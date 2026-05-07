@@ -6,7 +6,8 @@ chalk.level = 3;
 
 export const DIVIDER_WIDTH = 60;
 
-const DEBUG_LOG = path.resolve('/Users/mia/.claude/debug.log');
+const HOME = process.env.HOME || process.env.USERPROFILE || '';
+const DEBUG_LOG = path.join(HOME, '.claude', 'debug.log');
 
 export function debugLog(scope, ...parts) {
   try {
@@ -52,6 +53,19 @@ export function softCollapse(content, { maxLines = 20, label = 'lines' } = {}) {
   if (lines.length <= maxLines) return text;
   const head = lines.slice(0, maxLines).join('\n');
   return head + '\n' + chalk.gray.italic(`  … +${lines.length - maxLines} more ${label}`);
+}
+
+// Extract plain text from any tool response shape (string, array blocks, object).
+export function extractResultText(toolResponse) {
+  if (typeof toolResponse === 'string') return toolResponse;
+  if (!toolResponse || typeof toolResponse !== 'object') return null;
+  if (Array.isArray(toolResponse)) {
+    return toolResponse.filter(b => b?.type === 'text').map(b => b.text).join('\n') || null;
+  }
+  if (toolResponse['0']?.type === 'text') {
+    return Object.values(toolResponse).filter(b => b?.type === 'text').map(b => b.text).join('\n') || null;
+  }
+  return toolResponse.stdout ?? toolResponse.output ?? toolResponse.text ?? toolResponse.content ?? null;
 }
 
 export async function readInput() {
