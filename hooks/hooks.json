@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "description": "Enhanced hooks for Claude Code",
+  "hooks": {
+
+    "PreToolUse": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs PreToolUse" }
+      ]}
+    ],
+    "PostToolUse": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs PostToolUse" }
+      ]}
+    ],
+    "PostToolUseFailure": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs PostToolUseFailure" }
+      ]}
+    ],
+    "PostToolBatch": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs PostToolBatch" }
+      ]}
+    ],
+
+    "SessionStart": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs SessionStart" }
+      ]}
+    ],
+    "SessionEnd": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs SessionEnd" }
+      ]}
+    ],
+
+    "PostCompact": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs PostCompact" }
+      ]}
+    ],
+
+    "InstructionsLoaded": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs InstructionsLoaded" }
+      ]}
+    ],
+
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs UserPromptSubmit" }
+      ]}
+    ],
+    "UserPromptExpansion": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs UserPromptExpansion" }
+      ]}
+    ],
+
+    "SubagentStop": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs SubagentStop" }
+      ]}
+    ],
+    "Stop": [
+      { "hooks": [
+        { "type": "command", "command": "node ${CLAUDE_PLUGIN_ROOT}/bind.mjs Stop" }
+      ]}
+    ]
+  }
+}

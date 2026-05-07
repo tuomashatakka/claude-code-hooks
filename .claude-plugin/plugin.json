@@ -1,0 +1,10 @@
+{
+  "name": "hooks",
+  "version": "0.1.0",
+  "description": "Enhanced hooks for Claude Code - PreToolUse, PostToolUse, SessionStart, and more with beautified output",
+  "author": {
+    "name": "Mia",
+    "email": "mia@example.com"
+  },
+  "hooks": "../hooks/hooks.json"
+}
