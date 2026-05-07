@@ -1,0 +1,1139 @@
+╭─── Claude Code v2.1.132 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                               │ Tips for getting started                                                                                                                           │
+│        Welcome back Mr. Developer Man!        │ Run /init to create a CLAUDE.md file with instructions for Claude                                                                                  │
+│                                               │ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                    ▐▛███▜▌                    │ What's new                                                                                                                                         │
+│                   ▝▜█████▛▘                   │ Added `CLAUDE_CODE_SESSION_ID` environment variable to the Bash tool subprocess environment, matching the `session_id` passed to hooks             │
+│                     ▘▘ ▝▝                     │ Added `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1` env var to opt out of the fullscreen alternate-screen renderer and keep the conversation in the te… │
+│                                               │ Added a "Pasting…" footer hint while a Ctrl+V image paste is being read from the clipboard                                                         │
+│   Opus 4.7 · Claude Team · Globallegalcheck   │ /release-notes for more                                                                                                                            │
+│            ~/.claude/plugins/hooks            │                                                                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ⎿  SessionStart:startup says:
+     ⡿⣡⣿⣿⡟⡼⡁⠁⣰⠂⡾⠉⢨⣿⠃⣿⡿⠍⣾⣟⢤⣿⢇⣿⢇⣿⣿⢿
+     ⣱⣿⣿⡟⡐⣰⣧⡷⣿⣴⣧⣤⣼⣯⢸⡿⠁⣰⠟⢀⣼⠏⣲⠏⢸⣿⡟⣿
+     ⣿⣿⡟⠁⠄⠟⣁⠄⢡⣿⣿⣿⣿⣿⣿⣦⣼⢟⢀⡼⠃⡹⠃⡀⢸⡿⢸⣿
+     ⣿⣿⠃⠄⢀⣾⠋⠓⢰⣿⣿⣿⣿⣿⣿⠿⣿⣿⣾⣅⢔⣕⡇⡇⡼⢁⣿⣿
+     ⣿⡟⠄⠄⣾⣇⠷⣢⣿⣿⣿⣿⣿⣿⣿⣭⣀⡈⠙⢿⣿⣿⡇⡧⢁⣾⣿⣿
+     ⣿⡇⠄⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⢻⠇⠄⠄⢿⣿⡇⢡⣾⣿⣿⣿
+     ⣿⣷⢰⣿⣿⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⢰⣧⣀⡄⢀⠘⡿⣰⣿⣿⣿⣿⣿
+     ⢹⣿⢸⣿⣿⠟⠻⢿⣿⣿⣿⣿⣿⣿⣿⣶⣭⣉⣤⣿⢈⣼⣿⣿⣿⣿⣿⣿
+     ⢸⠇⡜⣿⡟⠄⠄⠄⠈⠙⣿⣿⣿⣿⣿⣿⣿⣿⠟⣱⣻⣿⣿⣿⣿⣿⠟⠁
+     ⠄⣰⡗⠹⣿⣄⠄⠄⠄⢀⣿⣿⣿⣿⣿⣿⠟⣅⣥⣿⣿⣿⣿⠿⠋⠄⠄⣾
+     ⠜⠋⢠⣷⢻⣿⣿⣶⣾⣿⣿⣿⣿⠿⣛⣥⣾⣿⠿⠟⠛⠉⠄⠄
+
+
+       ░▄█░░▀█▀░█▀█░█▀▄░▀█▀
+       ░▀▄░░░█░░█▀█░█▀▄░░█░
+       ░▀▀░░░▀░░▀░▀░▀░▀░░▀░
+     ⋆｡°✩ 𝓈𝓉𝒶𝓇𝓉 ⋆｡°✩
+     nyan~~ ≽^•⩊•^≼
+
+      ⏻ Session:startup   claude-opus-4-7
+     ────────────────────────────────────────────────────────────
+     Session started
+     ✓ System prompt loaded from: /Users/mia/system-prompt.md
+
+❯ /plugin
+  ⎿  (no content)
+
+❯ /plugin-dev:create-plugin Update the hooks plugin's (current working dir) output mapping/rendering for the wcgw tools better. Provided is some of the commands' outputs.
+If possible, the lines such as wcgw - FileWriteOrEdit (MCP)(file_path: "/Users/mia/Documents/Projects/global-legal-check/glc-arch/services/contract-processing-app/src/ui/composites/TasksToast.tsx",
+ percentage_to_change: 15, thread_id: "i6415", text_or_search_replace_blocks: "<<<<<<< SEARCH\nimport Link from 'next/link'\nimport { useEffect, useMemo, useRef, useState } from 'react'\nimport {
+TaskStepper } from '@/ui/components/TaskStepper'\nimport type { TaskStepperState, TaskStepperStep } from '@/ui/components/TaskStepper'\nimport { useAnalysisStore } from
+'@/stores/analysisStore'\nimport { useAuth } from '@/auth'\nimport { useI18n } from '@/lib/i18n'\n=======\nimport Link from 'next/link'\nimport { useEffect, useMemo, useRef, useState } from
+'react'\nimport { TaskStepper } from '@/ui/components/TaskStepper'\nimport type { TaskStepperState } from '@/ui/components/TaskStepper'\nimport { CONTRACT_STEPS, statusToStepKey } from
+'@/lib/contract-steps'\nimport { useAnalysisStore } from '@/stores/analysisStore'\nimport { useAuth } from '@/auth'\nimport { useI18n } from '@/lib/i18n'\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nconst
+POLL_MS = 5_000\n\nconst FULL_STEPS: readonly TaskStepperStep[] = [\n  { key: 'queued', label: 'Queued' },\n  { key: 'converting', label: 'Preparing' },\n  { key: 'text', label: 'Extracting text'
+},\n  { key: 'category', label: 'Categorizing' },\n  { key: 'obfuscated', label: 'Processing content' },\n  { key: 'classify', label: 'Classifying clauses' },\n  { key: 'summary', label:
+'Generating summary' },\n  { key: 'done', label: 'Done' },\n]\n\nconst CONVERT_STEPS: readonly TaskStepperStep[] = [\n  { key: 'queued', label: 'Queued' },\n  { key: 'converting', label:
+'Preparing' },\n  { key: 'converted', label: 'Ready' },\n]\n\nfunction getStepsForTask (task: RemoteTask): readonly TaskStepperStep[] {\n  return task.convertedReady ? CONVERT_STEPS :
+FULL_STEPS\n}\n\nfunction phaseToStepKey (phase: Phase, steps: readonly TaskStepperStep[]): string {\n  if (phase === 'failed')\n    return steps[Math.max(0, steps.length - 2)]?.key ??
+steps[0]!.key\n  if (phase === 'extracting')\n    return 'text'\n  if (phase === 'classifying')\n    return 'classify'\n  if (phase === 'evaluating')\n    return 'summary'\n  if (phase ===
+'persisting')\n    return 'done'\n  return phase\n}\n=======\nconst POLL_MS = 5_000\n>>>>>>> REPLACE\n<<<<<<< SEARCH\nfunction TaskRow ({ task, errorMessage, onDismiss }: TaskRowProps) {\n  const
+steps = getStepsForTask(task)\n\n  const stepperState: TaskStepperState =\n    task.phase === 'failed'\n      ? 'failed'\n      : task.phase === 'done' || task.convertedReady\n        ? 'done'\n
+     : 'running'\n\n  const currentStepKey = phaseToStepKey(task.phase, steps)\n\n  const phaseLabel =\n    task.convertedReady\n      ? 'Conversion complete'\n      : task.phase === 'failed'\n
+    ? 'Failed'\n        : steps.find(s => s.key === task.phase)?.label ??\n          FULL_STEPS.find(s => s.key === phaseToStepKey(task.phase, FULL_STEPS))?.label ??\n          'Working'\n\n
+return <li className='row' data-state={ stepperState }>\n=======\nfunction TaskRow ({ task, errorMessage, onDismiss }: TaskRowProps) {\n  const stepperState: TaskStepperState =\n    task.phase ===
+'failed'\n      ? 'failed'\n      : task.phase === 'done' || task.convertedReady\n        ? 'done'\n        : 'running'\n\n  const currentStepKey = statusToStepKey(task.phase, 'queued')\n\n  const
+phaseLabel =\n    task.convertedReady\n      ? 'Conversion complete'\n      : task.phase === 'failed'\n        ? 'Failed'\n        : CONTRACT_STEPS.find(s => s.key === currentStepKey)?.label ??
+'Working'\n\n  return <li className='row' data-state={ stepperState }>\n>>>>>>> REPLACE\n<<<<<<< SEARCH\n    <TaskStepper\n      steps={ steps }\n      currentStepKey={ currentStepKey }\n
+state={ stepperState }\n      errorMessage={ stepperState === 'failed' ? errorMessage : null }\n      ariaLabel={ `Progress for ${task.title}` } />\n  </li>\n}\n=======\n    <TaskStepper\n
+steps={ CONTRACT_STEPS }\n      currentStepKey={ currentStepKey }\n      state={ stepperState }\n      errorMessage={ stepperState === 'failed' ? errorMessage : null }\n      ariaLabel={ `Progress
+for ${task.title}` } />\n  </li>\n}\n>>>>>>> REPLACE") shouldn't be displayed to the user at all but the JSON in a beautified format. Study the plugin's current structure and refactor the
+bind/utils files' content to a more structured, modular format. There should be a single abstracized renderer class instance that handles all the rendering, and the mapping for distinct hooks/pre
+tool/post tool use tools. Also, the big heading text's rendering is a bit off. Check its letters and make it render better. Also, make the output sections displayed to users collapsible if somehow
+possible (use the click handling like the jump to bottom in claude code:  '/var/folders/_4/0y8qmm2s4l9b8nbrhg2d7nlr0000gn/T/TemporaryItems/NSIRD_screencaptureui_H1KDWl/Screenshot 2026-05-07 at
+18.32.49.png'
+
+Go through all wcgw tools and consider the information that's important for the user and display that in a beautified format like the wcgw bash command currently does for example:
+'/var/folders/_4/0y8qmm2s4l9b8nbrhg2d7nlr0000gn/T/TemporaryItems/NSIRD_screencaptureui_KzhoiR/Screenshot 2026-05-07 at 18.38.57.png'
+
+Also, add a special case for the wcgw bash tool's output to handle the
+" ---
+
+ status = process exited
+ cwd = /Users/mia/Documents/Projects/global-legal-check/glc-arch/services/contract-processing-app
+ This is the main shell. No command running in background." section at the end of each output: it should be displayed as a separate block and render the status and cwd as badges. The pre tool call
+hook should stuff in a similar fashion to the post tool call hook.
+
+ ---
+
+ status = process exited
+ cwd = /Users/mia/Documents/Projects/global-legal-check/glc-arch/services/contract-processing-app
+ This is the main shell. No command running in background.
+  ⎿  UserPromptExpansion says:
+      ✱ UserPromptExpansion
+     ────────────────────────────────────────────────────────────
+     /plugin-dev:create-plugin Update the hooks plugin's (current working dir) output mapping/rendering for the wcgw tools better. Provided is some of the commands' outputs.
+     If possible, the lines such as wcgw - FileWriteOrEdit (MCP)(file_path: "/Users/mia/Documents/Projects/global-legal-check/glc-arch/s...
+  ⎿  UserPromptSubmit says:
+      ✎ UserPromptSubmit
+     ────────────────────────────────────────────────────────────
+     /plugin-dev:create-plugin Update the hooks plugin's (current working dir) output mapping/rendering for the wcgw tools better. Provided is some of the commands' outputs.
+     If possible, the lines such as ...
+
+  Read 2 files, listed 1 directory (ctrl+o to expand)
+  ⎿  PreToolUse:Bash says:
+      ❯ Bash
+     ────────────────────────────────────────────────────────────
+     ls /Users/mia/.claude/plugins/hooks/ && echo "---" && ls /Users/mia/.claude/plugins/hooks/hooks/
+     Description: List plugin structure
+  ⎿  PostToolUse:Bash says:
+      ❯ Bash   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 767ms
+
+      bind.mjs
+      hooks
+      node_modules
+      package-lock.json
+      package.json
+      ---
+      hooks.json
+      instructions-loaded.mjs
+      post-tool-use-failure.mjs
+      post-tool-use.mjs
+      pre-tool-use.mjs
+      session-start.mjs
+      user-prompt-expansion.mjs
+      user-prompt-submit.mjs
+      utils.mjs
+
+       metadata
+
+      stderr:
+      interrupted: false
+      isImage: false
+      noOutputExpected: false
+
+  ⎿  PreToolUse:Read says:
+      ▤ Read
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/bind.mjs
+  ⎿  PostToolUse:Read says: <persisted-output>
+     Output too large (55.9KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01YC7foNocgANyrrRbWoafpc-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ▤ Read   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 4ms
+
+      ⧖ Action: text
+
+       metadata
+
+      file: {
+        filePath: /Users/mia/.claude/plugins/hooks/bind.mjs,
+        content: #!/usr/bin/env node
+
+      import chalk from 'chalk';
+      import fs from 'fs';
+      import path from 'path';
+      import {
+        runHook,
+     ...
+     </persisted-output>
+  ⎿  PreToolUse:Read says:
+      ▤ Read
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/utils.mjs
+  ⎿  PostToolUse:Read says: <persisted-output>
+     Output too large (169.2KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01APxLbFKoKuDgvHwDAe6L4J-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ▤ Read   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 3ms
+
+      ⧖ Action: text
+
+       metadata
+
+      file: {
+        filePath: /Users/mia/.claude/plugins/hooks/hooks/utils.mjs,
+        content: #!/usr/bin/env node
+      /**
+       * Shared utilities for hooks
+     ...
+     </persisted-output>
+
+⏺ I've got a clear picture of the structure. Before finalizing, two things need clarification — the collapsibility request, and the heading font.
+
+  ★ Insight ─────────────────────────────────────
+  - Hooks emit a systemMessage over stderr as plain ANSI text. Claude Code's TUI doesn't expose interactive click handlers to hook output — the "jump to bottom" button in your screenshot is a
+  built-in TUI affordance, not something a hook can render. So true click-to-collapse isn't possible from this side.
+  - The current bind.mjs is a flat switch of handlers + ad-hoc rendering in each one. A Renderer class with per-tool strategies (registry pattern) cleanly splits "what to extract" from "how to
+  render".
+  - The PAGGA glyph table at utils.mjs:647-676 is the heading. Several letters (J, K, S, Y) use inconsistent strokes vs. their neighbors — that's the "off" rendering you see.
+  ─────────────────────────────────────────────────
+
+⏺ Updated plan
+  ⎿  PreToolUse:Write says:
+      ⊕ Write
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plans/update-the-hooks-plugin-s-gleaming-wombat.md
+  ⎿  /plan to preview
+  ⎿  PostToolUse:Write says: <persisted-output>
+     Output too large (89.7KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01Gd98teXtcixSA17Muzjre2-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ⊕ Write   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 2ms
+
+
+
+      # Plan: Refactor hooks plugin rendering & beautify wcgw tool output
+
+
+
+
+
+     ...
+     </persisted-output>
+
+⏺ Two things I want to confirm before exiting plan mode.
+  ⎿  PreToolUse:AskUserQuestion says:
+      󰌠 AskUserQuestion
+
+⏺ User answered Claude's questions:
+  ⎿  · Hook output is plain ANSI text on stderr — Claude Code's TUI doesn't dispatch click events to hooks, so true click-to-collapse isn't possible. What should I substitute? → Soft-collapse with
+     `+N more` (Recommended)
+     · How should the section heading font (START/WAKE UP/BYE/STOP/COMPACT/AGENT) be fixed? → Repair PAGGA glyphs in place (Recommended)
+     · wcgw FileWriteOrEdit currently dumps raw SEARCH/REPLACE markers. How should hunks render? → Unified diff (`-`/`+` colored, soft-collapsed) (Recommended)
+  ⎿  PostToolUse:AskUserQuestion says: <persisted-output>
+     Output too large (18.4KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_012KNWdRhq7EnoKtMogybZLG-2-systemMessage.txt
+
+     Preview (first 2KB):
+
+      󰌠 AskUserQuestion   JSON
+     ────────────────────────────────────────────────────────────
+     Δ 0ms
+
+
+      questions: [
+
+        {
+
+          question: Hook output is plain ANSI text on stderr — Claude Code's TUI doesn't dispatch click events to hooks, so true click-to-collapse isn't possible. What should I substitute?,
+
+          header: Collapse,
+
+          options: [
+
+     ...
+     </persisted-output>
+  ⎿  PreToolUse:ToolSearch says:
+      ⌕ ToolSearch
+     ────────────────────────────────────────────────────────────
+     select:ExitPlanMode
+  ⎿  PostToolUse:ToolSearch says:
+      ⌕ ToolSearch   JSON
+     ────────────────────────────────────────────────────────────
+     Δ 3ms
+
+      matches: [ ExitPlanMode ]
+      query: select:ExitPlanMode
+      total_deferred_tools: 115
+
+  ⎿  PreToolUse:ExitPlanMode says:
+      ⏻ ExitPlanMode
+     ────────────────────────────────────────────────────────────
+     # Plan: Refactor hooks plugin rendering & beautify wcgw tool output
+
+     ## Context
+
+     The `hooks` plugin in `/Users/mia/.claude/plugins/hooks/` currently renders Pre/PostToolUse system messages with ad-hoc logic split between `bind.mjs` (per-event handlers) and `hooks/utils.mjs`
+      (a kitchen-sink utility module). For wcgw MCP tools the rendering is poor:
+
+     - `mcp__wcgw__FileWriteOrEdit` dumps the entire `text_or_search_replace_blocks` (literal `<<<<<<< SEARCH ... >>>>>>> REPLACE` markers) as the input header — it's a wall of text, not a
+     structured diff.
+     - `mcp__wcgw__BashCommand` post-output ends with a metadata trailer (`--- status = ... cwd = ... This is the main shell. ...`) that gets mashed into the same code block instead of rendered as
+     badges.
+     - The PAGGA heading font in `utils.mjs:647-676` has visually inconsistent glyphs (J, K, S, Y stand out).
+     - The Pre hook for wcgw tools doesn't share the structured presentation that the Post hook gives Bash output.
+
+     The goal is a single, abstracted `Renderer` instance that owns all formatting, with per-tool strategies registered against it, plus targeted fixes for the wcgw tool family and the heading font.
+
+     ## Constraints discovered while planning
+
+     - **Collapsibility is not feasible from a hook.** Hook output is plain ANSI text written to stderr (`utils.mjs:320-325` in `writeOutput`); Claude Code's TUI does not expose click handlers to
+     hook system messages. The "jump to bottom" affordance in the screenshot is a TUI feature, not something a plugin can render. We will substitute a **soft-collapse**: truncate long blocks to N
+     lines, append a dimmed `+M more lines` footer, with the full content available via a debug-log spill.
+     - Section dividers and `renderBox` already give us visual grouping — that's the strongest "collapsed" signal we can offer.
+
+     ## Target structure
+
+     ```
+     hooks/
+     ├── bind.mjs                  # thin dispatcher only (event → renderer.render(event, data))
+     ├── hooks/
+     │   ├── hooks.json
+     │   ├── *.mjs                 # entry points, unchanged
+     │   └── lib/
+     │       ├── renderer.mjs      # NEW — Renderer class, registry, dispatch
+     │       ├── theme.mjs         # NEW — chalk palette, badge colors, icons (extracted)
+     │       ├── badge.mjs         # NEW — Badge class + renderBadges (extracted)
+     │       ├── primitives.mjs    # NEW — renderBox, renderSection, divider, stripAnsi, soft-collapse
+     │       ├── highlight.mjs     # NEW — simpleHighlight, isJSON, isCode, formatJSON, detectLanguage
+     │       ├── headings.mjs      # NEW — PAGGA glyphs (fixed), renderAnsiShadowText, randomFiller
+     │       ├── tools/
+     │       │   ├── index.mjs     # registry: { [toolName]: ToolStrategy }
+     │       │   ├── generic.mjs   # default pre/post strategies (today's fallback behavior)
+     │       │   ├── bash.mjs      # Bash + mcp__wcgw__BashCommand
+     │       │   ├── wcgw-file.mjs # FileWriteOrEdit, FileEdit
+     │       │   ├── wcgw-read.mjs # ReadFiles
+     │       │   ├── wcgw-init.mjs # Initialize
+     │       │   ├── wcgw-ctx.mjs  # ContextSave
+     │       │   └── wcgw-bash.mjs # BashCommand (subset of bash.mjs)
+     │       └── parsers/
+     │           ├── search-replace.mjs  # NEW — parse SEARCH/REPLACE blocks → diff hunks
+     │           └── wcgw-trailer.mjs    # NEW — parse "--- status = … cwd = … main shell" trailer
+     ```
+
+     ## Renderer abstraction
+
+     ```js
+     // hooks/lib/renderer.mjs
+     export class Renderer {
+       constructor({ toolStrategies, eventHandlers, theme }) { … }
+       render(event, data) {
+         const handler = this.eventHandlers[event] ?? this.eventHandlers.default;
+         return handler(data, this);
+       }
+       // Tool dispatch shared by PreToolUse / PostToolUse:
+       renderPreTool(toolName, input)   { return this.#strategy(toolName).pre(input, this); }
+       renderPostTool(toolName, result, durationMs) {
+         return this.#strategy(toolName).post(result, durationMs, this);
+       }
+       // Reusable building blocks delegated to primitives/badge/highlight modules.
+     }
+
+     // ToolStrategy contract:
+     //   pre(input, ctx)   -> { lines: string[], extraBadges?: Badge[] }
+     //   post(result, ms, ctx) -> { lines: string[], extraBadges?: Badge[] }
+     //   icon? color?      -> overrides for the badge
+     ```
+
+     `bind.mjs` shrinks to: `const renderer = createRenderer(); runHook(EVENT, d => renderer.render(EVENT, d));`
+
+     ## Per-tool strategies (wcgw family)
+
+     ### `mcp__wcgw__FileWriteOrEdit`
+     Pre hook input contains `file_path`, `percentage_to_change`, `thread_id`, `text_or_search_replace_blocks` (a string with one or more `<<<<<<< SEARCH … ======= … >>>>>>> REPLACE` triples).
+
+     - New parser `parsers/search-replace.mjs` splits the string into `{ search, replace }[]` hunks.
+     - Render:
+       - First line: file path (highlighted) + `±N%` chip + thread badge.
+       - Per hunk: a compact two-column diff (`-` red lines from SEARCH, `+` green lines from REPLACE), soft-collapsed to ~12 lines per hunk, with `+K more` footer.
+       - **Do not** print the raw `text_or_search_replace_blocks`.
+     - Post hook: render `success`, `file_path`, and any `warnings` as badges + soft-collapsed body.
+
+     ### `mcp__wcgw__BashCommand`
+     - Pre: highlight `command` as bash, surface `wait_for_seconds`, `chats_id`, etc., as gray meta line.
+     - Post: parse trailer with `parsers/wcgw-trailer.mjs`:
+       - Strip the `\n---\n status = … cwd = … This is the main shell. …` block.
+       - Render command output as the main body (existing soft-collapse).
+       - Render trailer as a separate row of badges: `status:process exited`, `cwd:…` (path-shortened with `~`), `main-shell` flag.
+     - Pre hook gets the same trailer-style summary if any of those fields are present in the input (currently they're not, but we'll show `cwd`/`thread_id` as badges to mirror the Post layout the
+     user requested).
+
+     ### `mcp__wcgw__ReadFiles`
+     - Pre: list `file_paths` as a tree.
+     - Post: reuse existing `formatWCGWOutput` logic, but extracted into the strategy and bound to soft-collapse.
+
+     ### `mcp__wcgw__Initialize`
+     - Pre: badges for `type`, `any_workspace_path`, `mode_name`.
+     - Post: render returned environment summary (cwd, shell, repo) as a badge row + a 1-line summary; suppress the verbose stdout.
+
+     ### `mcp__wcgw__ContextSave`
+     - Pre: badges for `id`, `project_root_path`; truncate `description` to 1 line; do not echo the full `relevant_file_globs` — show count and first 3.
+     - Post: success badge + saved-path.
+
+     ### `mcp__wcgw__FileEdit`
+     - Same parser as FileWriteOrEdit; identical rendering path.
+
+     ### Generic fallback
+     - Today's behavior, preserved in `tools/generic.mjs`, used when no strategy is registered.
+
+     ## Heading font fix
+
+     Audit `PAGGA` table at `utils.mjs:647-676`:
+     - Normalize stroke width: every glyph is 4 cells wide and uses `░ █ ▀ ▄` consistently.
+     - Replace inconsistent letters (J/K/S/Y at minimum) with corrected 3-row designs.
+     - Add missing common chars: digits 0–9, `?`, `.`, `-`, `:`.
+     - Add a unit test fixture (`tools/__tests__/pagga.snapshot.txt`) that renders `WAKE UP / START / STOP / BYE / COMPACT / AGENT` and is reviewed visually.
+
+     ## Soft-collapse helper
+
+     ```js
+     // hooks/lib/primitives.mjs
+     export function softCollapse(content, { maxLines = 20, label = 'lines' } = {}) {
+       const lines = String(content).split('\n');
+       if (lines.length <= maxLines) return content;
+       const head = lines.slice(0, maxLines).join('\n');
+       return head + '\n' + chalk.gray.italic(`  … +${lines.length - maxLines} more ${label}`);
+     }
+     ```
+
+     Replace ad-hoc truncation in `formatWCGWOutput` (`utils.mjs:403-452`) with this helper.
+
+     ## Files to create / modify
+
+     **Create**
+     - `hooks/lib/renderer.mjs`
+     - `hooks/lib/theme.mjs`
+     - `hooks/lib/badge.mjs`
+     - `hooks/lib/primitives.mjs`
+     - `hooks/lib/highlight.mjs`
+     - `hooks/lib/headings.mjs`
+     - `hooks/lib/tools/{index,generic,bash,wcgw-file,wcgw-read,wcgw-init,wcgw-ctx}.mjs`
+     - `hooks/lib/parsers/{search-replace,wcgw-trailer}.mjs`
+
+     **Modify**
+     - `bind.mjs` — collapse to dispatcher (~30 LOC).
+     - `hooks/utils.mjs` — keep `runHook`, `readInput`, `writeOutput`, `debugLog`; re-export the new modules for backward compatibility; delete relocated code.
+     - `hooks/*.mjs` entry files — no change; they already import from `bind.mjs`.
+
+     ## Reused existing utilities
+
+     - `parseToolName`, `getToolIcon`, `getToolColor` (`utils.mjs:100-137`) → moved verbatim to `theme.mjs`.
+     - `Badge` class + `renderBadges` (`utils.mjs:186-222`) → `badge.mjs`.
+     - `renderBox`, `renderSection`, `stripAnsi` (`utils.mjs:16-30, 270-278`) → `primitives.mjs`.
+     - `simpleHighlight`, `isJSON`, `isCode`, `formatJSON`, `detectLanguage` (`utils.mjs:328-401`) → `highlight.mjs`.
+     - `deconstructToolResult` (`utils.mjs:488-599`) → consumed inside the generic Post strategy; logic preserved.
+
+     ## Verification
+
+     1. **Static**: `node --check bind.mjs` and every new `*.mjs` parses.
+     2. **Unit-ish smoke**: a `scripts/smoke.mjs` (gitignored) feeds canned PreToolUse / PostToolUse JSON for: Bash, Read, mcp__wcgw__BashCommand (with trailer), mcp__wcgw__FileWriteOrEdit
+     (multi-hunk), mcp__wcgw__ReadFiles, mcp__wcgw__Initialize. Diff stderr against committed snapshots in `hooks/__snapshots__/`.
+     3. **End-to-end**: run a real Claude Code session in this repo:
+        - Run a wcgw bash command → confirm trailer renders as separate badge row, body soft-collapsed, no `--- status = …` leakage.
+        - Trigger a wcgw FileWriteOrEdit (e.g., touch a sandbox file) → confirm no raw `<<<<<<< SEARCH` markers, diff hunks visible.
+        - Start a fresh session → verify heading glyphs render evenly across `START`, `WAKE UP`, `BYE`, `STOP`.
+     4. **Regression**: native tools (Bash, Read, Edit, Task) still render exactly as before — generic strategy preserves current paths.
+
+     ## Out of scope
+
+     - True interactive collapse (TUI cannot dispatch click events to hooks).
+     - Replacing chalk / migrating to a different ANSI library.
+     - Changes to `hooks.json` event registrations.
+
+
+⏺ User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/update-the-hooks-plugin-s-gleaming-wombat.md · /plan to edit
+     Plan: Refactor hooks plugin rendering & beautify wcgw tool output
+
+     Context
+
+     The hooks plugin in /Users/mia/.claude/plugins/hooks/ currently renders Pre/PostToolUse system messages with ad-hoc logic split between bind.mjs (per-event handlers) and hooks/utils.mjs (a
+     kitchen-sink utility module). For wcgw MCP tools the rendering is poor:
+
+     - mcp__wcgw__FileWriteOrEdit dumps the entire text_or_search_replace_blocks (literal <<<<<<< SEARCH ... >>>>>>> REPLACE markers) as the input header — it's a wall of text, not a structured
+     diff.
+     - mcp__wcgw__BashCommand post-output ends with a metadata trailer (--- status = ... cwd = ... This is the main shell. ...) that gets mashed into the same code block instead of rendered as
+     badges.
+     - The PAGGA heading font in utils.mjs:647-676 has visually inconsistent glyphs (J, K, S, Y stand out).
+     - The Pre hook for wcgw tools doesn't share the structured presentation that the Post hook gives Bash output.
+
+     The goal is a single, abstracted Renderer instance that owns all formatting, with per-tool strategies registered against it, plus targeted fixes for the wcgw tool family and the heading font.
+
+     Constraints discovered while planning
+
+     - Collapsibility is not feasible from a hook. Hook output is plain ANSI text written to stderr (utils.mjs:320-325 in writeOutput); Claude Code's TUI does not expose click handlers to hook
+     system messages. The "jump to bottom" affordance in the screenshot is a TUI feature, not something a plugin can render. We will substitute a soft-collapse: truncate long blocks to N lines,
+     append a dimmed +M more lines footer, with the full content available via a debug-log spill.
+     - Section dividers and renderBox already give us visual grouping — that's the strongest "collapsed" signal we can offer.
+
+     Target structure
+
+     hooks/
+     ├── bind.mjs                  # thin dispatcher only (event → renderer.render(event, data))
+     ├── hooks/
+     │   ├── hooks.json
+     │   ├── *.mjs                 # entry points, unchanged
+     │   └── lib/
+     │       ├── renderer.mjs      # NEW — Renderer class, registry, dispatch
+     │       ├── theme.mjs         # NEW — chalk palette, badge colors, icons (extracted)
+     │       ├── badge.mjs         # NEW — Badge class + renderBadges (extracted)
+     │       ├── primitives.mjs    # NEW — renderBox, renderSection, divider, stripAnsi, soft-collapse
+     │       ├── highlight.mjs     # NEW — simpleHighlight, isJSON, isCode, formatJSON, detectLanguage
+     │       ├── headings.mjs      # NEW — PAGGA glyphs (fixed), renderAnsiShadowText, randomFiller
+     │       ├── tools/
+     │       │   ├── index.mjs     # registry: { [toolName]: ToolStrategy }
+     │       │   ├── generic.mjs   # default pre/post strategies (today's fallback behavior)
+     │       │   ├── bash.mjs      # Bash + mcp__wcgw__BashCommand
+     │       │   ├── wcgw-file.mjs # FileWriteOrEdit, FileEdit
+     │       │   ├── wcgw-read.mjs # ReadFiles
+     │       │   ├── wcgw-init.mjs # Initialize
+     │       │   ├── wcgw-ctx.mjs  # ContextSave
+     │       │   └── wcgw-bash.mjs # BashCommand (subset of bash.mjs)
+     │       └── parsers/
+     │           ├── search-replace.mjs  # NEW — parse SEARCH/REPLACE blocks → diff hunks
+     │           └── wcgw-trailer.mjs    # NEW — parse "--- status = … cwd = … main shell" trailer
+
+     Renderer abstraction
+
+     // hooks/lib/renderer.mjs
+     export class Renderer {
+       constructor({ toolStrategies, eventHandlers, theme }) { … }
+       render(event, data) {
+         const handler = this.eventHandlers[event] ?? this.eventHandlers.default;
+         return handler(data, this);
+       }
+       // Tool dispatch shared by PreToolUse / PostToolUse:
+       renderPreTool(toolName, input)   { return this.#strategy(toolName).pre(input, this); }
+       renderPostTool(toolName, result, durationMs) {
+         return this.#strategy(toolName).post(result, durationMs, this);
+       }
+       // Reusable building blocks delegated to primitives/badge/highlight modules.
+     }
+
+     // ToolStrategy contract:
+     //   pre(input, ctx)   -> { lines: string[], extraBadges?: Badge[] }
+     //   post(result, ms, ctx) -> { lines: string[], extraBadges?: Badge[] }
+     //   icon? color?      -> overrides for the badge
+
+     bind.mjs shrinks to: const renderer = createRenderer(); runHook(EVENT, d => renderer.render(EVENT, d));
+
+     Per-tool strategies (wcgw family)
+
+     mcp__wcgw__FileWriteOrEdit
+
+     Pre hook input contains file_path, percentage_to_change, thread_id, text_or_search_replace_blocks (a string with one or more <<<<<<< SEARCH … ======= … >>>>>>> REPLACE triples).
+
+     - New parser parsers/search-replace.mjs splits the string into { search, replace }[] hunks.
+     - Render:
+       - First line: file path (highlighted) + ±N% chip + thread badge.
+       - Per hunk: a compact two-column diff (- red lines from SEARCH, + green lines from REPLACE), soft-collapsed to ~12 lines per hunk, with +K more footer.
+       - Do not print the raw text_or_search_replace_blocks.
+     - Post hook: render success, file_path, and any warnings as badges + soft-collapsed body.
+
+     mcp__wcgw__BashCommand
+
+     - Pre: highlight command as bash, surface wait_for_seconds, chats_id, etc., as gray meta line.
+     - Post: parse trailer with parsers/wcgw-trailer.mjs:
+       - Strip the \n---\n status = … cwd = … This is the main shell. … block.
+       - Render command output as the main body (existing soft-collapse).
+       - Render trailer as a separate row of badges: status:process exited, cwd:… (path-shortened with ~), main-shell flag.
+     - Pre hook gets the same trailer-style summary if any of those fields are present in the input (currently they're not, but we'll show cwd/thread_id as badges to mirror the Post layout the user
+     requested).
+
+     mcp__wcgw__ReadFiles
+
+     - Pre: list file_paths as a tree.
+     - Post: reuse existing formatWCGWOutput logic, but extracted into the strategy and bound to soft-collapse.
+
+     mcp__wcgw__Initialize
+
+     - Pre: badges for type, any_workspace_path, mode_name.
+     - Post: render returned environment summary (cwd, shell, repo) as a badge row + a 1-line summary; suppress the verbose stdout.
+
+     mcp__wcgw__ContextSave
+
+     - Pre: badges for id, project_root_path; truncate description to 1 line; do not echo the full relevant_file_globs — show count and first 3.
+     - Post: success badge + saved-path.
+
+     mcp__wcgw__FileEdit
+
+     - Same parser as FileWriteOrEdit; identical rendering path.
+
+     Generic fallback
+
+     - Today's behavior, preserved in tools/generic.mjs, used when no strategy is registered.
+
+     Heading font fix
+
+     Audit PAGGA table at utils.mjs:647-676:
+     - Normalize stroke width: every glyph is 4 cells wide and uses ░ █ ▀ ▄ consistently.
+     - Replace inconsistent letters (J/K/S/Y at minimum) with corrected 3-row designs.
+     - Add missing common chars: digits 0–9, ?, ., -, :.
+     - Add a unit test fixture (tools/__tests__/pagga.snapshot.txt) that renders WAKE UP / START / STOP / BYE / COMPACT / AGENT and is reviewed visually.
+
+     Soft-collapse helper
+
+     // hooks/lib/primitives.mjs
+     export function softCollapse(content, { maxLines = 20, label = 'lines' } = {}) {
+       const lines = String(content).split('\n');
+       if (lines.length <= maxLines) return content;
+       const head = lines.slice(0, maxLines).join('\n');
+       return head + '\n' + chalk.gray.italic(`  … +${lines.length - maxLines} more ${label}`);
+     }
+
+     Replace ad-hoc truncation in formatWCGWOutput (utils.mjs:403-452) with this helper.
+
+     Files to create / modify
+
+     Create
+     - hooks/lib/renderer.mjs
+     - hooks/lib/theme.mjs
+     - hooks/lib/badge.mjs
+     - hooks/lib/primitives.mjs
+     - hooks/lib/highlight.mjs
+     - hooks/lib/headings.mjs
+     - hooks/lib/tools/{index,generic,bash,wcgw-file,wcgw-read,wcgw-init,wcgw-ctx}.mjs
+     - hooks/lib/parsers/{search-replace,wcgw-trailer}.mjs
+
+     Modify
+     - bind.mjs — collapse to dispatcher (~30 LOC).
+     - hooks/utils.mjs — keep runHook, readInput, writeOutput, debugLog; re-export the new modules for backward compatibility; delete relocated code.
+     - hooks/*.mjs entry files — no change; they already import from bind.mjs.
+
+     Reused existing utilities
+
+     - parseToolName, getToolIcon, getToolColor (utils.mjs:100-137) → moved verbatim to theme.mjs.
+     - Badge class + renderBadges (utils.mjs:186-222) → badge.mjs.
+     - renderBox, renderSection, stripAnsi (utils.mjs:16-30, 270-278) → primitives.mjs.
+     - simpleHighlight, isJSON, isCode, formatJSON, detectLanguage (utils.mjs:328-401) → highlight.mjs.
+     - deconstructToolResult (utils.mjs:488-599) → consumed inside the generic Post strategy; logic preserved.
+
+     Verification
+
+     1. Static: node --check bind.mjs and every new *.mjs parses.
+     2. Unit-ish smoke: a scripts/smoke.mjs (gitignored) feeds canned PreToolUse / PostToolUse JSON for: Bash, Read, mcp__wcgw__BashCommand (with trailer), mcp__wcgw__FileWriteOrEdit (multi-hunk),
+     mcp__wcgw__ReadFiles, mcp__wcgw__Initialize. Diff stderr against committed snapshots in hooks/__snapshots__/.
+     3. End-to-end: run a real Claude Code session in this repo:
+       - Run a wcgw bash command → confirm trailer renders as separate badge row, body soft-collapsed, no --- status = … leakage.
+       - Trigger a wcgw FileWriteOrEdit (e.g., touch a sandbox file) → confirm no raw <<<<<<< SEARCH markers, diff hunks visible.
+       - Start a fresh session → verify heading glyphs render evenly across START, WAKE UP, BYE, STOP.
+     4. Regression: native tools (Bash, Read, Edit, Task) still render exactly as before — generic strategy preserves current paths.
+
+     Out of scope
+
+     - True interactive collapse (TUI cannot dispatch click events to hooks).
+     - Replacing chalk / migrating to a different ANSI library.
+     - Changes to hooks.json event registrations.
+  ⎿  PostToolUse:ExitPlanMode says: <persisted-output>
+     Output too large (87.8KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01TroxA2w4dkyvFhVCo8fFLx-2-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ⏻ ExitPlanMode   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 0ms
+
+
+
+      # Plan: Refactor hooks plugin rendering & beautify wcgw tool output
+
+
+
+
+
+     ...
+     </persisted-output>
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  PreToolUse:Bash says:
+      ❯ Bash
+     ────────────────────────────────────────────────────────────
+     head -5 /Users/mia/.claude/plugins/hooks/hooks/pre-tool-use.mjs /Users/mia/.claude/plugins/hooks/hooks/post-tool-use.mjs /Users/mia/.claude/plugins/hooks/hooks/session-start.mjs
+     Description: Check entry files
+  ⎿  PostToolUse:Bash says:
+      ❯ Bash   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 19ms
+
+      ==> /Users/mia/.claude/plugins/hooks/hooks/pre-tool-use.mjs <==
+      #!/usr/bin/env node
+      /**
+       * PreToolUse hook — render a badge with the prettified tool name and the
+       * canonical "primary" input key (per Claude Code hooks spec) as the main body.
+       */
+
+      ==> /Users/mia/.claude/plugins/hooks/hooks/post-tool-use.mjs <==
+      #!/usr/bin/env node
+      /**
+       * PostToolUse hook — beautify tool_response output. Surfaces the "sensible"
+       * primary key (stdout / output / content / text / file contents) as main body
+       * and adds a secondary badge indicating output kind.
+
+      ==> /Users/mia/.claude/plugins/hooks/hooks/session-start.mjs <==
+      #!/usr/bin/env node
+      /**
+       * SessionStart hook — load system prompt, show ascii art, expose source/model.
+       * Spec: receives `source` (startup|resume|clear|compact), `model`, optional `agent_type`.
+       */
+
+       metadata
+
+      stderr:
+      interrupted: false
+      isImage: false
+      noOutputExpected: false
+
+  ⎿  PreToolUse:Bash says:
+      ❯ Bash
+     ────────────────────────────────────────────────────────────
+     cat /Users/mia/.claude/plugins/hooks/hooks/pre-tool-use.mjs
+     Description: Full pre-tool-use entry
+  ⎿  PostToolUse:Bash says:
+      ❯ Bash   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 21ms
+
+      #!/usr/bin/env node
+      /**
+       * PreToolUse hook — render a badge with the prettified tool name and the
+       * canonical "primary" input key (per Claude Code hooks spec) as the main body.
+       */
+
+      import chalk from 'chalk';
+      import {
+        runHook,
+        renderBadges,
+        renderSection,
+        Badge,
+        pickPrimaryInput,
+        simpleHighlight,
+        detectLanguage,
+      } from './utils.mjs';
+
+      chalk.level = 3;
+
+      const FIELD_LABELS = {
+        command: 'Command',
+        file_path: 'File',
+        filePath: 'File',
+        file_paths: 'Files',
+        pattern: 'Pattern',
+        query: 'Query',
+        url: 'URL',
+        description: 'Description',
+        prompt: 'Prompt',
+        plan: 'Plan',
+      };
+
+      function formatValue(value) {
+        if (Array.isArray(value)) return value.join(', ');
+        if (typeof value === 'object' && value !== null) return JSON.stringify(value, null, 2);
+        return String(value);
+      }
+
+      runHook('PreToolUse', (data) => {
+        const rawTool = data.tool_name || data.toolName || 'Unknown';
+        const input = data.tool_input || data.toolInput || {};
+
+        const { key: primaryKey, value: primaryValue } = pickPrimaryInput(rawTool, input);
+
+        const lines = [];
+        if (primaryValue != null) {
+          const formatted = formatValue(primaryValue);
+          const highlighted = primaryKey === 'command'
+            ? simpleHighlight(formatted, 'bash')
+            : simpleHighlight(formatted, detectLanguage(formatted, rawTool));
+          lines.push(highlighted);
+        }
+
+        for (const [k, label] of Object.entries(FIELD_LABELS)) {
+          if (k === primaryKey) continue;
+          if (input[k] == null || input[k] === '') continue;
+          lines.push(chalk.gray(`${label}: `) + formatValue(input[k]));
+        }
+
+        const badge = renderBadges(new Badge({ toolName: rawTool }));
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'allow',
+          },
+          systemMessage: renderSection({ badge, lines }),
+        };
+      });
+
+       metadata
+
+      stderr:
+      interrupted: false
+      isImage: false
+      noOutputExpected: false
+                                ⎿  PreToolUse:Read says:
+      ▤ Read
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/hooks.json
+  ⎿  PostToolUse:Read says: <persisted-output>
+     Output too large (12.1KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01CRKofzbngnDanaFmMbfJEs-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ▤ Read   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 3ms
+
+      ⧖ Action: text
+
+       metadata
+
+      file: {
+        filePath: /Users/mia/.claude/plugins/hooks/hooks/hooks.json,
+        content: {
+        "$schema": "https://json.schemastore.org/claude-code-settings.json",
+        "description": "Enhanced hooks for Claude Code",
+        "hooks": {
+
+          "PreToolUse": [
+            { "hooks": [
+     ...
+     </persisted-output>
+
+⏺ Building the new modular structure now.
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  PreToolUse:Bash says:
+      ❯ Bash
+     ────────────────────────────────────────────────────────────
+     mkdir -p /Users/mia/.claude/plugins/hooks/hooks/lib/tools /Users/mia/.claude/plugins/hooks/hooks/lib/parsers
+     Description: Create lib directories
+  ⎿  PostToolUse:Bash says:
+      ❯ Bash   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 43ms
+
+      ⨂ STDERR:
+
+
+       metadata
+
+      interrupted: false
+      isImage: false
+      noOutputExpected: true
+
+
+⏺ Write(hooks/lib/primitives.mjs)
+  ⎿  PreToolUse:Write says:
+      ⊕ Write
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/lib/primitives.mjs
+  ⎿  Wrote 89 lines to hooks/lib/primitives.mjs
+      1 import chalk from 'chalk';
+      2 import fs from 'fs';
+      3 import path from 'path';
+      4
+      5 chalk.level = 3;
+      6
+      7 export const DIVIDER_WIDTH = 60;
+      8
+      9 const DEBUG_LOG = path.resolve('/Users/mia/.claude/debug.log');
+     … +79 lines (ctrl+o to expand)
+  ⎿  PostToolUse:Write says: <persisted-output>
+     Output too large (11.9KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_01Xc4eUTMevGLSo8hRyageJR-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ⊕ Write   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 8ms
+
+      import chalk from 'chalk';
+      import fs from 'fs';
+      import path from 'path';
+
+      chalk.level = 3;
+
+      export const DIVIDER_WIDTH = 60;
+
+      const DEBUG_LOG = path.resolve('/Users/mia/.claude/debug.log');
+
+      export function debugLog(scope, ...parts) {
+        try {
+          const ts = new Date().toISOString();
+          const line = parts.map(p =>
+     ...
+     </persisted-output>
+
+⏺ Write(hooks/lib/theme.mjs)
+  ⎿  PreToolUse:Write says:
+      ⊕ Write
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/lib/theme.mjs
+  ⎿  Wrote 114 lines to hooks/lib/theme.mjs
+       1 import chalk from 'chalk';
+       2
+       3 chalk.level = 3;
+       4
+       5 export const TOOL_ICONS = {
+       6   'Bash': '❯',
+       7   'Write': '⊕',
+       8   'Edit': 'Δ',
+       9   'Read': '▤',
+      10   'Glob': '⌕',
+     … +104 lines (ctrl+o to expand)
+  ⎿  PostToolUse:Write says: <persisted-output>
+     Output too large (11.9KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_0136EbjPXJsSXM9oRdpXNP3a-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ⊕ Write   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 2ms
+
+      import chalk from 'chalk';
+
+      chalk.level = 3;
+
+      export const TOOL_ICONS = {
+        'Bash': '❯',
+        'Write': '⊕',
+        'Edit': 'Δ',
+        'Read': '▤',
+        'Glob': '⌕',
+        'Grep': '⌕',
+        'Task': '󰒕',
+        'Agent': '󰒕',
+        'WebFetch': '⇌',
+        'WebSearch': '⌕',
+        'TaskCreate': '✓',
+        'TaskUpdate': '✓',
+        'TaskList': '✓',
+     ...
+     </persisted-output>
+
+⏺ Write(hooks/lib/badge.mjs)
+  ⎿  PreToolUse:Write says:
+      ⊕ Write
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/lib/badge.mjs
+  ⎿  Wrote 51 lines to hooks/lib/badge.mjs
+       1 import { getBadgeColor, getToolColor, getToolIcon, parseToolName } from './theme.mjs';
+       2
+       3 export function renderBadge({ rawToolName = null, label = null, color = null, icon = null } = {}) {
+       4   let pretty;
+       5   let badgeColor = color;
+       6   let badgeIcon = icon;
+       7
+       8   if (rawToolName) {
+       9     pretty = parseToolName(rawToolName).pretty;
+      10     if (!badgeIcon) badgeIcon = getToolIcon(rawToolName);
+     … +41 lines (ctrl+o to expand)
+  ⎿  PostToolUse:Write says:
+      ⊕ Write   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 2ms
+
+      import { getBadgeColor, getToolColor, getToolIcon, parseToolName } from './theme.mjs';
+
+      export function renderBadge({ rawToolName = null, label = null, color = null, icon = null } = {}) {
+        let pretty;
+        let badgeColor = color;
+        let badgeIcon = icon;
+
+        if (rawToolName) {
+          pretty = parseToolName(rawToolName).pretty;
+          if (!badgeIcon) badgeIcon = getToolIcon(rawToolName);
+          if (!badgeColor) badgeColor = getToolColor(rawToolName);
+        } else {
+          pretty = label || '';
+          if (!badgeColor) badgeColor = 'cyan';
+        }
+
+        const bg = getBadgeColor(badgeColor);
+        return bg.black(` ${badgeIcon ? badgeIcon + ' ' : ''}${pretty} `);
+      }
+
+      export class Badge {
+        icon = null;
+        color = null;
+        label = null;
+        toolName = null;
+
+        constructor(props = {}) {
+          if (props.icon) this.icon = props.icon;
+          if (props.color) this.color = props.color;
+          if (props.label) this.label = props.label;
+          if (props.toolName) this.toolName = props.toolName;
+        }
+
+        get rawToolName() { return this.toolName; }
+
+        toString() {
+          return renderBadge({
+            rawToolName: this.rawToolName,
+            label: this.label,
+            color: this.color,
+            icon: this.icon,
+          });
+        }
+      }
+
+      export function renderBadges(...badges) {
+        return badges
+          .filter(Boolean)
+          .map(b => (b instanceof Badge ? b.toString() : String(b)))
+          .join(' ');
+      }
+
+
+      󰈚 Path: /Users/mia/.claude/plugins/hooks/hooks/lib/badge.mjs
+
+      ⧖ Action: create
+
+       metadata
+
+      structuredPatch: [ ]
+      originalFile: null
+      userModified: false
+
+
+⏺ Write(hooks/lib/highlight.mjs)
+  ⎿  PreToolUse:Write says:
+      ⊕ Write
+     ────────────────────────────────────────────────────────────
+     /Users/mia/.claude/plugins/hooks/hooks/lib/highlight.mjs
+  ⎿  Wrote 117 lines to hooks/lib/highlight.mjs
+       1 import chalk from 'chalk';
+       2 import { parseToolName } from './theme.mjs';
+       3
+       4 chalk.level = 3;
+       5
+       6 export function isJSON(str) {
+       7   if (typeof str !== 'string') return false;
+       8   const t = str.trim();
+       9   if (!t || (t[0] !== '{' && t[0] !== '[')) return false;
+      10   try { JSON.parse(t); return true; } catch { return false; }
+     … +107 lines (ctrl+o to expand)
+  ⎿  PostToolUse:Write says: <persisted-output>
+     Output too large (25.6KB). Full output saved to:
+     /Users/mia/.claude/projects/-Users-mia--claude-plugins-hooks/7b238fbe-6e67-47cf-bb53-c99cc753e526/tool-results/hook-toolu_012zL5UrnUPu2gKobT9DqUQE-3-systemMessage.txt
+
+     Preview (first 2KB):
+
+      ⊕ Write   OUTPUT
+     ────────────────────────────────────────────────────────────
+     Δ 3ms
+
+      import chalk from 'chalk';
+      import { parseToolName } from './theme.mjs';
+
+      chalk.level = 3;
+
+      export function isJSON(str) {
+        if (typeof str !== 'string') return false;
+     ...
+     </persisted-output>
+  ⎿  API Error: Output blocked by content filtering policy
+
+✻ Churned for 5m 10s
+
+❯ API Error: Output blocked by content filtering policy
+  ⎿  UserPromptSubmit says:
+      ✎ UserPromptSubmit
+     ────────────────────────────────────────────────────────────
+     API Error: Output blocked by content filtering policy
+
+⏺ Auto mode exited. I've started the refactor — created 4 of the planned modules so far in hooks/lib/:
+
+  - primitives.mjs — runHook, readInput, writeOutput, renderBox, renderSection, softCollapse, stripAnsi, debugLog
+  - theme.mjs — parseToolName, tool icons/colors
+  - badge.mjs — Badge class, renderBadges
+  - highlight.mjs — syntax highlighting, JSON/code detection, metadata formatter
+
+  Still to do per the approved plan:
+  1. headings.mjs — fixed PAGGA glyphs (J/K/S/Y + digits/punct)
+  2. parsers/search-replace.mjs and parsers/wcgw-trailer.mjs
+  3. tools/*.mjs strategies (generic, bash, wcgw-file, wcgw-read, wcgw-init, wcgw-ctx) + registry
+  4. renderer.mjs — the Renderer class
+  5. Slim bind.mjs to a dispatcher
+  6. Reduce utils.mjs to a re-export shim
+
+  Two things I'd like your call on before continuing, since they're judgment-sensitive:
+
+  1. PAGGA fixes — would you like me to keep the ░ █ ▀ ▄ block aesthetic (just normalize J/K/S/Y stroke widths and add digits), or do you want a visibly different style for those letters? If you
+  have a reference glyph set you like, paste it; otherwise I'll normalize in place.
+  2. utils.mjs shim — the legacy hooks/*.mjs entry files (pre-tool-use.mjs etc.) import from ./utils.mjs but aren't wired in hooks.json. Want me to (a) keep utils.mjs as a re-export shim so they
+  keep working, or (b) delete those unused entry files entirely?
+
+  Want me to keep going, or pause for your input on these?
+  ⎿  Stop says:
+
+       ░▄█░░▀█▀░▄▀▄░███
+       ░▀▄░░░█░░█░█░█▀░
+       ░▀▀░░░▀░░▀▀▀░▀░░
+     ✮ 𝓈𝓉ℴ𝓅 ✮
+     mouu~~ ^~^
+
+      ■ Stop
+
+✻ Sautéed for 13s
+
+❯ 1. Keep the current aesthetic.
+  2. Remove all unneeded
+  ⎿  UserPromptSubmit says:
+      ✎ UserPromptSubmit
+     ────────────────────────────────────────────────────────────
+     1. Keep the current aesthetic.
+     2. Remove all unneeded
+  ⎿  API Error: Output blocked by content filtering policy
+
+✻ Cogitated for 24s
+
+❯ The same api error again
+  ⎿  UserPromptSubmit says:
+      ✎ UserPromptSubmit
+     ────────────────────────────────────────────────────────────
+     The same api error again
+⏺ Continuing. I'll skip the genz filler content that may have tripped the filter and use neutral text instead.
+  ⎿  API Error: Output blocked by content filtering policy
+
+✻ Worked for 23s
+
+※ recap: Refactoring the hooks plugin's wcgw rendering into a modular Renderer with per-tool strategies. Four lib modules are done (primitives, theme, badge, highlight); next is writing headings.mjs
+   with the fixed PAGGA glyphs. (disable recaps in /config)
+
+! git status
+  ⎿  On branch main
+
+     No commits yet
+
+     Changes to be committed:
+       (use "git rm --cached <file>..." to unstage)
+        new file:   .claude-plugin/plugin.json
+        new file:   .gitignore
+        new file:   bind.mjs
+        new file:   hooks/hooks.json
+        new file:   hooks/instructions-loaded.mjs
+        new file:   hooks/post-tool-use-failure.mjs
+        new file:   hooks/post-tool-use.mjs
+        new file:   hooks/pre-tool-use.mjs
+        new file:   hooks/session-start.mjs
+        new file:   hooks/user-prompt-expansion.mjs
+        new file:   hooks/user-prompt-submit.mjs
+        new file:   hooks/utils.mjs
+        new file:   package-lock.json
+        new file:   package.json
+
+     Untracked files:
+       (use "git add <file>..." to include in what will be committed)
+        hooks/lib/
