@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>claude-code-hooks — beautified hook output for Claude Code</title>
+  <meta name="description" content="Enhanced hooks for Claude Code: PreToolUse, PostToolUse, SessionStart and more, with beautified terminal output — block-letter headings, colored badges, diffs, and playful phrases." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬡</text></svg>" />
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="hero">
+      <p class="eyebrow">⬡ Claude Code plugin</p>
+      <h1 class="title">claude-code-hooks</h1>
+      <p class="tagline">Enhanced hooks for Claude Code — beautified terminal output for every event.</p>
+      <p class="blurb">
+        Block-letter headings, colored badges, syntax-highlighted diffs, and playful
+        kaomoji phrases. <strong>13 hook events</strong>, powered by TypeScript&nbsp;+&nbsp;Bun.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/tuomashatakka/claude-code-hooks">View on GitHub →</a>
+        <a class="btn" href="#install">Install</a>
+      </div>
+    </header>
+
+    <!-- ===== Animated terminal ===== -->
+    <section class="terminal" aria-label="Animated example of hook output">
+      <div class="term-bar">
+        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+        <span class="term-title">claude — hooks demo</span>
+      </div>
+      <div class="term-body">
+
+        <p class="line" style="--i:0"><span class="prompt">$</span> <span class="type type-cmd">claude</span></p>
+
+        <!-- SessionStart -->
+        <p class="line" style="--i:2"><span class="badge b-green">⏻ Session:startup</span></p>
+        <p class="line heading h-green" style="--i:3">BEGIN&nbsp;AGAIN</p>
+        <p class="line phrase" style="--i:4">haii bestie ✧ context loaded n cooked <span class="kao">(ノ◕ヮ◕)ノ*:･ﾟ✧</span> ~</p>
+
+        <!-- PreToolUse: Bash -->
+        <p class="line" style="--i:6"><span class="badge b-magenta">❯ Bash</span></p>
+        <p class="line" style="--i:7"><span class="type type-bash">echo&nbsp;"hello"</span></p>
+
+        <!-- PostToolUse: Bash -->
+        <p class="line" style="--i:9"><span class="badge b-magenta">❯ Bash</span> <span class="badge b-brightgreen">OUTPUT</span> <span class="meta">Δ 12ms</span></p>
+        <p class="line" style="--i:10"><span class="box">hi</span></p>
+        <p class="line" style="--i:11"><span class="meta meta-ok">exit:0</span> <span class="meta">cwd:~</span></p>
+
+        <!-- Edit / diff -->
+        <p class="line" style="--i:13"><span class="badge b-green">Δ Edit</span> <span class="tag">file /tmp/example.ts</span></p>
+        <p class="line" style="--i:14"><span class="badge b-red">- 1</span> <span class="badge b-green">+ 1</span> <span class="meta">1 edit</span></p>
+        <div class="line diff" style="--i:15">
+          <span class="diff-h">hunk 1/1</span>
+          <span class="del">- const x = 1</span>
+          <span class="add">+ const x = 2</span>
+        </div>
+
+        <!-- UserPromptSubmit -->
+        <p class="line" style="--i:17"><span class="badge b-yellow">✎ UserPromptSubmit</span> <span class="meta">hello world</span></p>
+
+        <!-- Stop -->
+        <p class="line" style="--i:19"><span class="badge b-red">■ Stop</span></p>
+        <p class="line heading h-red" style="--i:20">STOP</p>
+        <p class="line phrase" style="--i:21">mouu ~ that's a wrap, logs sealed <span class="kao">(´∩｡• ᵕ •｡∩`)</span> zzZ</p>
+
+        <p class="line" style="--i:23"><span class="prompt">$</span> <span class="cursor"></span></p>
+      </div>
+    </section>
+
+    <!-- ===== Hook events ===== -->
+    <section class="events">
+      <h2>13 hook events, all beautified</h2>
+      <ul class="event-grid">
+        <li><span class="badge b-green">⏻ SessionStart</span></li>
+        <li><span class="badge b-red">⏼ SessionEnd</span></li>
+        <li><span class="badge b-magenta">❯ PreToolUse</span></li>
+        <li><span class="badge b-brightgreen">▤ PostToolUse</span></li>
+        <li><span class="badge b-red">⨂ PostToolUseFailure</span></li>
+        <li><span class="badge b-yellow">⟳ PreCompact</span></li>
+        <li><span class="badge b-yellow">⟳ PostCompact</span></li>
+        <li><span class="badge b-cyan">✓ InstructionsLoaded</span></li>
+        <li><span class="badge b-yellow">✎ UserPromptSubmit</span></li>
+        <li><span class="badge b-magenta">✱ UserPromptExpansion</span></li>
+        <li><span class="badge b-green">⬡ SubagentStart</span></li>
+        <li><span class="badge b-green">⬡ SubagentStop</span></li>
+        <li><span class="badge b-red">■ Stop</span></li>
+      </ul>
+    </section>
+
+    <!-- ===== Install ===== -->
+    <section class="install" id="install">
+      <h2>Install</h2>
+      <p>Clone into your Claude Code plugins directory:</p>
+      <pre class="codeblock"><code>git clone https://github.com/tuomashatakka/claude-code-hooks.git \
+  ~/.claude/plugins/hooks</code></pre>
+      <p class="fineprint">Requires <a href="https://bun.sh">Bun</a>. Hooks run directly from TypeScript — no build step.</p>
+    </section>
+
+    <footer class="foot">
+      <p>
+        <a href="https://github.com/tuomashatakka/claude-code-hooks">tuomashatakka/claude-code-hooks</a>
+        · built with TypeScript + Bun · made with ♡
+      </p>
+    </footer>
+
+  </main>
+</body>
+</html>
