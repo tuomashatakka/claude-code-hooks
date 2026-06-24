@@ -1,8 +1,34 @@
 import chalk, { type ColorName } from 'chalk';
+import { readFileSync } from 'node:fs';
 
 chalk.level = 3;
 
+// The Claude Code harness wraps tool/hook output that exceeds its inline limit
+// in <persisted-output>…Full output saved to: /path/…</persisted-output>. When
+// rendering, prefer the on-disk content over the truncated preview so the user
+// sees the whole thing. Errors fall back to the original text.
+const PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
+
+export function expandPersistedOutput(text: string): string {
+  if (typeof text !== 'string' || !text.includes('<persisted-output>')) return text;
+  return text.replace(PERSISTED_RE, (match, path: string) => {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return match;
+    }
+  });
+}
+
 export const DIVIDER_WIDTH = 60;
+
+// Metadata tag: bgDarkGrey black label, darkGrey corner, value, terminator.
+// Render as inline tag — caller decides whether to append a newline.
+export function renderMetaTag(label: string, value: string): string {
+  const labelChip = chalk.bgHex('#3a3a3a').black(` ${label} `);
+  const corner    = chalk.hex('#3a3a3a')('◤');
+  return labelChip + corner + ` ${value} ` + chalk.hex('#3a3a3a')('❚');
+}
 
 export function stripAnsi(str: unknown): string {
   // eslint-disable-next-line no-control-regex
@@ -14,11 +40,10 @@ export function renderBox(content: string): string {
   const maxLen = Math.max(...lines.map(l => stripAnsi(l).length), 0);
   const width = maxLen + 2;
   const bg = chalk.bgHex('#252525');
-  const blank = bg(' '.repeat(width));
   const body = lines.map(l =>
     bg(' ' + l + ' '.repeat(Math.max(0, width - 1 - stripAnsi(l).length)))
   );
-  return [blank, ...body, blank].join('\n');
+  return body.join('\n');
 }
 
 export interface RenderSectionOptions {
@@ -28,13 +53,11 @@ export interface RenderSectionOptions {
   dividerColor?: ColorName;
 }
 
-export function renderSection({ badge, lines = [], divider = '─', dividerColor = 'gray' }: RenderSectionOptions): string {
-  let out = '\n' + badge;
+export function renderSection({ badge, lines = [] }: RenderSectionOptions): string {
+  let out = badge;
   const body = lines.filter((l): l is string => Boolean(l));
   if (body.length) {
-    const colorize = (chalk[dividerColor] ?? chalk.gray) as (s: string) => string;
-    out += '\n' + colorize(divider.repeat(DIVIDER_WIDTH)) + '\n';
-    out += body.join('\n');
+    out += '\n\n' + body.join('\n');
   }
   return out;
 }
@@ -54,6 +77,11 @@ export function softCollapse(content: unknown, { maxLines = 20, label = 'lines' 
 
 // Extract plain text from any tool response shape (string, array of content blocks, object).
 export function extractResultText(toolResponse: unknown): string | null {
+  const raw = extractResultTextRaw(toolResponse);
+  return raw === null ? null : expandPersistedOutput(raw);
+}
+
+function extractResultTextRaw(toolResponse: unknown): string | null {
   if (typeof toolResponse === 'string') return toolResponse;
   if (!toolResponse || typeof toolResponse !== 'object') return null;
   if (Array.isArray(toolResponse)) {

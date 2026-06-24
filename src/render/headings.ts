@@ -1,5 +1,6 @@
 import chalk, { type ColorName } from 'chalk';
 import { generatePhrase, type PhraseContext, type PhraseEvent } from './phrase.ts';
+import { stripAnsi } from './primitives.ts';
 
 chalk.level = 3;
 
@@ -22,13 +23,13 @@ const GLYPHS: Record<string, Row3> = {
   F: [' █▀▀', ' █▀ ', ' ▀  '],
   G: [' ▄▀▀', ' █ ▄', ' ▀▀▀'],
   H: [' █ █', ' █▀█', ' ▀ ▀'],
-  I: [' ▀█▀', '  █ ', '  ▀ '],
-  J: ['   █', '   █', ' ▀▀ '],
-  K: [' █ ▄', ' █▀ ', ' ▀ ▀'],
+  I: [' █', ' █', ' ▀'],
+  J: ['   █', ' ▄ █', ' ▀▀ '],
+  K: [' █ █', ' █▀▄', ' ▀ ▀'],
   L: [' █  ', ' █  ', ' ▀▀▀'],
-  M: [' █▄█', ' █ █', ' ▀ ▀'],
-  N: [' █▄█', ' █ █', ' ▀ ▀'],
-  O: [' ▄▀▄', ' █ █', ' ▀▄▀'],
+  M: [' █▄█▄█', ' █ █ █', ' ▀ ▀ ▀'],
+  N: [' █▄ █', ' █ ▀█', ' ▀  ▀'],
+  O: [' █▀█', ' █ █', ' ▀▀▀'],
   P: [' █▀▄', ' █▀ ', ' ▀  '],
   Q: [' ▄▀▄', ' █ █', ' ▀▀▄'],
   R: [' █▀▄', ' █▀▄', ' ▀ ▀'],
@@ -36,13 +37,13 @@ const GLYPHS: Record<string, Row3> = {
   T: [' ▀█▀', '  █ ', '  ▀ '],
   U: [' █ █', ' █ █', ' ▀▀▀'],
   V: [' █ █', ' █ █', '  ▀ '],
-  W: [' █ █', ' █ █', ' ▀█▀'],
+  W: [' █ █ █', ' █ █ █', '  ▀ ▀ '],
   X: [' █ █', '  █ ', ' ▀ ▀'],
   Y: [' █ █', '  █ ', '  ▀ '],
-  Z: [' ▀▀█', '  ▄ ', ' █▀▀'],
+  Z: [' ▀▀█', ' ▄▄ ', ' ▀▀▀'],
 
   '0': [' ▄▀▄', ' █ █', ' ▀▄▀'],
-  '1': ['  █ ', '  █ ', '  ▀ '],
+  '1': [' █ ', ' █ ', ' ▀ '],
   '2': [' ▄▀▄', '  ▄▀', ' ▀▀▀'],
   '3': [' ▀▀▄', '  ▀▄', ' ▀▀ '],
   '4': [' █ █', ' ▀▀█', '   ▀'],
@@ -52,16 +53,16 @@ const GLYPHS: Record<string, Row3> = {
   '8': [' ▄▀▄', ' ▄▀▄', ' ▀▄▀'],
   '9': [' ▄▀▄', ' ▀▀█', ' ▀▀ '],
 
-  '!': ['  █ ', '  █ ', '  ▄ '],
+  '!': [' █ ', ' █ ', ' ▄ '],
   '?': [' ▀▀▄', '  ▄▀', '  ▄ '],
-  '.': ['    ', '    ', '  ▄ '],
-  ':': ['  ▄ ', '    ', '  ▄ '],
-  '-': ['    ', ' ▄▄▄', '    '],
-  '_': ['    ', '    ', ' ▄▄▄'],
-  '/': ['   ▄', '  █ ', ' ▀  '],
+  '.': ['   ', '   ', ' ▄ '],
+  ':': [' ▄ ', '   ', ' ▄ '],
+  '-': ['     ', ' ▄▄▄ ', '     '],
+  '_': ['     ', '     ', ' ▄▄▄ '],
+  '/': ['   ▄ ', '  █  ', ' ▀   '],
 };
 
-function renderGlyphs(text: string, color: ColorName): string {
+function renderGlyphRows(text: string, color: ColorName): [string, string, string] {
   const chars = text.toUpperCase().split('');
   const rows: [string, string, string] = ['  ', '  ', '  '];
   for (const ch of chars) {
@@ -71,7 +72,15 @@ function renderGlyphs(text: string, color: ColorName): string {
     rows[2] += glyph[2];
   }
   const colorize = (chalk[color] ?? chalk.cyan) as (s: string) => string;
-  return colorize(rows.join('\n'));
+  return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
+}
+
+function renderGlyphs(text: string, color: ColorName): string {
+  return renderGlyphRows(text, color).join('\n');
+}
+
+function glyphWidth(text: string): number {
+  return 2 + text.length * 4;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -85,9 +94,35 @@ export interface HeadingArgs {
 }
 
 export function renderHeading({ word, color = 'cyan', event, tone, width = 60 }: HeadingArgs): string {
-  const pagga  = renderGlyphs(word, color);
-  const phrase = generatePhrase({ event, word, color, tone, width, minTokens: 7, maxTokens: 16 });
-  return '\n\n' + pagga + '\n' + phrase + '\n';
+  const glyphRows = renderGlyphRows(word, color);
+  const gw = glyphWidth(word);
+  const gutter = 2;
+  const phraseWidth = Math.max(20, width - gw - gutter);
+
+  const phrase = generatePhrase({ event, word, color, tone, width: phraseWidth, minTokens: 4, maxTokens: 10 });
+  const phraseLines = phrase.split('\n');
+
+  // Pad/truncate to exactly 3 rows; place text on rows 1 (top) and 2 (middle)
+  // for a vertically-centered look against the 3-row glyph block.
+  const slots: [string, string, string] = ['', '', ''];
+  if (phraseLines.length === 1) {
+    slots[1] = phraseLines[0]!;
+  } else if (phraseLines.length === 2) {
+    slots[0] = phraseLines[0]!;
+    slots[1] = phraseLines[1]!;
+  } else {
+    slots[0] = phraseLines[0]!;
+    slots[1] = phraseLines[1]!;
+    const tail = phraseLines.slice(2).join(' ');
+    slots[2] = stripAnsi(tail).length > phraseWidth
+      ? tail.slice(0, Math.max(0, phraseWidth - 1)) + '…'
+      : tail;
+  }
+
+  const composed = glyphRows
+    .map((g, i) => g + ' '.repeat(gutter) + (slots[i] ?? ''))
+    .join('\n');
+  return '\n' + composed;
 }
 
 // Back-compat shim — emits glyphs only. Used where callers compose phrase

@@ -32,11 +32,21 @@ export function formatJSON(content: string): string {
   } catch { return content; }
 }
 
+const EXT_TO_LANG: Record<string, SupportedLanguage> = {
+  ts: 'typescript', tsx: 'typescript',
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  json: 'json',
+  sh: 'bash', bash: 'bash', zsh: 'bash',
+  md: 'markdown', markdown: 'markdown',
+};
+
 export function detectLanguage(content: string, toolName: string): SupportedLanguage {
   const { tool } = parseToolName(toolName);
   if (tool === 'Read' || tool === 'ReadFiles') {
     const extMatch = content.match(/\.([a-z]+)$/m);
-    if (extMatch?.[1]) return extMatch[1];
+    const ext = extMatch?.[1];
+    if (ext && EXT_TO_LANG[ext]) return EXT_TO_LANG[ext]!;
+    if (ext) return ext;
     if (
       content.includes('function') ||
       content.includes('const ') ||
@@ -52,7 +62,11 @@ export function detectLanguage(content: string, toolName: string): SupportedLang
 export function simpleHighlight(code: string, language: SupportedLanguage): string {
   if (
     !language ||
-    (language !== 'javascript' && language !== 'typescript' && language !== 'json' && language !== 'bash')
+    (language !== 'javascript' &&
+      language !== 'typescript' &&
+      language !== 'json' &&
+      language !== 'bash' &&
+      language !== 'markdown')
   ) {
     return code;
   }
@@ -78,12 +92,69 @@ export function simpleHighlight(code: string, language: SupportedLanguage): stri
     return result;
   }
 
-  if (language === 'bash') {
-    result = result.replace(/(^|\n)(#.*)$/gm, (_, p1, p2) => p1 + chalk.gray(p2));
-    return result;
-  }
+  if (language === 'bash') return highlightBash(result);
+  if (language === 'markdown') return highlightMarkdown(result);
 
   return code;
+}
+
+function highlightBash(code: string): string {
+  let result = code;
+  // Comments first (whole-line `#` only, to avoid clashing with `$#`).
+  result = result.replace(/(^|\n)(\s*#.*)/g, (_, p1, p2) => p1 + chalk.gray(p2));
+  // Strings — both single and double quoted.
+  result = result.replace(/"([^"\\]|\\.)*"/g, m => chalk.green(m));
+  result = result.replace(/'([^'\\]|\\.)*'/g, m => chalk.green(m));
+  // Variables: $VAR, ${VAR}, $1, $@, $#, $?
+  result = result.replace(/\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@#?*!\$]/g, m => chalk.yellow(m));
+  // Keywords.
+  result = result.replace(
+    /\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|export|local|readonly|declare|set|unset|source|exit|break|continue)\b/g,
+    m => chalk.cyan(m)
+  );
+  // Common commands.
+  result = result.replace(
+    /\b(echo|printf|cd|pwd|ls|cat|grep|sed|awk|jq|curl|wget|git|npm|bun|node|python|pip|docker|kubectl|make|find|xargs|tar|chmod|chown|mkdir|rm|mv|cp|ln|touch|env|which|head|tail|sort|uniq|wc|tee|read)\b/g,
+    m => chalk.magenta(m)
+  );
+  // Numbers.
+  result = result.replace(/\b\d+\b/g, m => chalk.yellow(m));
+  return result;
+}
+
+function highlightMarkdown(code: string): string {
+  let result = code;
+  // Fenced code blocks: highlight the inner content per language.
+  result = result.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang: string | undefined, body: string) => {
+    const inner = lang ? simpleHighlight(body, lang as SupportedLanguage) : body;
+    const fence = chalk.gray('```' + (lang ?? ''));
+    return fence + '\n' + inner + chalk.gray('```');
+  });
+  // ATX headings.
+  result = result.replace(/^(#{1,6})\s+(.*)$/gm, (_m, h: string, t: string) =>
+    chalk.bold.cyan(h + ' ' + t)
+  );
+  // Blockquotes.
+  result = result.replace(/^(>\s.*)$/gm, m => chalk.gray.italic(m));
+  // List markers.
+  result = result.replace(/^(\s*)([-*+])(\s)/gm, (_m, sp: string, marker: string, tail: string) =>
+    sp + chalk.yellow(marker) + tail
+  );
+  result = result.replace(/^(\s*)(\d+\.)(\s)/gm, (_m, sp: string, marker: string, tail: string) =>
+    sp + chalk.yellow(marker) + tail
+  );
+  // Bold and italic. Bold first so ** isn't eaten by *.
+  result = result.replace(/\*\*([^*]+)\*\*/g, (_m, t: string) => chalk.bold(t));
+  result = result.replace(/__([^_]+)__/g, (_m, t: string) => chalk.bold(t));
+  result = result.replace(/(?<![*_])\*([^*\n]+)\*(?!\*)/g, (_m, t: string) => chalk.italic(t));
+  result = result.replace(/(?<![*_])_([^_\n]+)_(?!_)/g, (_m, t: string) => chalk.italic(t));
+  // Inline code.
+  result = result.replace(/`([^`\n]+)`/g, (_m, t: string) => chalk.bgHex('#1e1e1e').white(t));
+  // Links: [text](url)
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, url: string) =>
+    chalk.cyan(text) + chalk.gray(' (') + chalk.gray.underline(url) + chalk.gray(')')
+  );
+  return result;
 }
 
 const META_KEY   = chalk.hex('#7aa2f7');

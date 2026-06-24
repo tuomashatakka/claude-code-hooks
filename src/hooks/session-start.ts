@@ -58,7 +58,7 @@ defineHook({
     if (systemPrompt)    lines.push(chalk.cyan('✓ ') + 'System prompt loaded from: ' + SYSTEM_PROMPT_PATH);
 
     const isWake = input.source === 'compact';
-    const headingWord = isWake ? 'WAKE UP' : 'START';
+    const headingWord = isWake ? 'WAKE UP' : 'BEGIN AGAIN';
     const asciiBlock = asciiArt ? '\n' + asciiArt + '\n' : '';
     const heading = renderHeading({
       word: headingWord,

@@ -57,6 +57,11 @@
       ]}
     ],
 
+    "SubagentStart": [
+      { "hooks": [
+        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SubagentStart" }
+      ]}
+    ],
     "SubagentStop": [
       { "hooks": [
         { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SubagentStop" }

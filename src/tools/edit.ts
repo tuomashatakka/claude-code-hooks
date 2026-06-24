@@ -1,18 +1,14 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { softCollapse } from '../render/primitives.ts';
+import { renderMetaTag } from '../render/primitives.ts';
+import { Badge } from '../render/badge.ts';
 import type { EditInput, EditInputSingle, EditInputMulti, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
 
-function renderDiff(oldStr: string | null | undefined, newStr: string | null | undefined): string {
-  const removed = (oldStr ?? '').replace(/\n$/, '').split('\n');
-  const added   = (newStr ?? '').replace(/\n$/, '').split('\n');
-  const diffLines = [
-    ...removed.map(l => chalk.red('  - ') + chalk.red(l)),
-    ...added.map(l   => chalk.green('  + ') + chalk.green(l)),
-  ];
-  return softCollapse(diffLines.join('\n'), { maxLines: 24, label: 'diff lines' });
+function countLines(s: string | null | undefined): number {
+  if (!s) return 0;
+  return s.replace(/\n$/, '').split('\n').length;
 }
 
 defineTool<EditInput, RawToolResult>({
@@ -20,7 +16,6 @@ defineTool<EditInput, RawToolResult>({
   pre(input) {
     const filePath = input.file_path;
     const lines: string[] = [];
-    if (filePath) lines.push(chalk.bold.cyan(filePath));
 
     const multi = input as Partial<EditInputMulti>;
     const single = input as Partial<EditInputSingle>;
@@ -29,10 +24,18 @@ defineTool<EditInput, RawToolResult>({
           ? [{ old_string: single.old_string!, new_string: single.new_string ?? '' }]
           : []);
 
+    let removed = 0;
+    let added = 0;
     for (const e of edits) {
-      if (e.old_string == null && e.new_string == null) continue;
-      lines.push(renderDiff(e.old_string, e.new_string));
+      removed += countLines(e.old_string);
+      added += countLines(e.new_string);
     }
+
+    if (filePath) lines.push(renderMetaTag('file', filePath));
+
+    const removedBadge = new Badge({ label: `- ${removed}`, color: 'red' }).toString();
+    const addedBadge   = new Badge({ label: `+ ${added}`, color: 'green' }).toString();
+    lines.push(removedBadge + addedBadge);
 
     if (edits.length > 1) lines.push(chalk.gray(`  ${edits.length} edits`));
     return { lines };

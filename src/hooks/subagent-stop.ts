@@ -11,7 +11,7 @@ defineHook({
     return { agentType: pickString(o, 'agent_type', 'agentType') };
   },
   handle(input) {
-    const heading = renderHeading({ word: 'AGENT', color: 'green', event: 'agent' });
+    const heading = renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' });
     const main = new Badge({ label: 'SubagentStop', color: 'green', icon: '⬡' });
     const badge = input.agentType
       ? renderBadges(main, new Badge({ label: input.agentType, color: 'gray' }))

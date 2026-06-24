@@ -8,10 +8,12 @@ export type HookEventName =
   | 'PostToolBatch'
   | 'SessionStart'
   | 'SessionEnd'
+  | 'PreCompact'
   | 'PostCompact'
   | 'InstructionsLoaded'
   | 'UserPromptSubmit'
   | 'UserPromptExpansion'
+  | 'SubagentStart'
   | 'SubagentStop'
   | 'Stop';
 
@@ -58,6 +60,16 @@ export interface PostCompactInput {
   summary?: string;
 }
 
+export interface PreCompactInput {
+  trigger?: 'manual' | 'auto';
+  customInstructions?: string;
+}
+
+export interface SubagentStartInput {
+  agentId?: string;
+  agentType?: string;
+}
+
 export interface InstructionsLoadedInput {
   filePath: string;
   memoryType: string;
@@ -88,10 +100,12 @@ export type HookInput<E extends HookEventName> =
   E extends 'PostToolBatch'        ? PostToolBatchInput :
   E extends 'SessionStart'         ? SessionStartInput :
   E extends 'SessionEnd'           ? SessionEndInput :
+  E extends 'PreCompact'           ? PreCompactInput :
   E extends 'PostCompact'          ? PostCompactInput :
   E extends 'InstructionsLoaded'   ? InstructionsLoadedInput :
   E extends 'UserPromptSubmit'     ? UserPromptSubmitInput :
   E extends 'UserPromptExpansion'  ? UserPromptExpansionInput :
+  E extends 'SubagentStart'        ? SubagentStartInput :
   E extends 'SubagentStop'         ? SubagentStopInput :
   E extends 'Stop'                 ? StopInput :
   never;
@@ -103,10 +117,12 @@ export const HOOK_EVENT_NAMES: readonly HookEventName[] = [
   'PostToolBatch',
   'SessionStart',
   'SessionEnd',
+  'PreCompact',
   'PostCompact',
   'InstructionsLoaded',
   'UserPromptSubmit',
   'UserPromptExpansion',
+  'SubagentStart',
   'SubagentStop',
   'Stop',
 ] as const;
