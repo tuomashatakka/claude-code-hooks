@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "description": "Enhanced hooks for Claude Code - PreToolUse, PostToolUse, SessionStart, and more with beautified output",
   "author": {
-    "name": "Mia",
-    "email": "mia@example.com"
+    "name": "tuomashatakka",
+    "email": "tuomas.hatakka@gmail.com"
   },
   "hooks": "../hooks/hooks.json"
 }
