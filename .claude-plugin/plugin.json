@@ -1,6 +1,6 @@
 {
   "name": "hooks",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Enhanced hooks for Claude Code - PreToolUse, PostToolUse, SessionStart, and more with beautified output",
   "author": {
     "name": "tuomashatakka",
