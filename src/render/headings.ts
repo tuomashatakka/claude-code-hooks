@@ -1,6 +1,6 @@
 import chalk, { type ColorName } from 'chalk'
 import { generatePhrase, type PhraseContext, type PhraseEvent } from './phrase.ts'
-import { stripAnsi } from './primitives.ts'
+import { stripAnsi, truncateAnsi } from './primitives.ts'
 import GLYPHS from './glyphs.json'
 
 chalk.level = 3
@@ -70,7 +70,7 @@ export function renderHeading({ word, color = 'cyan', event, tone, width = 60 }:
     slots[1] = phraseLines[1]!
     const tail = phraseLines.slice(2).join(' ')
     slots[2] = stripAnsi(tail).length > phraseWidth
-      ? tail.slice(0, Math.max(0, phraseWidth - 1)) + '…'
+      ? truncateAnsi(tail, Math.max(0, phraseWidth - 1))
       : tail
   }
 

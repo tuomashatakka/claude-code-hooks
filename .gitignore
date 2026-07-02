@@ -4,3 +4,4 @@ dist/
 *.tsbuildinfo
 debug.log
 transcript.output
+public/demo-data.js

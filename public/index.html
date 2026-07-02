@@ -25,48 +25,16 @@
       </div>
     </header>
 
-    <!-- ===== Animated terminal ===== -->
-    <section class="terminal" aria-label="Animated example of hook output">
+    <!-- ===== Live terminal simulator ===== -->
+    <!-- Content is captured from the real hook pipeline at build time (see
+         scripts/capture-demo.ts) - not hand-authored. -->
+    <section class="terminal" aria-label="Live-captured example of actual hook output">
       <div class="term-bar">
         <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
         <span class="term-title">claude — hooks demo</span>
       </div>
-      <div class="term-body">
-
-        <p class="line" style="--i:0"><span class="prompt">$</span> <span class="type type-cmd">claude</span></p>
-
-        <!-- SessionStart -->
-        <p class="line" style="--i:2"><span class="badge b-green">⏻ Session:startup</span></p>
-        <p class="line heading h-green" style="--i:3">BEGIN&nbsp;AGAIN</p>
-        <p class="line phrase" style="--i:4">haii bestie ✧ context loaded n cooked <span class="kao">(ノ◕ヮ◕)ノ*:･ﾟ✧</span> ~</p>
-
-        <!-- PreToolUse: Bash -->
-        <p class="line" style="--i:6"><span class="badge b-magenta">❯ Bash</span></p>
-        <p class="line" style="--i:7"><span class="type type-bash">echo&nbsp;"hello"</span></p>
-
-        <!-- PostToolUse: Bash -->
-        <p class="line" style="--i:9"><span class="badge b-magenta">❯ Bash</span> <span class="badge b-brightgreen">OUTPUT</span> <span class="meta">Δ 12ms</span></p>
-        <p class="line" style="--i:10"><span class="box">hi</span></p>
-        <p class="line" style="--i:11"><span class="meta meta-ok">exit:0</span> <span class="meta">cwd:~</span></p>
-
-        <!-- Edit / diff -->
-        <p class="line" style="--i:13"><span class="badge b-green">Δ Edit</span> <span class="tag">file /tmp/example.ts</span></p>
-        <p class="line" style="--i:14"><span class="badge b-red">- 1</span> <span class="badge b-green">+ 1</span> <span class="meta">1 edit</span></p>
-        <div class="line diff" style="--i:15">
-          <span class="diff-h">hunk 1/1</span>
-          <span class="del">- const x = 1</span>
-          <span class="add">+ const x = 2</span>
-        </div>
-
-        <!-- UserPromptSubmit -->
-        <p class="line" style="--i:17"><span class="badge b-yellow">✎ UserPromptSubmit</span> <span class="meta">hello world</span></p>
-
-        <!-- Stop -->
-        <p class="line" style="--i:19"><span class="badge b-red">■ Stop</span></p>
-        <p class="line heading h-red" style="--i:20">STOP</p>
-        <p class="line phrase" style="--i:21">mouu ~ that's a wrap, logs sealed <span class="kao">(´∩｡• ᵕ •｡∩`)</span> zzZ</p>
-
-        <p class="line" style="--i:23"><span class="prompt">$</span> <span class="cursor"></span></p>
+      <div class="term-body" id="term-body">
+        <span class="fg-dim">…</span>
       </div>
     </section>
 
@@ -107,5 +75,8 @@
     </footer>
 
   </main>
+
+  <script src="demo-data.js" defer></script>
+  <script src="terminal-sim.js" defer></script>
 </body>
 </html>

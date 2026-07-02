@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "smoke": "bun run scripts/smoke.ts"
+    "smoke": "bun run scripts/smoke.ts",
+    "demo:capture": "bun run scripts/capture-demo.ts"
   },
   "dependencies": {
     "chalk": "^5.6.2"

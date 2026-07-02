@@ -35,6 +35,31 @@ export function stripAnsi(str: unknown): string {
   return String(str).replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+// Truncates by visible-character count, passing ANSI escape sequences
+// through untouched (they don't count against the budget) so a cut never
+// lands mid-sequence and drops a style's closing reset code - which would
+// otherwise leak that style into everything rendered after it.
+export function truncateAnsi(text: string, maxVisibleLen: number, ellipsis = '…'): string {
+  // eslint-disable-next-line no-control-regex
+  const csi = /\x1b\[[0-9;]*m/y;
+  let out = '';
+  let visible = 0;
+  let i = 0;
+  while (i < text.length && visible < maxVisibleLen) {
+    csi.lastIndex = i;
+    const m = csi.exec(text);
+    if (m) {
+      out += m[0];
+      i += m[0].length;
+      continue;
+    }
+    out += text[i];
+    visible += 1;
+    i += 1;
+  }
+  return out + '\x1b[0m' + ellipsis;
+}
+
 export function renderBox(content: string): string {
   const lines = String(content).split('\n');
   const maxLen = Math.max(...lines.map(l => stripAnsi(l).length), 0);

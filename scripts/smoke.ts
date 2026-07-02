@@ -8,13 +8,13 @@ import path from 'node:path';
 const ROOT = path.resolve(import.meta.dir, '..');
 const BIND = path.join(ROOT, 'hooks', 'bin', 'bind.ts');
 
-interface Case {
+export interface Case {
   label: string;
   event: string;
   payload: unknown;
 }
 
-const CASES: Case[] = [
+export const CASES: Case[] = [
   {
     label: 'PreToolUse — Bash',
     event: 'PreToolUse',
@@ -51,7 +51,7 @@ const CASES: Case[] = [
     payload: {
       tool_name: 'mcp__wcgw__BashCommand',
       tool_input: { type: 'command', thread_id: 'i6314', command: 'ls' },
-      tool_response: 'a\nb\nc\n\n---\nstatus = 0\ncwd = /Users/mia\nThis is the main shell. No command running in background.',
+      tool_response: 'a\nb\nc\n\n---\nstatus = 0\ncwd = /home/user\nThis is the main shell. No command running in background.',
       duration_ms: 21,
     },
   },
@@ -72,9 +72,17 @@ const CASES: Case[] = [
   },
 ];
 
-async function runCase(c: Case): Promise<{ stdout: string; stderr: string; code: number | null }> {
+// SessionStart reads $HOME/system-prompt.md and $HOME/Documents/Prompts/anime-ascii/*
+// if present - point HOME at a directory that won't exist so output is the
+// same generic content regardless of whose machine (or CI runner) this runs on.
+const SANDBOX_HOME = path.join(ROOT, '.smoke-home');
+
+export async function runCase(c: Case): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bun', ['run', BIND, c.event], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('bun', ['run', BIND, c.event], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, HOME: SANDBOX_HOME, USERPROFILE: SANDBOX_HOME },
+    });
     let out = '';
     let err = '';
     child.stdout.on('data', d => (out += d.toString()));
@@ -85,17 +93,19 @@ async function runCase(c: Case): Promise<{ stdout: string; stderr: string; code:
   });
 }
 
-let failures = 0;
-for (const c of CASES) {
-  const { stdout, stderr, code } = await runCase(c);
-  const ok = code === 0 && stdout.includes('"continue": true');
-  process.stdout.write(`\n=== ${c.label} ${ok ? 'OK' : 'FAIL'} (exit ${code}) ===\n`);
-  process.stdout.write(stderr);
-  if (!ok) {
-    failures += 1;
-    process.stdout.write('\n--- stdout ---\n' + stdout + '\n');
+if (import.meta.main) {
+  let failures = 0;
+  for (const c of CASES) {
+    const { stdout, stderr, code } = await runCase(c);
+    const ok = code === 0 && stdout.includes('"continue": true');
+    process.stdout.write(`\n=== ${c.label} ${ok ? 'OK' : 'FAIL'} (exit ${code}) ===\n`);
+    process.stdout.write(stderr);
+    if (!ok) {
+      failures += 1;
+      process.stdout.write('\n--- stdout ---\n' + stdout + '\n');
+    }
   }
-}
 
-process.stdout.write(`\n${failures === 0 ? 'all cases passed' : failures + ' failures'}\n`);
-process.exit(failures === 0 ? 0 : 1);
+  process.stdout.write(`\n${failures === 0 ? 'all cases passed' : failures + ' failures'}\n`);
+  process.exit(failures === 0 ? 0 : 1);
+}
