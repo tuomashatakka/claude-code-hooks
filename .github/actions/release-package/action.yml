@@ -1,0 +1,146 @@
+name: "Release package"
+description: >
+  Bumps a package's version file(s), optionally tags + creates a GitHub
+  Release, and optionally publishes the package to an npm-compatible
+  registry (e.g. GitHub Packages). Reusable across any package in this repo.
+
+inputs:
+  version:
+    description: "Release version (semver, no leading v) e.g. 2.1.0"
+    required: true
+  prerelease:
+    description: "Mark the GitHub Release as a pre-release"
+    required: false
+    default: "false"
+  package-dir:
+    description: "Directory containing the package.json being released"
+    required: false
+    default: "."
+  extra-version-files:
+    description: "Comma-separated list of additional JSON files whose .version field should be bumped to the same version"
+    required: false
+    default: ""
+  tag-prefix:
+    description: "Prefix used to build the git tag, e.g. 'v' -> v1.2.3, 'ansi-headings-v' -> ansi-headings-v1.2.3"
+    required: false
+    default: "v"
+  create-git-tag:
+    description: "Whether to commit the version bump and create/push a git tag"
+    required: false
+    default: "true"
+  create-github-release:
+    description: "Whether to create a GitHub Release for the tag"
+    required: false
+    default: "true"
+  publish-npm:
+    description: "Whether to publish package-dir to an npm-compatible registry"
+    required: false
+    default: "false"
+  npm-registry-url:
+    description: "Registry URL used when publish-npm is true"
+    required: false
+    default: "https://npm.pkg.github.com"
+  npm-scope:
+    description: "Scope passed to actions/setup-node (e.g. @tuomashatakka), used when publish-npm is true"
+    required: false
+    default: ""
+  npm-tag:
+    description: "npm dist-tag to publish under, used when publish-npm is true"
+    required: false
+    default: "latest"
+  github-token:
+    description: "Token used for git push, gh release create, and npm auth"
+    required: true
+
+outputs:
+  tag:
+    description: "The git tag that was created (empty if create-git-tag was false)"
+    value: ${{ steps.tag.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate version input
+      shell: bash
+      run: |
+        if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$ ]]; then
+          echo "::error::Invalid version '${{ inputs.version }}'. Expected semver like 2.1.0 or 2.1.0-rc.1"
+          exit 1
+        fi
+
+    - name: Bump version file(s)
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        PACKAGE_DIR: ${{ inputs.package-dir }}
+        EXTRA_FILES: ${{ inputs.extra-version-files }}
+      run: |
+        bump() {
+          jq --arg v "$VERSION" '.version = $v' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+          echo "$1 -> $(jq -r .version "$1")"
+        }
+        bump "$PACKAGE_DIR/package.json"
+        if [[ -n "$EXTRA_FILES" ]]; then
+          IFS=',' read -ra FILES <<< "$EXTRA_FILES"
+          for f in "${FILES[@]}"; do
+            bump "$f"
+          done
+        fi
+
+    - name: Commit, tag, and push
+      id: tag
+      if: inputs.create-git-tag == 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        PACKAGE_DIR: ${{ inputs.package-dir }}
+        EXTRA_FILES: ${{ inputs.extra-version-files }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+      run: |
+        TAG="${TAG_PREFIX}${VERSION}"
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add "$PACKAGE_DIR/package.json"
+        if [[ -n "$EXTRA_FILES" ]]; then
+          IFS=',' read -ra FILES <<< "$EXTRA_FILES"
+          git add "${FILES[@]}"
+        fi
+        if git diff --cached --quiet; then
+          echo "No version changes to commit (already at $VERSION)."
+        else
+          git commit -m "chore(release): $TAG"
+        fi
+        git tag -a "$TAG" -m "Release $TAG"
+        git push origin HEAD:${{ github.ref_name }}
+        git push origin "$TAG"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+    - name: Create GitHub Release
+      if: inputs.create-github-release == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TAG: ${{ steps.tag.outputs.tag }}
+        PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        FLAGS=(--title "$TAG" --generate-notes)
+        if [[ "$PRERELEASE" == "true" ]]; then
+          FLAGS+=(--prerelease)
+        fi
+        gh release create "$TAG" "${FLAGS[@]}"
+
+    - name: Setup Node for npm publish
+      if: inputs.publish-npm == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        registry-url: ${{ inputs.npm-registry-url }}
+        scope: ${{ inputs.npm-scope }}
+
+    - name: Publish to registry
+      if: inputs.publish-npm == 'true'
+      shell: bash
+      working-directory: ${{ inputs.package-dir }}
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.github-token }}
+      run: npm publish --tag "${{ inputs.npm-tag }}"
