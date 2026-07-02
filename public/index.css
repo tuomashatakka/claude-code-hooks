@@ -25,7 +25,7 @@
   --diff-del:    #e0564f;
   --diff-add:    #9ece6a;
 
-  --mono: ui-monospace, "JetBrains Mono", "Fira Code", "SFMono-Regular", Menlo, Consolas, monospace;
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -39,6 +39,8 @@ body {
     var(--bg);
   color: var(--fg);
   font-family: var(--mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -127,12 +129,12 @@ a:hover { text-decoration: underline; }
 /* lines injected by terminal-sim.js from public/demo-data.js (build-time
    capture of real hook output - see scripts/capture-demo.ts) */
 .cap-line {
-  margin: 0 0 .5rem;
+  margin: 0;
   white-space: pre;
   animation: reveal .35s ease both;
 }
 
-.line { margin: 0 0 .5rem; white-space: nowrap; animation: reveal .35s ease both; }
+.line { margin: 0; white-space: nowrap; animation: reveal .35s ease both; }
 
 .prompt { color: var(--brightgreen); font-weight: 700; }
 
