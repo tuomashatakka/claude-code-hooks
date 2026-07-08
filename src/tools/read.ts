@@ -20,12 +20,6 @@ function guessLanguage(filePath: string | null | undefined): SupportedLanguage |
   return m ? (LANG_MAP[m[1]!.toLowerCase()] ?? null) : null;
 }
 
-function isTruncated(content: string): boolean {
-  return /\[(?:File\s+)?[Tt]runcated/.test(content)
-    || /\.\.\.\s*\(\d+\s+more\s+lines?\)/.test(content)
-    || /\.\.\.\s*\+\d+\s+more\s+lines?/.test(content);
-}
-
 defineTool<ReadInput, RawToolResult>({
   matches: 'Read',
   pre(input) {
@@ -38,14 +32,11 @@ defineTool<ReadInput, RawToolResult>({
     if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
 
     const filePath = input.file_path;
-    let content = extractResultText(result);
-
-    if (content && isTruncated(content) && filePath) {
-      try {
-        const fromDisk = fs.readFileSync(filePath, 'utf8');
-        if (fromDisk) content = fromDisk;
-      } catch {}
+    let content: string | null = null;
+    if (filePath) {
+      try { content = fs.readFileSync(filePath, 'utf8'); } catch {}
     }
+    if (!content) content = extractResultText(result);
 
     if (content) {
       const lang = guessLanguage(filePath);

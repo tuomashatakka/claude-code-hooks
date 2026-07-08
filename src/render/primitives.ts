@@ -60,15 +60,34 @@ export function truncateAnsi(text: string, maxVisibleLen: number, ellipsis = 'â€
   return out + '\x1b[0m' + ellipsis;
 }
 
+// Fallback content width when we can't see the real terminal (hooks are almost
+// always spawned with piped, non-TTY stdio) - wide enough for normal code/output
+// lines, narrow enough that a stray huge line can't blow the box past a typical
+// terminal once the harness's own tree indentation is added on top.
+const FALLBACK_CONTENT_WIDTH = 96;
+const OUTER_INDENT_MARGIN = 4;
+
+function getMaxContentWidth(): number {
+  const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
+  const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN;
+  return Math.max(20, usable);
+}
+
+const H_PADDING = 2;
+
 export function renderBox(content: string): string {
-  const lines = String(content).split('\n');
-  const maxLen = Math.max(...lines.map(l => stripAnsi(l).length), 0);
-  const width = maxLen + 2;
+  const maxWidth = getMaxContentWidth();
+  const lines = String(content)
+    .split('\n')
+    .map(l => (stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l));
+  const maxLen = Math.min(Math.max(...lines.map(l => stripAnsi(l).length), 0), maxWidth);
+  const width = maxLen + H_PADDING * 2;
   const bg = chalk.bgHex('#252525');
+  const pad = bg(' '.repeat(width));
   const body = lines.map(l =>
-    bg(' ' + l + ' '.repeat(Math.max(0, width - 1 - stripAnsi(l).length)))
+    bg(' '.repeat(H_PADDING) + l + ' '.repeat(Math.max(0, width - H_PADDING - stripAnsi(l).length)))
   );
-  return body.join('\n');
+  return [pad, ...body, pad].join('\n');
 }
 
 export interface RenderSectionOptions {
