@@ -9,10 +9,13 @@
     "demo:capture": "bun run scripts/capture-demo.ts"
   },
   "dependencies": {
-    "chalk": "^5.6.2"
+    "chalk": "^5.6.2",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "bun-types": "latest"
+    "@types/pngjs": "^6.0.5",
+    "bun-types": "latest",
+    "typescript": "^5.6.0"
   }
 }

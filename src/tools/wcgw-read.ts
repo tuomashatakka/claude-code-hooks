@@ -1,6 +1,8 @@
 import chalk from 'chalk';
+import fs from 'node:fs';
 import { defineTool } from '../registry/tool-registry.ts';
-import { softCollapse } from '../render/primitives.ts';
+import { softCollapse, getMaxContentWidth } from '../render/primitives.ts';
+import { imageToAscii } from '../render/image-to-ascii.ts';
 import type { WcgwReadFilesInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -33,8 +35,23 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
       for (const [filePath, content] of Object.entries(fileContents as Record<string, unknown>)) {
         if (typeof content !== 'string') continue;
         lines.push(chalk.cyan('  ├ ') + chalk.bold(filePath));
+
+        const ext = filePath.slice(filePath.lastIndexOf('.'));
+        const isImg = /\.(png|jpg|jpeg)$/i.test(ext);
+        let rendered: string | null = null;
+        if (isImg) {
+          try {
+            const buffer = fs.readFileSync(filePath);
+            rendered = imageToAscii(buffer, ext, getMaxContentWidth());
+          } catch {}
+        }
+
+        if (!rendered) {
+          rendered = content;
+        }
+
         lines.push(softCollapse(
-          content.split('\n').map(l => chalk.gray('  │ ') + l).join('\n'),
+          rendered.split('\n').map(l => chalk.gray('  │ ') + l).join('\n'),
           { maxLines: 15, label: 'lines' }
         ));
       }

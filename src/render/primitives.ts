@@ -65,15 +65,14 @@ export function truncateAnsi(text: string, maxVisibleLen: number, ellipsis = 'â€
 // lines, narrow enough that a stray huge line can't blow the box past a typical
 // terminal once the harness's own tree indentation is added on top.
 const FALLBACK_CONTENT_WIDTH = 96;
-const OUTER_INDENT_MARGIN = 4;
+const OUTER_INDENT_MARGIN = 6;
+const H_PADDING = 2;
 
-function getMaxContentWidth(): number {
+export function getMaxContentWidth(): number {
   const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
-  const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN;
+  const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN - H_PADDING * 2;
   return Math.max(20, usable);
 }
-
-const H_PADDING = 2;
 
 export function renderBox(content: string): string {
   const maxWidth = getMaxContentWidth();

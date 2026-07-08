@@ -8,4 +8,7 @@ import './wcgw-file.ts';
 import './wcgw-read.ts';
 import './wcgw-init.ts';
 import './wcgw-ctx.ts';
+import './agent.ts';
+import './exit-plan.ts';
+import './task-update.ts';
 import './generic.ts';

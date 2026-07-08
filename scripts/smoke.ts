@@ -4,6 +4,9 @@
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import { PNG } from 'pngjs';
+import jpeg from 'jpeg-js';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const BIND = path.join(ROOT, 'hooks', 'bin', 'bind.ts');
@@ -25,8 +28,8 @@ export const CASES: Case[] = [
     event: 'PostToolUse',
     payload: {
       tool_name: 'Bash',
-      tool_input: { command: 'echo hi' },
-      tool_response: 'hi\n',
+      tool_input: { command: 'echo "hello"\necho "==="\necho "world"\necho "--- info"\necho "bye"' },
+      tool_response: 'hello\n===\nworld\n--- info\nbye\n',
       duration_ms: 12,
     },
   },
@@ -70,6 +73,114 @@ export const CASES: Case[] = [
     event: 'UserPromptSubmit',
     payload: { prompt: 'hello world' },
   },
+  {
+    label: 'PreToolUse — Agent',
+    event: 'PreToolUse',
+    payload: {
+      tool_name: 'Agent',
+      tool_input: {
+        description: 'Explore package export structure',
+        prompt: 'Explore the repo at /Users/mia/Documents/Projects/ai/skills/threejs-scenes (search breadth: medium). This is an npm package.\n\nHere are some details:\n- list exports\n- compile',
+      },
+    },
+  },
+  {
+    label: 'PostToolUse — Agent',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'Agent',
+      tool_input: {
+        description: 'Explore package export structure',
+        prompt: 'Explore the repo at /Users/mia/Documents/Projects/ai/skills/threejs-scenes (search breadth: medium). This is an npm package.\n\nHere are some details:\n- list exports\n- compile',
+      },
+      tool_response: {
+        isAsync: true,
+        status: 'async_launched',
+        agentId: 'ab9e5c61bab1e0212',
+        resolvedModel: 'claude-opus-4-8',
+        prompt: 'Explore the repo at /Users/mia/Documents/Projects/ai/skills/threejs-scenes (search breadth: medium). This is an npm package.\n\nHere are some details:\n- list exports\n- compile',
+        outputFile: '/private/tmp/claude-501/-Users-mia-Documents-Projects-ai-skills-threejs-scenes/8b6081c5-93c1-46fe-a72c-05bd382ee8a8/out',
+        canReadOutputFile: true,
+      },
+      duration_ms: 6,
+    },
+  },
+  {
+    label: 'PostToolUse — ExitPlanMode',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'ExitPlanMode',
+      tool_input: { plan: 'The plan is complete.' },
+      tool_response: { success: true },
+      duration_ms: 1,
+    },
+  },
+  {
+    label: 'PostToolUse — TaskUpdate (Completed)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'TaskUpdate',
+      tool_input: { id: 1, status: 'completed' },
+      tool_response: {
+        success: true,
+        taskId: 1,
+        updatedFields: ['status'],
+        statusChange: { from: 'in_progress', to: 'completed' },
+      },
+      duration_ms: 12,
+    },
+  },
+  {
+    label: 'PostToolUse — TaskUpdate (In Progress)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'TaskUpdate',
+      tool_input: { id: 1, status: 'in_progress' },
+      tool_response: {
+        success: true,
+        taskId: 1,
+        updatedFields: ['status'],
+        statusChange: { from: 'todo', to: 'in_progress' },
+      },
+      duration_ms: 15,
+    },
+  },
+  {
+    label: 'PostToolUse — Read (PNG Image)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/test-smoke.png' },
+      tool_response: '[Image Data]',
+      duration_ms: 5,
+    },
+  },
+  {
+    label: 'PreToolUse — ExitPlanMode',
+    event: 'PreToolUse',
+    payload: {
+      tool_name: 'ExitPlanMode',
+      tool_input: { plan: 'Final plan summary' },
+    },
+  },
+  {
+    label: 'PreToolUse — TaskUpdate',
+    event: 'PreToolUse',
+    payload: {
+      tool_name: 'TaskUpdate',
+      tool_input: { id: 1, status: 'completed' },
+    },
+  },
+  {
+    label: 'PostToolUse — Read (JPEG Image)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/test-smoke.jpg' },
+      tool_response: '[Image Data]',
+      duration_ms: 4,
+    },
+  },
 ];
 
 // SessionStart reads $HOME/system-prompt.md and $HOME/Documents/Prompts/anime-ascii/*
@@ -94,6 +205,40 @@ export async function runCase(c: Case): Promise<{ stdout: string; stderr: string
 }
 
 if (import.meta.main) {
+  // Generate a mock PNG file to test the image-to-ascii conversion
+  const png = new PNG({ width: 8, height: 8 });
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const idx = (png.width * y + x) << 2;
+      png.data[idx] = x * 32;       // R
+      png.data[idx + 1] = y * 32;   // G
+      png.data[idx + 2] = 128;      // B
+      png.data[idx + 3] = 255;      // A
+    }
+  }
+  fs.writeFileSync('/tmp/test-smoke.png', PNG.sync.write(png));
+
+  // Generate a mock JPEG file to test the image-to-ascii conversion
+  const width = 8;
+  const height = 8;
+  const frameData = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (width * y + x) * 4;
+      frameData[idx] = x * 32;       // R
+      frameData[idx + 1] = y * 32;   // G
+      frameData[idx + 2] = 128;      // B
+      frameData[idx + 3] = 255;      // A
+    }
+  }
+  const jpegImageData = {
+    data: frameData,
+    width: width,
+    height: height,
+  };
+  const jpegBuffer = jpeg.encode(jpegImageData, 50).data;
+  fs.writeFileSync('/tmp/test-smoke.jpg', jpegBuffer);
+
   let failures = 0;
   for (const c of CASES) {
     const { stdout, stderr, code } = await runCase(c);
@@ -105,6 +250,13 @@ if (import.meta.main) {
       process.stdout.write('\n--- stdout ---\n' + stdout + '\n');
     }
   }
+
+  try {
+    fs.unlinkSync('/tmp/test-smoke.png');
+  } catch {}
+  try {
+    fs.unlinkSync('/tmp/test-smoke.jpg');
+  } catch {}
 
   process.stdout.write(`\n${failures === 0 ? 'all cases passed' : failures + ' failures'}\n`);
   process.exit(failures === 0 ? 0 : 1);

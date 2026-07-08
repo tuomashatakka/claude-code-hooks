@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse, extractResultText } from '../render/primitives.ts';
-import { simpleHighlight } from '../render/highlight.ts';
+import { renderBox, softCollapse, extractResultText, stripAnsi } from '../render/primitives.ts';
+import { simpleHighlight, isJSON, formatJSON } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -36,9 +36,30 @@ defineTool<AnyBashInput, RawToolResult>({
 
     if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
 
+    const cmd = (_input as Partial<BashInput & WcgwBashCommandInput>).command
+      ?? (_input as Partial<WcgwBashCommandInput>).action_json
+      ?? null;
+    if (cmd) {
+      lines.push(chalk.gray('$ ') + simpleHighlight(String(cmd).trim(), 'bash'));
+    }
+
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
 
-    if (stdout.trim()) lines.push(renderBox(softCollapse(stdout)));
+    if (stdout.trim()) {
+      const highlighted = isJSON(stdout)
+        ? simpleHighlight(formatJSON(stdout), 'json')
+        : simpleHighlight(stdout, 'bash');
+
+      const processedStdout = highlighted.split('\n').map(line => {
+        const plain = stripAnsi(line).trim();
+        if (plain.startsWith('---') || plain.startsWith('===')) {
+          return chalk.gray('─'.repeat(60));
+        }
+        return line;
+      }).join('\n');
+
+      lines.push(renderBox(softCollapse(processedStdout)));
+    }
 
     const trailerParts: string[] = [];
     if (status !== null) {
