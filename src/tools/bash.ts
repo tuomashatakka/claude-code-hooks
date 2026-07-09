@@ -9,6 +9,56 @@ chalk.level = 3;
 
 type AnyBashInput = BashInput | WcgwBashCommandInput;
 
+interface CommandRow {
+  sep: string;
+  text: string;
+}
+
+/** Splits a command on top-level `;` and `&&`, ignoring separators inside quotes. */
+function splitCommandRows(cmd: string): CommandRow[] {
+  const rows: CommandRow[] = [];
+  let current = '';
+  let sep = '';
+  let quote: '"' | "'" | null = null;
+
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i]!;
+
+    if (quote) {
+      current += ch;
+      if (quote === '"' && ch === '\\' && i + 1 < cmd.length) current += cmd[++i];
+      else if (ch === quote) quote = null;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+
+    if (ch === ';') {
+      rows.push({ sep, text: current.trim() });
+      current = '';
+      sep = '; ';
+      continue;
+    }
+
+    if (ch === '&' && cmd[i + 1] === '&') {
+      rows.push({ sep, text: current.trim() });
+      current = '';
+      sep = '&& ';
+      i++;
+      continue;
+    }
+
+    current += ch;
+  }
+  rows.push({ sep, text: current.trim() });
+
+  return rows.filter(r => r.text.length > 0);
+}
+
 defineTool<AnyBashInput, RawToolResult>({
   matches: ['Bash', 'mcp__wcgw__BashCommand'],
   pre(input): import('../registry/tool-registry.ts').RenderedSection {
@@ -16,7 +66,11 @@ defineTool<AnyBashInput, RawToolResult>({
     const cmd = (input as Partial<BashInput & WcgwBashCommandInput>).command
       ?? (input as Partial<WcgwBashCommandInput>).action_json
       ?? null;
-    if (cmd) lines.push(simpleHighlight(String(cmd), 'bash'));
+    if (cmd) {
+      for (const { sep, text } of splitCommandRows(String(cmd))) {
+        lines.push((sep ? chalk.gray(sep) : '') + simpleHighlight(text, 'bash'));
+      }
+    }
 
     const meta: string[] = [];
     const w = (input as WcgwBashCommandInput).wait_for_seconds;
@@ -40,7 +94,10 @@ defineTool<AnyBashInput, RawToolResult>({
       ?? (_input as Partial<WcgwBashCommandInput>).action_json
       ?? null;
     if (cmd) {
-      lines.push(chalk.gray('$ ') + simpleHighlight(String(cmd).trim(), 'bash'));
+      splitCommandRows(String(cmd).trim()).forEach(({ sep, text }, i) => {
+        const marker = i === 0 ? chalk.gray('$ ') : chalk.gray('  ' + sep);
+        lines.push(marker + simpleHighlight(text, 'bash'));
+      });
     }
 
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
