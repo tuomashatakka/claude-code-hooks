@@ -34,7 +34,7 @@ defineTool<ReadInput, RawToolResult>({
 
     const filePath = input.file_path;
     const ext = filePath ? filePath.slice(filePath.lastIndexOf('.')) : '';
-    const isImg = /\.(png|jpg|jpeg)$/i.test(ext);
+    const isImg = /\.(png|jpg|jpeg|webp)$/i.test(ext);
 
     let content: string | null = null;
     let asciiArt: string | null = null;
