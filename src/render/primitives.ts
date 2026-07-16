@@ -110,7 +110,12 @@ export interface SoftCollapseOptions {
   label?: string;
 }
 
-export function softCollapse(content: unknown, { maxLines = 20, label = 'lines' }: SoftCollapseOptions = {}): string {
+// Safety ceiling, not a summary cap: this output is user-only (systemMessage on
+// stderr, never model context), so it should render complete — the cap only stops
+// a pathological multi-megabyte dump from flooding the terminal.
+export const SAFETY_MAX_LINES = 2000;
+
+export function softCollapse(content: unknown, { maxLines = SAFETY_MAX_LINES, label = 'lines' }: SoftCollapseOptions = {}): string {
   const text = String(content);
   const lines = text.split('\n');
   if (lines.length <= maxLines) return text;

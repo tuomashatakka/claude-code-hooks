@@ -35,7 +35,7 @@ export function renderSearchReplace(blocks: SearchReplaceBlock[], filePath: stri
       ...replaceLines.map(l => chalk.green('  + ') + chalk.green(l)),
     ];
 
-    lines.push(softCollapse(diffLines.join('\n'), { maxLines: 24, label: 'diff lines' }));
+    lines.push(softCollapse(diffLines.join('\n'), { label: 'diff lines' }));
   });
 
   return lines.join('\n');

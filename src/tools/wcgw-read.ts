@@ -52,11 +52,11 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
 
         lines.push(softCollapse(
           rendered.split('\n').map(l => chalk.gray('  │ ') + l).join('\n'),
-          { maxLines: 15, label: 'lines' }
+          { label: 'lines' }
         ));
       }
     } else if (typeof fileContents === 'string' && fileContents.length) {
-      lines.push(softCollapse(fileContents, { maxLines: 20, label: 'lines' }));
+      lines.push(softCollapse(fileContents, { label: 'lines' }));
     }
 
     const filePaths = res['file_paths'];

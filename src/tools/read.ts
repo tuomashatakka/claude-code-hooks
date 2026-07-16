@@ -55,7 +55,7 @@ defineTool<ReadInput, RawToolResult>({
     }
 
     if (asciiArt) {
-      lines.push(softCollapse(asciiArt, { maxLines: 60, label: 'lines' }));
+      lines.push(softCollapse(asciiArt, { label: 'lines' }));
     } else if (content) {
       const lang = guessLanguage(filePath);
       let rendered = content;
@@ -64,7 +64,7 @@ defineTool<ReadInput, RawToolResult>({
       } else if (lang) {
         rendered = simpleHighlight(content, lang);
       }
-      lines.push(softCollapse(rendered, { maxLines: 40, label: 'lines' }));
+      lines.push(softCollapse(rendered, { label: 'lines' }));
     }
 
     return { lines };
