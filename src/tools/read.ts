@@ -2,24 +2,11 @@ import chalk from 'chalk';
 import fs from 'node:fs';
 import { defineTool } from '../registry/tool-registry.ts';
 import { softCollapse, extractResultText, getMaxContentWidth } from '../render/primitives.ts';
-import { isJSON, formatJSON, simpleHighlight, type SupportedLanguage } from '../render/highlight.ts';
+import { isJSON, formatJSON, simpleHighlight, langFromPath, detectContentLanguage } from '../render/highlight.ts';
 import { imageToAscii } from '../render/image-to-ascii.ts';
 import type { ReadInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
-
-const LANG_MAP: Record<string, SupportedLanguage> = {
-  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript', jsx: 'javascript',
-  json: 'json',
-  sh: 'bash', bash: 'bash',
-};
-
-function guessLanguage(filePath: string | null | undefined): SupportedLanguage | null {
-  if (!filePath) return null;
-  const m = String(filePath).match(/\.([^./]+)$/);
-  return m ? (LANG_MAP[m[1]!.toLowerCase()] ?? null) : null;
-}
 
 defineTool<ReadInput, RawToolResult>({
   matches: 'Read',
@@ -57,7 +44,7 @@ defineTool<ReadInput, RawToolResult>({
     if (asciiArt) {
       lines.push(softCollapse(asciiArt, { label: 'lines' }));
     } else if (content) {
-      const lang = guessLanguage(filePath);
+      const lang = langFromPath(filePath) ?? detectContentLanguage(content);
       let rendered = content;
       if (isJSON(content)) {
         rendered = simpleHighlight(formatJSON(content), 'json');

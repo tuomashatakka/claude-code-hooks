@@ -22,6 +22,24 @@ export function expandPersistedOutput(text: string): string {
 
 export const DIVIDER_WIDTH = 60;
 
+// Turns plain-text ruler lines into styled dividers. Lines made only of ruler
+// chars (`---`, `====`) become a full-width rule; lines carrying a label
+// (`--- info`, `===== info =====`) center the label inside the rule. `=`
+// rulers render with the double-line glyph so the source's visual weight
+// survives the transform. Returns null when the line isn't a ruler.
+export function renderRuler(line: string): string | null {
+  const plain = stripAnsi(line).trim();
+  const m = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
+  if (!m) return null;
+  const ch = m[1]![0] === '=' || m[1]![0] === '═' ? '═' : '─';
+  const text = m[2]!.replace(/[-=─═]{3,}\s*$/, '').trim();
+  if (!text) return chalk.gray(ch.repeat(DIVIDER_WIDTH));
+  const label = ` ${text} `;
+  const remaining = Math.max(6, DIVIDER_WIDTH - label.length);
+  const left = Math.floor(remaining / 2);
+  return chalk.gray(ch.repeat(left)) + chalk.bold(label) + chalk.gray(ch.repeat(remaining - left));
+}
+
 // Metadata tag: bgDarkGrey black label, darkGrey corner, value, terminator.
 // Render as inline tag — caller decides whether to append a newline.
 export function renderMetaTag(label: string, value: string): string {

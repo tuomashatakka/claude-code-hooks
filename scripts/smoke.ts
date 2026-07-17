@@ -28,9 +28,19 @@ export const CASES: Case[] = [
     event: 'PostToolUse',
     payload: {
       tool_name: 'Bash',
-      tool_input: { command: 'echo "hello"\necho "==="\necho "world"\necho "--- info"\necho "bye"' },
-      tool_response: 'hello\n===\nworld\n--- info\nbye\n',
+      tool_input: { command: 'echo "hello"\necho "==="\necho "world"\necho "--- info"\necho "===== section title ====="\necho "bye"' },
+      tool_response: 'hello\n===\nworld\n--- info\n===== section title =====\nbye\nDone in 42ms — see /tmp/out.log\nerror: something exploded\n',
       duration_ms: 12,
+    },
+  },
+  {
+    label: 'PostToolUse — Bash (diff output, rulers untouched)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'Bash',
+      tool_input: { command: 'git diff' },
+      tool_response: 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1,2 +1,2 @@\n-const x = 1\n+const x = 2\n',
+      duration_ms: 8,
     },
   },
   {

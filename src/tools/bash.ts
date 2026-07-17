@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse, extractResultText, stripAnsi } from '../render/primitives.ts';
-import { simpleHighlight, isJSON, formatJSON } from '../render/highlight.ts';
+import { renderBox, softCollapse, extractResultText, renderRuler } from '../render/primitives.ts';
+import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -103,17 +103,14 @@ defineTool<AnyBashInput, RawToolResult>({
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
 
     if (stdout.trim()) {
-      const highlighted = isJSON(stdout)
-        ? simpleHighlight(formatJSON(stdout), 'json')
-        : simpleHighlight(stdout, 'bash');
+      const lang = detectOutputLanguage(stdout);
+      const highlighted = simpleHighlight(lang === 'json' ? formatJSON(stdout) : stdout, lang);
 
-      const processedStdout = highlighted.split('\n').map(line => {
-        const plain = stripAnsi(line).trim();
-        if (plain.startsWith('---') || plain.startsWith('===')) {
-          return chalk.gray('─'.repeat(60));
-        }
-        return line;
-      }).join('\n');
+      // Ruler lines (`---`, `===== info =====`) become styled dividers with
+      // the label centered — but not inside diffs, where `--- a/file` is a header.
+      const processedStdout = lang === 'diff'
+        ? highlighted
+        : highlighted.split('\n').map(line => renderRuler(line) ?? line).join('\n');
 
       lines.push(renderBox(softCollapse(processedStdout)));
     }
