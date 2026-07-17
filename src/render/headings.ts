@@ -44,15 +44,23 @@ export interface HeadingArgs {
   event: PhraseEvent
   tone?: PhraseContext['tone']
   width?: number
+  // Literal caption to show instead of the generated phrase — skips
+  // generatePhrase entirely when set.
+  caption?: string
 }
 
-export function renderHeading({ word, color = 'cyan', event, tone, width = 60 }: HeadingArgs): string {
+export function renderHeading({ word, color = 'cyan', event, tone, width = 60, caption }: HeadingArgs): string {
   const glyphRows = renderGlyphRows(word, color)
   const gw = glyphWidth(word)
   const gutter = 2
   const phraseWidth = Math.max(20, width - gw - gutter)
 
-  const phrase = generatePhrase({ event, word, color, tone, width: phraseWidth, minTokens: 4, maxTokens: 10 })
+  const colorize = (chalk[color] ?? chalk.cyan) as (s: string) => string
+  const phrase = caption !== undefined
+    ? (stripAnsi(caption).length > phraseWidth
+        ? truncateAnsi(chalk.bold(colorize(caption)), Math.max(0, phraseWidth - 1))
+        : chalk.bold(colorize(caption)))
+    : generatePhrase({ event, word, color, tone, width: phraseWidth, minTokens: 4, maxTokens: 10 })
   const phraseLines = phrase.split('\n')
 
   // Pad/truncate to exactly 3 rows place text on rows 1 (top) and 2 (middle)
@@ -76,6 +84,22 @@ export function renderHeading({ word, color = 'cyan', event, tone, width = 60 }:
 
   const composed = glyphRows
     .map((g, i) => g + ' '.repeat(gutter) + (slots[i] ?? ''))
+    .join('\n')
+  return '\n' + composed
+}
+
+// Fixed 3-row checkbox glyph (border + centered checkmark) paired with a
+// plain caption — same gutter/compose layout as renderHeading, but the glyph
+// is a static icon rather than the word spelled out in block letters.
+const CHECKBOX_ROWS: Row3 = [' ┌───┐', ' │ ✓ │', ' └───┘']
+
+export function renderCheckboxHeading(caption: string, color: ColorName = 'green'): string {
+  const colorize = (chalk[color] ?? chalk.green) as (s: string) => string
+  const rows = CHECKBOX_ROWS.map(r => colorize(r))
+  const gutter = 2
+  const slots: [string, string, string] = ['', chalk.bold(colorize(caption)), '']
+  const composed = rows
+    .map((r, i) => r + ' '.repeat(gutter) + (slots[i] ?? ''))
     .join('\n')
   return '\n' + composed
 }

@@ -126,6 +126,22 @@ export const CASES: Case[] = [
     },
   },
   {
+    label: 'PostToolUse — TaskCreate',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'TaskCreate',
+      tool_input: {
+        subject: 'M6: @recall/skill + plugin wiring + docs',
+        description: 'Wire up the @recall skill, connect it to the plugin, and write docs.',
+      },
+      tool_response: {
+        success: true,
+        task: { id: 7, subject: 'M6: @recall/skill + plugin wiring + docs' },
+      },
+      duration_ms: 34,
+    },
+  },
+  {
     label: 'PostToolUse — TaskUpdate (Completed)',
     event: 'PostToolUse',
     payload: {
@@ -136,6 +152,7 @@ export const CASES: Case[] = [
         taskId: 1,
         updatedFields: ['status'],
         statusChange: { from: 'in_progress', to: 'completed' },
+        task: { id: 1, subject: 'Fix syntax highlighting for TSX' },
       },
       duration_ms: 12,
     },
@@ -151,6 +168,7 @@ export const CASES: Case[] = [
         taskId: 1,
         updatedFields: ['status'],
         statusChange: { from: 'todo', to: 'in_progress' },
+        task: { id: 1, subject: 'Fix syntax highlighting for TSX' },
       },
       duration_ms: 15,
     },

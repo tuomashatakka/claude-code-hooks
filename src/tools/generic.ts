@@ -27,7 +27,6 @@ const PRIMARY_INPUT_KEYS: Record<string, string[]> = {
   Agent:                       ['description', 'prompt'],
   ExitPlanMode:                ['plan'],
   TodoWrite:                   ['todos'],
-  TaskCreate:                  ['description', 'prompt'],
   mcp__wcgw__BashCommand:      ['command', 'action_json'],
   mcp__wcgw__FileWriteOrEdit:  ['file_path'],
   mcp__wcgw__ReadFiles:        ['file_paths'],
