@@ -131,11 +131,6 @@ export function toCursive(text: string): string {
 
 // ── Token emission ───────────────────────────────────────────────────────────
 
-interface Emitted {
-  tokens: string[]; // already colored
-  rawTokens: string[]; // for length calc / dedup
-}
-
 function emitToken(state: State, ctx: Required<Pick<PhraseContext, 'event' | 'word' | 'color' | 'tone'>>): { raw: string; rendered: string } | null {
   const accent = (chalk[ctx.color] ?? chalk.cyan) as (s: string) => string;
   switch (state) {
@@ -250,6 +245,7 @@ export function generatePhrase(ctx: PhraseContext): string {
         break;
       }
     }
+
     // Avoid back-to-back duplicates of the same state for variety.
     if (next === state && next !== 'cursive') {
       next = weightedNext(TRANSITIONS[state], new Set([next]));

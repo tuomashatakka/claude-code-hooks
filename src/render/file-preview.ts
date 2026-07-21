@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { imageToAscii } from './image-to-ascii.ts';
+import { imageToAscii } from '@tuomashatakka/image-to-ascii';
 import { formatJSON, isJSON, simpleHighlight, langFromPath, detectContentLanguage } from './highlight.ts';
 import { getMaxContentWidth, softCollapse, type SoftCollapseOptions } from './primitives.ts';
 

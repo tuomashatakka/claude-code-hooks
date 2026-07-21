@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderHeading } from '../render/headings.ts';
+import { renderHeading } from '@tuomashatakka/ansi-headings';
 import type { ExitPlanInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;

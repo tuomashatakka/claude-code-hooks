@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderCheckboxHeading } from '../render/headings.ts';
+import { renderCheckboxHeading } from '@tuomashatakka/ansi-headings';
 import { pushDurationLine } from '../render/primitives.ts';
 import { Badge, renderBadges } from '../render/badge.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';

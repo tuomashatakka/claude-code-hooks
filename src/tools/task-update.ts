@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
 import { pushDurationLine, renderBox } from '../render/primitives.ts';
-import { renderHeading } from '../render/headings.ts';
+import { renderHeading } from '@tuomashatakka/ansi-headings';
 import { formatMetadataCustom } from '../render/highlight.ts';
 import { Badge, renderBadges } from '../render/badge.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';

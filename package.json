@@ -3,6 +3,9 @@
   "version": "2.0.1",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -10,6 +13,8 @@
     "demo:capture": "bun run scripts/capture-demo.ts"
   },
   "dependencies": {
+    "@tuomashatakka/ansi-headings": "workspace:*",
+    "@tuomashatakka/image-to-ascii": "workspace:*",
     "chalk": "^5.6.2",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0"

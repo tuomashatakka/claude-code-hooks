@@ -5,6 +5,8 @@
     "": {
       "name": "claude-hooks",
       "dependencies": {
+        "@tuomashatakka/ansi-headings": "workspace:*",
+        "@tuomashatakka/image-to-ascii": "workspace:*",
         "chalk": "^5.6.2",
         "jpeg-js": "^0.4.4",
         "pngjs": "^7.0.0",
@@ -15,8 +17,27 @@
         "typescript": "^5.6.0",
       },
     },
+    "packages/ansi-headings": {
+      "name": "@tuomashatakka/ansi-headings",
+      "version": "0.0.0",
+      "dependencies": {
+        "chalk": "^5.6.2",
+      },
+    },
+    "packages/image-to-ascii": {
+      "name": "@tuomashatakka/image-to-ascii",
+      "version": "0.0.0",
+      "dependencies": {
+        "jpeg-js": "^0.4.4",
+        "pngjs": "^7.0.0",
+      },
+    },
   },
   "packages": {
+    "@tuomashatakka/ansi-headings": ["@tuomashatakka/ansi-headings@workspace:packages/ansi-headings"],
+
+    "@tuomashatakka/image-to-ascii": ["@tuomashatakka/image-to-ascii@workspace:packages/image-to-ascii"],
+
     "@types/node": ["@types/node@25.6.1", "", { "dependencies": { "undici-types": "~7.19.0" } }, "sha512-coJCN8O1q4AGyyqCAUSP06P+SrMTu18BkEj3NVAK07q6QUneD2wzj3CLv9+yP+BMeZQlMvneXqqvDe3w+xcq7g=="],
 
     "@types/pngjs": ["@types/pngjs@6.0.5", "", { "dependencies": { "@types/node": "*" } }, "sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ=="],

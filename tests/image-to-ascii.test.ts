@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
-import { imageToAscii } from '../src/render/image-to-ascii.ts';
+import { imageToAscii } from '@tuomashatakka/image-to-ascii';
 
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 const BLOCK_RE = /[\u2580\u2584\u2588]/;
