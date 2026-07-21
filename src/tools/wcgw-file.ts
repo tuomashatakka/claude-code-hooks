@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox } from '../render/primitives.ts';
+import { firstLine, pickResultText, pushDurationLine, renderBox } from '../render/primitives.ts';
 import { parseSearchReplaceBlocks, renderSearchReplace } from '../parsers/search-replace.ts';
 import type { WcgwFileWriteOrEditInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -35,13 +35,9 @@ defineTool<WcgwFileWriteOrEditInput, RawToolResult>({
 
   post(_input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
-    const text = typeof result === 'string'
-      ? result
-      : ((result as Record<string, unknown> | null)?.text
-        ?? (result as Record<string, unknown> | null)?.result
-        ?? JSON.stringify(result, null, 2));
-    if (text) lines.push(chalk.green('✓ ') + String(text).split('\n')[0]!);
+    pushDurationLine(lines, durationMs);
+    const text = pickResultText(result, ['text', 'result']) ?? JSON.stringify(result, null, 2);
+    if (text) lines.push(chalk.green('✓ ') + firstLine(text));
     return { lines };
   },
 });

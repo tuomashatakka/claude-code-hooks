@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
 import { shortenPath } from '../parsers/wcgw-trailer.ts';
+import { firstLine, pickResultText, pushDurationLine } from '../render/primitives.ts';
 import type { WcgwContextSaveInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -27,13 +28,9 @@ defineTool<WcgwContextSaveInput, RawToolResult>({
 
   post(_input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
-    const text = typeof result === 'string'
-      ? result
-      : ((result as Record<string, unknown> | null)?.text
-        ?? (result as Record<string, unknown> | null)?.result
-        ?? null);
-    if (text) lines.push(chalk.green('⧺ ') + String(text).split('\n')[0]!);
+    pushDurationLine(lines, durationMs);
+    const text = pickResultText(result, ['text', 'result']);
+    if (text) lines.push(chalk.green('⧺ ') + firstLine(text));
     return { lines };
   },
 });

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox } from '../render/primitives.ts';
+import { renderBox, pushDurationLine } from '../render/primitives.ts';
 import { simpleHighlight, formatMetadataCustom } from '../render/highlight.ts';
 import type { TaskInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -19,7 +19,7 @@ defineTool<TaskInput, RawToolResult>({
   post(input, result, durationMs) {
     const lines: string[] = [];
 
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     // Get the prompt. Prefer input.prompt (full prompt) over truncated result.prompt.
     const prompt = input.prompt || (result && typeof result === 'object' && (result as any).prompt) || '';

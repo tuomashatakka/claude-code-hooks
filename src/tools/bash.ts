@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse, extractResultText, renderRuler } from '../render/primitives.ts';
+import { renderBox, softCollapse, extractResultText, renderRuler, pushDurationLine } from '../render/primitives.ts';
 import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
@@ -88,7 +88,7 @@ defineTool<AnyBashInput, RawToolResult>({
     const raw = extractResultText(result) ?? '';
     const lines: string[] = [];
 
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     const cmd = (_input as Partial<BashInput & WcgwBashCommandInput>).command
       ?? (_input as Partial<WcgwBashCommandInput>).action_json

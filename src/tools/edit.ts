@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderMetaTag } from '../render/primitives.ts';
+import { firstLine, pickResultText, pushDurationLine, renderMetaTag } from '../render/primitives.ts';
 import { Badge } from '../render/badge.ts';
 import type { EditInput, EditInputSingle, EditInputMulti, RawToolResult } from '../types/tool-io.ts';
 
@@ -43,14 +43,9 @@ defineTool<EditInput, RawToolResult>({
 
   post(_input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
-    const text = typeof result === 'string'
-      ? result
-      : ((result as Record<string, unknown> | null)?.text
-        ?? (result as Record<string, unknown> | null)?.result
-        ?? (result as Record<string, unknown> | null)?.output
-        ?? null);
-    if (text) lines.push(chalk.green('✓ ') + String(text).split('\n')[0]!.slice(0, 120));
+    pushDurationLine(lines, durationMs);
+    const text = pickResultText(result);
+    if (text) lines.push(chalk.green('✓ ') + firstLine(text, 120));
     return { lines };
   },
 });

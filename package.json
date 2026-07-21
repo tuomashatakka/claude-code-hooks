@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "smoke": "bun run scripts/smoke.ts",
     "demo:capture": "bun run scripts/capture-demo.ts"

@@ -92,6 +92,34 @@ export function getMaxContentWidth(): number {
   return Math.max(20, usable);
 }
 
+export function renderDuration(durationMs: number | null | undefined): string | null {
+  return durationMs == null ? null : chalk.gray(`Δ ${durationMs}ms`);
+}
+
+export function pushDurationLine(lines: string[], durationMs: number | null | undefined): void {
+  const line = renderDuration(durationMs);
+  if (line) lines.push(line);
+}
+
+export function firstLine(value: unknown, maxLength?: number): string {
+  const line = String(value ?? '').split('\n')[0] ?? '';
+  return maxLength == null ? line : line.slice(0, maxLength);
+}
+
+export function pickResultText(
+  result: unknown,
+  keys: readonly string[] = ['text', 'result', 'output']
+): string | null {
+  if (typeof result === 'string') return result;
+  if (!result || typeof result !== 'object') return null;
+  const record = result as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string') return value;
+  }
+  return null;
+}
+
 export function renderBox(content: string): string {
   const maxWidth = getMaxContentWidth();
   const lines = String(content)

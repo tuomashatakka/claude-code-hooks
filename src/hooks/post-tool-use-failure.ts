@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { defineHook } from '../registry/hook-registry.ts';
 import { Badge, renderBadges } from '../render/badge.ts';
-import { renderSection } from '../render/primitives.ts';
+import { pushDurationLine, renderSection } from '../render/primitives.ts';
 import { asObject, injectToolDiscriminator, pickString, pickNumber, pickBool, pickAny } from './_normalize.ts';
 import type { ToolName } from '../types/claude-code.ts';
 
@@ -36,7 +36,7 @@ defineHook({
     if (typeof err === 'string') lines.push(err);
     else if (typeof err === 'object' && err && typeof err.message === 'string') lines.push(err.message);
     else lines.push(JSON.stringify(err, null, 2));
-    if (input.durationMs != null) lines.push(chalk.gray(`Δ ${input.durationMs}ms`));
+    pushDurationLine(lines, input.durationMs);
 
     return {
       hookSpecificOutput: {

@@ -146,11 +146,14 @@ export function imageToAscii(buffer: Buffer, ext: string, maxWidth: number = 80)
   };
 
   let out = '';
-  for (let cols = Math.min(width, maxWidth); cols >= MIN_COLS; cols = Math.floor(cols * 0.85)) {
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  for (let cols = Math.min(width, requestedMax); ; ) {
     for (const attempt of ATTEMPTS) {
       out = render(cols, attempt);
       if (out.length <= BYTE_BUDGET) return out;
     }
+    if (cols <= MIN_COLS) break;
+    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
   }
   return out; // smallest attempt — io's systemMessage guard has the final say
 }

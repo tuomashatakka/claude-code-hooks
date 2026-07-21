@@ -15,6 +15,7 @@ export interface Case {
   label: string;
   event: string;
   payload: unknown;
+  expectAsciiImage?: boolean;
 }
 
 export const CASES: Case[] = [
@@ -182,6 +183,7 @@ export const CASES: Case[] = [
       tool_response: '[Image Data]',
       duration_ms: 5,
     },
+    expectAsciiImage: true,
   },
   {
     label: 'PreToolUse — ExitPlanMode',
@@ -208,6 +210,7 @@ export const CASES: Case[] = [
       tool_response: '[Image Data]',
       duration_ms: 4,
     },
+    expectAsciiImage: true,
   },
 ];
 
@@ -270,11 +273,17 @@ if (import.meta.main) {
   let failures = 0;
   for (const c of CASES) {
     const { stdout, stderr, code } = await runCase(c);
-    const ok = code === 0 && stdout.includes('"continue": true');
+    const imageAssertion = c.expectAsciiImage && (
+      stderr.includes('[Image Data]') || !/[\u2580\u2584\u2588]/.test(stderr)
+    )
+      ? 'expected image read to render ANSI block ascii instead of the raw image placeholder'
+      : null;
+    const ok = code === 0 && stdout.includes('"continue": true') && !imageAssertion;
     process.stdout.write(`\n=== ${c.label} ${ok ? 'OK' : 'FAIL'} (exit ${code}) ===\n`);
     process.stdout.write(stderr);
     if (!ok) {
       failures += 1;
+      if (imageAssertion) process.stdout.write('\n--- assertion ---\n' + imageAssertion + '\n');
       process.stdout.write('\n--- stdout ---\n' + stdout + '\n');
     }
   }

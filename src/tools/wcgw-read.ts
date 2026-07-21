@@ -1,8 +1,7 @@
 import chalk from 'chalk';
-import fs from 'node:fs';
 import { defineTool } from '../registry/tool-registry.ts';
-import { softCollapse, getMaxContentWidth } from '../render/primitives.ts';
-import { imageToAscii } from '../render/image-to-ascii.ts';
+import { pushDurationLine } from '../render/primitives.ts';
+import { collapsePreview, prefixPreviewLines, renderFilePreview } from '../render/file-preview.ts';
 import type { WcgwReadFilesInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -17,7 +16,7 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
 
   post(_input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     if (!result || typeof result !== 'object') {
       if (result) lines.push(String(result));
@@ -36,27 +35,12 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
         if (typeof content !== 'string') continue;
         lines.push(chalk.cyan('  ├ ') + chalk.bold(filePath));
 
-        const ext = filePath.slice(filePath.lastIndexOf('.'));
-        const isImg = /\.(png|jpg|jpeg)$/i.test(ext);
-        let rendered: string | null = null;
-        if (isImg) {
-          try {
-            const buffer = fs.readFileSync(filePath);
-            rendered = imageToAscii(buffer, ext, getMaxContentWidth());
-          } catch {}
-        }
-
-        if (!rendered) {
-          rendered = content;
-        }
-
-        lines.push(softCollapse(
-          rendered.split('\n').map(l => chalk.gray('  │ ') + l).join('\n'),
-          { label: 'lines' }
-        ));
+        const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
+        const rendered = preview?.content ?? content;
+        lines.push(collapsePreview(prefixPreviewLines(rendered, chalk.gray('  │ '))));
       }
     } else if (typeof fileContents === 'string' && fileContents.length) {
-      lines.push(softCollapse(fileContents, { label: 'lines' }));
+      lines.push(collapsePreview(fileContents));
     }
 
     const filePaths = res['file_paths'];

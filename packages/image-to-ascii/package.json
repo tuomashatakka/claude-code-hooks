@@ -1,0 +1,19 @@
+{
+  "name": "@tuomashatakka/image-to-ascii",
+  "version": "0.0.0",
+  "description": "ANSI half-block image previews extracted from claude-code-hooks",
+  "type": "module",
+  "main": "dist/index.js",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuomashatakka/claude-code-hooks.git",
+    "directory": "packages/image-to-ascii"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
+  }
+}

@@ -2,6 +2,7 @@
 import './pre-tool-use.ts';
 import './post-tool-use.ts';
 import './post-tool-use-failure.ts';
+import './post-tool-batch.ts';
 import './session-start.ts';
 import './session-end.ts';
 import './pre-compact.ts';

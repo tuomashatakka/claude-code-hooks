@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox } from '../render/primitives.ts';
+import { pushDurationLine, renderBox } from '../render/primitives.ts';
 import { renderHeading } from '../render/headings.ts';
 import { formatMetadataCustom } from '../render/highlight.ts';
 import { Badge, renderBadges } from '../render/badge.ts';
@@ -16,7 +16,7 @@ defineTool<RawToolInput, RawToolResult>({
 
   post(input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     const statusChangeTo = result && typeof result === 'object' && (result as any).statusChange?.to;
     const status = statusChangeTo || (result && typeof result === 'object' && (result as any).status) || (input && typeof input === 'object' && (input as any).status) || '';

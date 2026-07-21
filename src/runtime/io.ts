@@ -21,7 +21,7 @@ export function readInput(): Promise<unknown | null> {
 // Claude Code (≥2.1.x) replaces any hook systemMessage over 10,000 chars with a
 // persisted-output stub showing only a 2KB preview. Trimming whole lines just under
 // that gate keeps ~10KB visible instead of losing everything to the stub.
-const MAX_SYSTEM_MESSAGE_CHARS = 9900;
+const MAX_SYSTEM_MESSAGE_CHARS = 9980;
 const TRIM_MARKER = '\x1b[0m\n\x1b[90m\x1b[3m  … trimmed to fit the 10KB hook display limit\x1b[0m';
 
 function fitSystemMessage(message: string): string {

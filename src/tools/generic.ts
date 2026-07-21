@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { defineGenericTool, type RenderedSection, type ToolContext } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse } from '../render/primitives.ts';
+import { renderBox, softCollapse, pushDurationLine } from '../render/primitives.ts';
 import { parseToolName } from '../render/theme.ts';
 import {
   isJSON,
@@ -185,7 +185,7 @@ defineGenericTool<RawToolInput, RawToolResult>({
     const { primary, metadata } = deconstructToolResult(rawTool, result);
     const lines: string[] = [];
 
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     if (primary) {
       let formatted: string = primary;

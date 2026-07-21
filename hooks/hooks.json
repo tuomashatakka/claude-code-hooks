@@ -23,6 +23,12 @@
       ]}
     ],
 
+    "PreCompact": [
+      { "hooks": [
+        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PreCompact" }
+      ]}
+    ],
+
     "SessionStart": [
       { "hooks": [
         { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SessionStart" }

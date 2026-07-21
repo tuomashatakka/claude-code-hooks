@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
 import { renderCheckboxHeading } from '../render/headings.ts';
+import { pushDurationLine } from '../render/primitives.ts';
 import { Badge, renderBadges } from '../render/badge.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -14,7 +15,7 @@ defineTool<RawToolInput, RawToolResult>({
 
   post(input, result, durationMs) {
     const lines: string[] = [];
-    if (durationMs != null) lines.push(chalk.gray(`Δ ${durationMs}ms`));
+    pushDurationLine(lines, durationMs);
 
     lines.push(...renderCheckboxHeading('ADDED TASK').split('\n'));
 
