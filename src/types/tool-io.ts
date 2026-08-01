@@ -45,8 +45,9 @@ export interface WcgwFileWriteOrEditInput {
 export interface WcgwFileEditInput extends WcgwFileWriteOrEditInput {}
 
 export interface WcgwReadFilesInput {
-  file_paths: string[];
-  // Some shapes pass it as a single string
+  // Some shapes pass it as a single string; ReadImage passes `file_path`.
+  file_paths?: string[] | string;
+  file_path?: string;
 }
 
 export interface WcgwInitializeInput {
@@ -86,6 +87,7 @@ export type ToolInputUnion =
   | { __tool: 'mcp__wcgw__FileWriteOrEdit' } & WcgwFileWriteOrEditInput
   | { __tool: 'mcp__wcgw__FileEdit' } & WcgwFileEditInput
   | { __tool: 'mcp__wcgw__ReadFiles' } & WcgwReadFilesInput
+  | { __tool: 'mcp__wcgw__ReadImage' } & WcgwReadFilesInput
   | { __tool: 'mcp__wcgw__Initialize' } & WcgwInitializeInput
   | { __tool: 'mcp__wcgw__ContextSave' } & WcgwContextSaveInput
   | { __tool: string; [k: string]: unknown };

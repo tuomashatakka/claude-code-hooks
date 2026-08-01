@@ -30,6 +30,7 @@ export type KnownToolName =
   | 'mcp__wcgw__FileWriteOrEdit'
   | 'mcp__wcgw__FileEdit'
   | 'mcp__wcgw__ReadFiles'
+  | 'mcp__wcgw__ReadImage'
   | 'mcp__wcgw__Initialize'
   | 'mcp__wcgw__ContextSave';
 
