@@ -4,8 +4,6 @@ import { getToolDefinition, type RenderedSection, type ToolContext } from '../re
 import type { ToolName } from '../types/claude-code.ts';
 import type { ToolInputUnion, RawToolResult } from '../types/tool-io.ts';
 
-const CLEAR_LINE_PREFIX = '\x1b[1A\x1b[2K\x1b[1B';
-
 interface RenderToolArgs {
   phase: 'pre' | 'post';
   toolName: ToolName;
@@ -45,5 +43,6 @@ export function renderToolSection({
   for (const b of section.extraBadges ?? []) badges.push(b);
 
   const badge = renderBadges(...badges);
-  return CLEAR_LINE_PREFIX + renderSection({ badge, lines: section.lines });
+  // The clear-line prefix is applied once for every event in runtime/io.ts.
+  return renderSection({ badge, lines: section.lines });
 }

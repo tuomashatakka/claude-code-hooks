@@ -120,9 +120,21 @@ export function pickResultText(
   return null;
 }
 
+/**
+ * A card: content on a raised background.
+ *
+ * Box model, uniform across every card in the output — horizontal padding 2,
+ * vertical padding 1 (the blank filled rows top and bottom), and a vertical
+ * margin of 1 so cards never butt against the line above or the next card
+ * below. The margin is part of the box rather than the caller's job, because
+ * ten call sites across src/tools would otherwise each have to remember it.
+ */
 export function renderBox(content: string): string {
   const maxWidth = getMaxContentWidth();
   const lines = String(content)
+    // Blank leading/trailing rows would stack on top of the card's own vertical
+    // padding and read as a ragged gap inside the fill.
+    .replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, '')
     .split('\n')
     .map(l => (stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l));
   const maxLen = Math.min(Math.max(...lines.map(l => stripAnsi(l).length), 0), maxWidth);
@@ -132,7 +144,12 @@ export function renderBox(content: string): string {
   const body = lines.map(l =>
     bg(' '.repeat(H_PADDING) + l + ' '.repeat(Math.max(0, width - H_PADDING - stripAnsi(l).length)))
   );
-  return [pad, ...body, pad].join('\n');
+  return ['', pad, ...body, pad, ''].join('\n');
+}
+
+/** A card with a badge naming what it holds, e.g. ` ⏎  Running ` over a command. */
+export function renderCard(badge: string, content: string): string {
+  return '\n' + badge + renderBox(content);
 }
 
 export interface RenderSectionOptions {

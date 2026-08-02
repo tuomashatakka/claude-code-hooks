@@ -37,9 +37,22 @@ function fitSystemMessage(message: string): string {
   return kept.join('\n') + TRIM_MARKER;
 }
 
+/**
+ * Cursor up, erase that whole line, return to column 0.
+ *
+ * Claude Code prints a `⎿  <Event>:<Tool> says:` label on the line above a
+ * hook's output. That label repeats what the badges already say, and it costs
+ * a row plus a five-column indent on every single hook. Overwriting it means
+ * output starts flush at the left of that row instead.
+ *
+ * Applied here rather than per-hook so it holds for all fourteen events —
+ * anything that returns a systemMessage gets it, with no way to forget.
+ */
+export const CLEAR_LINE_PREFIX = '\x1b[1A\x1b[2K\r';
+
 export function writeOutput(data: Record<string, unknown> & { systemMessage?: string }): never {
   if (typeof data.systemMessage === 'string' && data.systemMessage.length > 0) {
-    data.systemMessage = fitSystemMessage(data.systemMessage);
+    data.systemMessage = CLEAR_LINE_PREFIX + fitSystemMessage(data.systemMessage);
     process.stderr.write(data.systemMessage + '\n');
   }
   process.stdout.write(JSON.stringify(data, null, 2));

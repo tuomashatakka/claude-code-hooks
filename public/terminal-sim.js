@@ -1,65 +1,61 @@
-/* Replays the session captured in demo-data.js.
+/* Replays the examples captured in demo-data.js, one tool call at a time.
  *
- * `prompt` beats are typed into the composer, then echoed into the scrollback
- * the way submitting actually moves them. `hook` beats carry pre-rendered HTML
- * lines produced by scripts/capture-demo.ts from the real hook pipeline - this
- * file only decides *when* they appear, never what they say. */
+ * Each example is framed the way Claude Code frames it in a real terminal:
+ *
+ *   > give the Stop hook a matching badge
+ *   ⏺ Bash(rg -n 'renderBadges' src/hooks/index.ts)
+ *    ❯ Bash  OUTPUT
+ *   Δ 12ms
+ *
+ * Hook output sits flush at column 0: every event opens with a clear-line
+ * prefix (runtime/io.ts) that overwrites the "<Event> says:" label Claude Code
+ * prints above it, so there is no caption row and no gutter to indent under.
+ *
+ * The hook output itself is pre-rendered HTML from scripts/capture-demo.ts,
+ * which runs the real hook pipeline. This file decides framing and timing,
+ * never content.
+ */
 (() => {
   'use strict';
 
   const stream = document.getElementById('stream');
   const scrollback = document.getElementById('scrollback');
-  const composerText = document.getElementById('composer-text');
-  const caret = document.getElementById('caret');
-  const playPause = document.getElementById('playpause');
-  const restartBtn = document.getElementById('restart');
+  const hint = document.getElementById('hint');
+  const counter = document.getElementById('counter');
+  const prevBtn = document.getElementById('prev');
+  const nextBtn = document.getElementById('next');
 
   wireCopyButtons(document);
 
   const session = window.__SESSION__;
-  const steps = session && Array.isArray(session.steps) ? session.steps : null;
-  if (!stream || !steps || !steps.length) {
-    // Capture missing or empty: the static banner is already on screen and
-    // carries the install commands, so leaving it alone is the right failure.
-    if (playPause) playPause.hidden = true;
-    if (restartBtn) restartBtn.hidden = true;
+  const examples = session && Array.isArray(session.examples) ? session.examples : null;
+  if (!stream || !examples || !examples.length) {
+    // No capture: the static banner already carries the install commands, so
+    // leaving it untouched is the right failure.
+    if (hint) hint.hidden = true;
     return;
   }
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const LINE_MS = 26;      // stagger between captured lines
+  const BURST_OVER = 16;   // art and block headings land in one frame
 
-  const TYPE_MS = 26;          // per character in the composer
-  const SUBMIT_MS = 420;       // pause on a finished prompt before it submits
-  const LINE_MS = 55;          // stagger between captured lines
-  const BURST_OVER = 14;       // longer blocks (art, block headings) land at once
-  const BEAT_MS = 380;         // breath between beats
-  const LOOP_MS = 6000;        // hold on the finished session before restarting
+  const boot = document.querySelector('.boot');
+  const installBar = document.getElementById('installbar');
 
-  let paused = false;
-  let run = 0;                 // bumped to cancel an in-flight playthrough
+  let index = 0;
+  let run = 0;             // bumped to cancel an in-flight reveal
+  let revealing = false;
 
-  /* ---------- timing ---------- */
-
-  const CANCELLED = Symbol('cancelled');
-
-  function sleep(ms, token) {
-    return new Promise((resolve, reject) => {
-      const deadline = performance.now() + ms;
-      (function tick() {
-        if (token !== run) return reject(CANCELLED);
-        if (!paused && performance.now() >= deadline) return resolve();
-        setTimeout(tick, 40);
-      })();
-    });
+  // The banner is part of the session-start frame. Past that it would eat the
+  // room an example needs, so it collapses into the compact install bar.
+  function setChrome(i) {
+    const atStart = i === 0;
+    if (boot) boot.hidden = !atStart;
+    if (installBar) installBar.hidden = atStart;
   }
 
-  /* ---------- rendering ---------- */
-
-  function append(node) {
-    stream.appendChild(node);
-    scrollback.scrollTop = scrollback.scrollHeight;
-    return node;
-  }
+  /* ---------- dom helpers ---------- */
 
   function el(cls, html) {
     const node = document.createElement('div');
@@ -68,28 +64,121 @@
     return node;
   }
 
-  function echoPrompt(step) {
-    const node = el('echo beat');
-    const chev = document.createElement('span');
-    chev.className = 'chev';
-    chev.textContent = '❯ ';
-    node.append(chev, document.createTextNode(step.text));
-    if (step.copyable) node.appendChild(copyButton(step.text));
-    append(node);
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function copyButton(text) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'copy';
-    btn.textContent = 'copy';
-    btn.addEventListener('click', () => copyText(text, btn));
-    return btn;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ---------- rendering one example ---------- */
+
+  async function show(i) {
+    const token = ++run;
+    const ex = examples[i];
+    stream.innerHTML = '';
+    revealing = true;
+    setHint('');
+    setChrome(i);
+
+    if (ex.note) stream.appendChild(el('note', escapeHtml(ex.note)));
+    if (ex.prompt) stream.appendChild(el('turn', '&gt; ' + escapeHtml(ex.prompt)));
+    if (ex.header) {
+      stream.appendChild(
+        el('callhdr', '<span class="dot">⏺</span> ' + escapeHtml(ex.header))
+      );
+    }
+
+    const block = el('hookblock');
+    stream.appendChild(block);
+
+    // Every hook opens with a clear-line prefix that erases Claude Code's
+    // "<Event>:<Tool> says:" row and returns to column 0, so output starts
+    // flush left — no caption, no gutter. Leading blanks are the remains of
+    // that overwritten row and would render as a stray gap.
+    let first = 0;
+    while (first < ex.lines.length && !ex.lines[first]) first++;
+
+    const rest = ex.lines.slice(first);
+    const burst = reduceMotion || rest.length > BURST_OVER;
+
+    if (burst) {
+      const frag = document.createDocumentFragment();
+      rest.forEach(l => frag.appendChild(el('cap-line', l || '&nbsp;')));
+      block.appendChild(frag);
+    } else {
+      for (const l of rest) {
+        if (token !== run) return;
+        block.appendChild(el('cap-line', l || '&nbsp;'));
+        scrollback.scrollTop = scrollback.scrollHeight;
+        await sleep(LINE_MS);
+      }
+    }
+
+    if (token !== run) return;
+    scrollback.scrollTop = 0;
+    revealing = false;
+    counter.textContent = (i + 1) + ' / ' + examples.length;
+    setHint('press any key or click to continue');
   }
+
+  function setHint(text) {
+    hint.textContent = text;
+    hint.classList.toggle('on', Boolean(text));
+  }
+
+  function go(delta) {
+    // Mid-reveal, the first press finishes the current example rather than
+    // skipping past output the viewer has not seen yet.
+    if (revealing && delta > 0) {
+      run++;
+      renderInstant(index);
+      return;
+    }
+    index = (index + delta + examples.length) % examples.length;
+    show(index);
+  }
+
+  function renderInstant(i) {
+    const ex = examples[i];
+    const block = stream.querySelector('.hookblock');
+    if (!block) return;
+    let first = 0;
+    while (first < ex.lines.length && !ex.lines[first]) first++;
+    const shown = block.querySelectorAll('.cap-line').length;
+    const frag = document.createDocumentFragment();
+    ex.lines.slice(first + shown).forEach(l => frag.appendChild(el('cap-line', l || '&nbsp;')));
+    block.appendChild(frag);
+    revealing = false;
+    scrollback.scrollTop = 0;
+    counter.textContent = (i + 1) + ' / ' + examples.length;
+    setHint('press any key or click to continue');
+  }
+
+  /* ---------- input ---------- */
+
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;       // leave shortcuts alone
+    if (e.key === 'Tab') return;                          // keep focus navigable
+    e.preventDefault();
+    go(e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Backspace' ? -1 : 1);
+  });
+
+  document.addEventListener('click', e => {
+    // Buttons and links own their clicks.
+    if (e.target.closest('button, a')) return;
+    go(1);
+  });
+
+  prevBtn.addEventListener('click', () => go(-1));
+  nextBtn.addEventListener('click', () => go(1));
+  document.getElementById('restart').addEventListener('click', () => { index = 0; show(0); });
+
+  /* ---------- clipboard ---------- */
 
   function copyText(text, btn) {
     const done = () => {
-      const original = btn.textContent;
+      const original = btn.dataset.label || btn.textContent;
+      btn.dataset.label = original;
       btn.textContent = 'copied';
       btn.classList.add('done');
       setTimeout(() => {
@@ -101,7 +190,6 @@
       navigator.clipboard.writeText(text).then(done, () => {});
       return;
     }
-    // http:// origins and older browsers have no async clipboard
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.setAttribute('readonly', '');
@@ -109,16 +197,10 @@
     ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    try {
-      document.execCommand('copy');
-      done();
-    } catch (e) {
-      /* clipboard unavailable — the text is selectable on the page anyway */
-    }
+    try { document.execCommand('copy'); done(); } catch (err) { /* no clipboard */ }
     document.body.removeChild(ta);
   }
 
-  // Buttons that live in the static banner copy from an element's text.
   function wireCopyButtons(root) {
     root.querySelectorAll('.copy[data-copy]').forEach(btn => {
       const target = document.querySelector(btn.getAttribute('data-copy'));
@@ -126,93 +208,5 @@
     });
   }
 
-  /* ---------- beats ---------- */
-
-  async function playPrompt(step, token) {
-    if (reduceMotion) {
-      echoPrompt(step);
-      return;
-    }
-    composerText.textContent = '';
-    for (const ch of step.text) {
-      composerText.textContent += ch;
-      await sleep(TYPE_MS, token);
-    }
-    await sleep(SUBMIT_MS, token);
-    composerText.textContent = '';
-    echoPrompt(step);
-  }
-
-  async function playHook(step, token) {
-    if (step.caption) append(el('caption beat', '└ ' + escapeHtml(step.caption)));
-
-    if (reduceMotion || step.lines.length > BURST_OVER) {
-      const frag = document.createDocumentFragment();
-      step.lines.forEach(line => frag.appendChild(el('cap-line', line || '&nbsp;')));
-      stream.appendChild(frag);
-      scrollback.scrollTop = scrollback.scrollHeight;
-      return;
-    }
-    for (const line of step.lines) {
-      append(el('cap-line beat', line || '&nbsp;'));
-      await sleep(LINE_MS, token);
-    }
-  }
-
-  function escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  /* ---------- loop ---------- */
-
-  async function play() {
-    const token = ++run;
-    stream.innerHTML = '';
-    composerText.textContent = '';
-
-    try {
-      for (const step of steps) {
-        if (step.kind === 'prompt') await playPrompt(step, token);
-        else await playHook(step, token);
-        await sleep(BEAT_MS, token);
-      }
-      if (reduceMotion) return;          // render once, don't loop
-      await sleep(LOOP_MS, token);
-      if (token === run) play();
-    } catch (e) {
-      if (e !== CANCELLED) throw e;      // a restart cancelled this run
-    }
-  }
-
-  function setPaused(next) {
-    paused = next;
-    playPause.textContent = paused ? '▶' : '❚❚';
-    playPause.setAttribute('aria-label', paused ? 'Resume the demo' : 'Pause the demo');
-    if (caret) caret.style.animationPlayState = paused ? 'paused' : '';
-  }
-
-  playPause.addEventListener('click', () => setPaused(!paused));
-  restartBtn.addEventListener('click', () => {
-    setPaused(false);
-    play();
-  });
-
-  // Don't burn frames (or the session) in a background tab.
-  let pausedByVisibility = false;
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && !paused) {
-      pausedByVisibility = true;
-      setPaused(true);
-    } else if (!document.hidden && pausedByVisibility) {
-      pausedByVisibility = false;
-      setPaused(false);
-    }
-  });
-
-  if (reduceMotion) {
-    playPause.hidden = true;
-    restartBtn.hidden = true;
-  }
-
-  play();
+  show(0);
 })();

@@ -56,3 +56,14 @@ export function renderBadges(...badges: Array<Badge | string | null | undefined 
     .map(b => (b instanceof Badge ? b.toString() : String(b)))
     .join(' ');
 }
+
+/**
+ * Badges that label a card's contents.
+ *
+ * A section badge names the tool; these name what the card below them holds,
+ * so a call that shows input, output and metadata reads as three labelled
+ * blocks rather than one run-on wall.
+ */
+export const RUNNING_BADGE = new Badge({ label: 'Running', color: 'magenta', icon: '⏎ ' }).toString();
+export const OUTPUT_BADGE  = new Badge({ label: 'Output', color: 'brightGreen', icon: '≘' }).toString();
+export const META_BADGE    = new Badge({ label: 'metadata', color: 'gray', icon: '⛁' }).toString();

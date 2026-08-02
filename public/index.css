@@ -159,8 +159,8 @@ a:hover { text-decoration: underline; }
   position: relative;
   border: 1px solid var(--clay);
   border-radius: 3px;
-  padding: 14px 4px 10px;
-  margin: 6px 0 22px;
+  padding: 12px 4px 8px;
+  margin: 4px 0 16px;
   min-width: 42ch;
 }
 
@@ -182,6 +182,7 @@ a:hover { text-decoration: underline; }
 
 .boot-left {
   padding: 4px 16px;
+  align-self: center;
   text-align: center;
 }
 
@@ -193,7 +194,6 @@ a:hover { text-decoration: underline; }
 .boot p { margin: 0 0 .45em; }
 .boot hr { border: 0; border-top: 1px solid #ffffff12; margin: .9em 0; }
 
-.sigil { margin: 0 0 .7em; color: var(--cyan); line-height: 1.05; }
 .boot-lead { color: var(--fg); }
 .boot-h { font-size: 1em; font-weight: 700; color: var(--clay); margin: 0 0 .5em; }
 .dim { color: var(--fg-dim); }
@@ -217,28 +217,43 @@ a:hover { text-decoration: underline; }
 .copy:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
 .copy.done { color: var(--brightgreen); border-color: var(--brightgreen); }
 
-/* ---------- replayed session ---------- */
+.installbar {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 1.4em;
+  padding-bottom: .9em;
+  border-bottom: 1px solid var(--line);
+}
+.installbar[hidden] { display: none; }
+.installbar code { color: var(--brightgreen); word-break: break-all; }
+
+/* ---------- one example, framed like Claude Code ---------- */
 
 /* Captured lines carry their own inline colors and rely on column alignment,
    so they must never wrap or collapse whitespace. */
-.cap-line,
-.echo {
+.cap-line {
   white-space: pre;
   min-height: calc(var(--lh) * 1em);
 }
 
-.caption {
+.note {
   color: var(--fg-dim);
-  margin-top: 1.05em;
-  white-space: pre;
+  font-style: italic;
+  margin: 0 0 1.2em;
+  max-width: 78ch;
+  white-space: normal;
 }
 
-.echo { margin-top: 1.05em; color: var(--fg); }
-.echo .chev { color: var(--fg-dim); }
-.echo .copy { margin-left: 10px; vertical-align: baseline; }
+.turn   { color: var(--fg); margin-bottom: .6em; white-space: pre-wrap; }
 
-.beat { animation: fade .18s ease-out both; }
-@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+.callhdr { color: var(--fg); margin-bottom: .2em; white-space: pre-wrap; }
+.callhdr .dot { color: var(--brightgreen); }
+
+/* No gutter: the clear-line prefix each hook emits overwrites Claude Code's
+   "says:" row, so hook output starts at column 0 like the terminal shows it. */
+.hookblock { margin-top: .2em; }
 
 /* ---------- composer + status ---------- */
 
@@ -246,17 +261,25 @@ a:hover { text-decoration: underline; }
   flex: none;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
   padding: 10px clamp(10px, 1.6vw, 22px);
   border-top: 1px solid var(--line);
   min-height: 2.6em;
-  overflow: hidden;
 }
 .composer .chev { color: var(--fg-dim); flex: none; }
-#composer-text { white-space: pre-wrap; word-break: break-word; }
 
-.caret { color: var(--fg); animation: blink 1.05s steps(1, end) infinite; }
-@keyframes blink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+.hint {
+  color: var(--fg-dim);
+  opacity: 0;
+  transition: opacity .25s ease;
+  flex: 1;
+  min-width: 0;
+}
+.hint.on { opacity: 1; animation: hintpulse 2.4s ease-in-out infinite; }
+@keyframes hintpulse { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+
+.stepper { display: flex; align-items: center; gap: 6px; flex: none; }
+.counter { color: var(--fg-dim); min-width: 6ch; text-align: center; }
 
 .status {
   flex: none;
@@ -296,6 +319,7 @@ a:hover { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .caret { animation: none; }
+  .hint.on { animation: none; opacity: 1; }
+}
   .beat  { animation: none; }
 }

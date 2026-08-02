@@ -1,6 +1,7 @@
 import chalk from 'chalk';
+import { META_BADGE } from '../render/badge.ts';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox, pushDurationLine } from '../render/primitives.ts';
+import { renderCard, pushDurationLine } from '../render/primitives.ts';
 import { simpleHighlight, formatMetadataCustom } from '../render/highlight.ts';
 import type { TaskInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -34,8 +35,7 @@ defineTool<TaskInput, RawToolResult>({
       delete metadata.description;
 
       if (Object.keys(metadata).length > 0) {
-        lines.push(chalk.gray('  metadata'));
-        lines.push(renderBox(formatMetadataCustom(metadata)));
+        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
       }
     }
 

@@ -27,8 +27,7 @@
         <span class="lights" aria-hidden="true"><i class="l-r"></i><i class="l-y"></i><i class="l-g"></i></span>
         <span class="titletext">✳ Claude Code</span>
         <span class="tb-actions">
-          <button type="button" id="playpause" class="tb-btn" aria-label="Pause the demo">❚❚</button>
-          <button type="button" id="restart" class="tb-btn" aria-label="Restart the demo">↻</button>
+          <button type="button" id="restart" class="tb-btn" aria-label="Back to the first example">↻</button>
         </span>
       </header>
 
@@ -41,11 +40,7 @@
             <span class="boot-legend">claude-code-hooks v2.2.0</span>
             <div class="boot-cols">
               <div class="boot-left">
-                <pre class="sigil" aria-hidden="true"> ▄▀▀▀▀▀▀▄
-█  ▄▀▀▄  █
-█  ▀▄▄▀  █
- ▀▄▄▄▄▄▄▀ </pre>
-                <p class="boot-lead">14 hook events, beautified</p>
+                <p class="boot-lead">⬡ 14 hook events, beautified</p>
                 <p class="dim">block headings · badges · diffs · ASCII images</p>
                 <p class="dim">TypeScript + Bun · runs on plain <span class="fg">node</span></p>
               </div>
@@ -61,6 +56,14 @@
             </div>
           </div>
 
+          <!-- Compact stand-in for the banner once the reel moves past the
+               session-start frame, so the install command never leaves the page. -->
+          <p class="installbar" id="installbar" hidden>
+            <span class="dim">⬡ install</span>
+            <code id="cmd-add2">/plugin marketplace add tuomashatakka/claude-code-hooks</code>
+            <button type="button" class="copy" data-copy="#cmd-add2">copy</button>
+          </p>
+
           <!-- Replay target. Populated from public/demo-data.js, which is
                captured from the live hook pipeline on every deploy. -->
           <div id="stream"></div>
@@ -68,11 +71,17 @@
         </div>
 
         <div class="composer">
-          <span class="chev" aria-hidden="true">❯</span><span id="composer-text"></span><span class="caret" id="caret" aria-hidden="true">▌</span>
+          <span class="chev" aria-hidden="true">❯</span>
+          <span class="hint" id="hint" aria-live="polite"></span>
+          <span class="stepper">
+            <button type="button" id="prev" class="tb-btn" aria-label="Previous example">←</button>
+            <span class="counter" id="counter">1 / 1</span>
+            <button type="button" id="next" class="tb-btn" aria-label="Next example">→</button>
+          </span>
         </div>
 
-        <div class="status" aria-hidden="true">
-          <div class="meters">
+        <div class="status">
+          <div class="meters" aria-hidden="true">
             <div class="meter"><span class="bar bar-cyan"></span><span class="dim">0% used of rate limit budget</span></div>
             <div class="meter"><span class="bar bar-magenta"></span><span class="dim">0% used of context budget</span></div>
           </div>

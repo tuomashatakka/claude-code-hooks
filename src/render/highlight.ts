@@ -397,9 +397,25 @@ function formatMetaValue(val: unknown, depth: number): string {
   return String(val);
 }
 
+/**
+ * Metadata as a two-column table.
+ *
+ * Keys are padded to a common width so every value starts in the same column —
+ * a ragged `key: value` list is hard to scan once the keys differ in length,
+ * and these blocks are almost always read by looking for one field.
+ *
+ * Only top-level keys are aligned; nested objects keep their inline/indented
+ * form, since padding them to the outer grid would misrepresent the nesting.
+ */
 export function formatMetadataCustom(obj: unknown): string {
   if (!obj || typeof obj !== 'object') return String(obj);
-  return Object.entries(obj as Record<string, unknown>)
-    .map(([k, v]) => META_KEY(k) + META_PUNCT(': ') + formatMetaValue(v, 0))
+  const entries = Object.entries(obj as Record<string, unknown>);
+  if (!entries.length) return '';
+  const keyWidth = Math.max(...entries.map(([k]) => k.length));
+  return entries
+    .map(([k, v]) => {
+      const gap = ' '.repeat(keyWidth - k.length);
+      return META_KEY(k) + META_PUNCT(':') + gap + '  ' + formatMetaValue(v, 0);
+    })
     .join('\n');
 }

@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse, extractResultText, renderRuler, pushDurationLine } from '../render/primitives.ts';
+import { renderCard, softCollapse, extractResultText, renderRuler, pushDurationLine } from '../render/primitives.ts';
+import { RUNNING_BADGE, OUTPUT_BADGE } from '../render/badge.ts';
 import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
@@ -10,67 +11,110 @@ chalk.level = 3;
 type AnyBashInput = BashInput | WcgwBashCommandInput;
 
 interface CommandRow {
-  sep: string;
   text: string;
+  /** The separator that *terminates* this row, rendered at the end of it. */
+  sep: string;
 }
 
-/** Splits a command on top-level `;` and `&&`, ignoring separators inside quotes. */
+/**
+ * Splits a command on top-level `;`, `&&` and `||`, ignoring separators inside
+ * quotes and heredoc bodies.
+ *
+ * The separator trails its own row rather than leading the next one, so a
+ * chain reads the way it would in a script — `cd $D &&` at the end of a line,
+ * the next command starting at the row start:
+ *
+ *     $ mkdir -p $D &&
+ *     cd $D &&
+ *     cat reg.ts
+ *
+ * Heredoc bodies are passed through verbatim. Their content is not shell —
+ * splitting a `<<'EOF'` payload on `;` shredded embedded JS/TS across rows and
+ * put a stray separator in front of every statement.
+ */
 function splitCommandRows(cmd: string): CommandRow[] {
   const rows: CommandRow[] = [];
   let current = '';
-  let sep = '';
   let quote: '"' | "'" | null = null;
+  let heredoc: string | null = null;
 
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i]!;
+  const push = (sep: string) => {
+    rows.push({ text: current.replace(/^\s+|\s+$/g, ''), sep });
+    current = '';
+  };
 
-    if (quote) {
+  const lines = cmd.split('\n');
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li]!;
+
+    // Inside a heredoc everything is literal until the terminator line.
+    if (heredoc !== null) {
+      current += (current ? '\n' : '') + line;
+      if (line.trim() === heredoc) heredoc = null;
+      continue;
+    }
+
+    if (li > 0) current += '\n';
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]!;
+
+      if (quote) {
+        current += ch;
+        if (quote === '"' && ch === '\\' && i + 1 < line.length) current += line[++i]!;
+        else if (ch === quote) quote = null;
+        continue;
+      }
+
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        current += ch;
+        continue;
+      }
+
+      // `<<EOF`, `<<'EOF'`, `<<-"EOF"` — everything up to the terminator is data.
+      const here = line.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+      if (here) {
+        current += here[0];
+        i += here[0].length - 1;
+        heredoc = here[2]!;
+        continue;
+      }
+
+      if (ch === ';') { push(';'); continue; }
+      if ((ch === '&' || ch === '|') && line[i + 1] === ch) { push(ch + ch); i++; continue; }
+
       current += ch;
-      if (quote === '"' && ch === '\\' && i + 1 < cmd.length) current += cmd[++i];
-      else if (ch === quote) quote = null;
-      continue;
     }
-
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-
-    if (ch === ';') {
-      rows.push({ sep, text: current.trim() });
-      current = '';
-      sep = '; ';
-      continue;
-    }
-
-    if (ch === '&' && cmd[i + 1] === '&') {
-      rows.push({ sep, text: current.trim() });
-      current = '';
-      sep = '&& ';
-      i++;
-      continue;
-    }
-
-    current += ch;
   }
-  rows.push({ sep, text: current.trim() });
+  push('');
 
   return rows.filter(r => r.text.length > 0);
+}
+
+
+function commandOf(input: AnyBashInput): string | null {
+  const raw = (input as Partial<BashInput & WcgwBashCommandInput>).command
+    ?? (input as Partial<WcgwBashCommandInput>).action_json;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+}
+
+/** `$ ` on the first row, separators trailing, every later row flush left. */
+function renderCommand(cmd: string): string {
+  return splitCommandRows(cmd)
+    .map(({ text, sep }, i) => {
+      const body = simpleHighlight(text, 'bash') + (sep ? ' ' + chalk.gray(sep) : '');
+      return i === 0 ? chalk.gray('$ ') + body : body;
+    })
+    .join('\n');
 }
 
 defineTool<AnyBashInput, RawToolResult>({
   matches: ['Bash', 'mcp__wcgw__BashCommand'],
   pre(input): import('../registry/tool-registry.ts').RenderedSection {
     const lines: string[] = [];
-    const cmd = (input as Partial<BashInput & WcgwBashCommandInput>).command
-      ?? (input as Partial<WcgwBashCommandInput>).action_json
-      ?? null;
-    if (cmd) {
-      for (const { sep, text } of splitCommandRows(String(cmd))) {
-        lines.push((sep ? chalk.gray(sep) : '') + simpleHighlight(text, 'bash'));
-      }
-    }
+    const cmd = commandOf(input);
+    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
 
     const meta: string[] = [];
     const w = (input as WcgwBashCommandInput).wait_for_seconds;
@@ -90,15 +134,11 @@ defineTool<AnyBashInput, RawToolResult>({
 
     pushDurationLine(lines, durationMs);
 
-    const cmd = (_input as Partial<BashInput & WcgwBashCommandInput>).command
-      ?? (_input as Partial<WcgwBashCommandInput>).action_json
-      ?? null;
-    if (cmd) {
-      splitCommandRows(String(cmd).trim()).forEach(({ sep, text }, i) => {
-        const marker = i === 0 ? chalk.gray('$ ') : chalk.gray('  ' + sep);
-        lines.push(marker + simpleHighlight(text, 'bash'));
-      });
-    }
+    // Input and output get their own labelled cards: what was run and what came
+    // back are different things, and running them together made a long command
+    // and a long result read as one undifferentiated block.
+    const cmd = commandOf(_input);
+    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
 
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
 
@@ -112,7 +152,7 @@ defineTool<AnyBashInput, RawToolResult>({
         ? highlighted
         : highlighted.split('\n').map(line => renderRuler(line) ?? line).join('\n');
 
-      lines.push(renderBox(softCollapse(processedStdout)));
+      lines.push(renderCard(OUTPUT_BADGE, softCollapse(processedStdout)));
     }
 
     const trailerParts: string[] = [];

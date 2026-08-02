@@ -1,6 +1,7 @@
 import chalk from 'chalk';
+import { OUTPUT_BADGE } from '../render/badge.ts';
 import { defineTool } from '../registry/tool-registry.ts';
-import { extractResultText, firstLine, pushDurationLine, renderBox } from '../render/primitives.ts';
+import { extractResultText, firstLine, pushDurationLine, renderCard } from '../render/primitives.ts';
 import { renderFileResult } from '../render/file-preview.ts';
 import { parseSearchReplaceBlocks, renderSearchReplace } from '../parsers/search-replace.ts';
 import type { WcgwFileWriteOrEditInput, RawToolResult } from '../types/tool-io.ts';
@@ -25,7 +26,7 @@ defineTool<WcgwFileWriteOrEditInput, RawToolResult>({
       const text    = String(input.text_or_search_replace_blocks);
       const parts   = text.split('\n');
       const snippet = parts.slice(0, 6).join('\n');
-      lines.push(renderBox(snippet + (parts.length > 6 ? '\n…' : '')));
+      lines.push(renderCard(OUTPUT_BADGE, snippet + (parts.length > 6 ? '\n…' : '')));
     }
 
     const meta: string[] = [];
@@ -51,7 +52,7 @@ defineTool<WcgwFileWriteOrEditInput, RawToolResult>({
     const box    = input.file_path ? renderFileResult(input.file_path, { action }) : null;
 
     if (box) lines.push(box);
-    else if (!status && text) lines.push(renderBox(text));
+    else if (!status && text) lines.push(renderCard(OUTPUT_BADGE, text));
 
     return { lines };
   },

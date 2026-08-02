@@ -1,6 +1,7 @@
 import chalk from 'chalk';
+import { OUTPUT_BADGE } from '../render/badge.ts';
 import { defineTool } from '../registry/tool-registry.ts';
-import { extractResultText, pushDurationLine, renderBox } from '../render/primitives.ts';
+import { extractResultText, pushDurationLine, renderCard } from '../render/primitives.ts';
 import {
   collapsePreview,
   prefixPreviewLines,
@@ -75,7 +76,7 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
       if (inline.length) lines.push(...inline);
       else {
         const text = extractResultText(result);
-        if (text) lines.push(renderBox(collapsePreview(text)));
+        if (text) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text)));
       }
     }
 

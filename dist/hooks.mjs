@@ -4877,7 +4877,7 @@ function pickResultText(result, keys = ["text", "result", "output"]) {
 }
 function renderBox(content) {
   const maxWidth = getMaxContentWidth();
-  const lines = String(content).split("\n").map((l) => stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l);
+  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((l) => stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l);
   const maxLen = Math.min(Math.max(...lines.map((l) => stripAnsi(l).length), 0), maxWidth);
   const width = maxLen + H_PADDING * 2;
   const bg = source_default.bgHex("#252525");
@@ -4885,7 +4885,10 @@ function renderBox(content) {
   const body = lines.map(
     (l) => bg(" ".repeat(H_PADDING) + l + " ".repeat(Math.max(0, width - H_PADDING - stripAnsi(l).length)))
   );
-  return [pad, ...body, pad].join("\n");
+  return ["", pad, ...body, pad, ""].join("\n");
+}
+function renderCard(badge, content) {
+  return "\n" + badge + renderBox(content);
 }
 function renderSection({ badge, lines = [] }) {
   let out = badge;
@@ -5031,6 +5034,50 @@ var COLOR_MAP = {
 function getBadgeColor(name) {
   return COLOR_MAP[name] ?? source_default.bgBlue;
 }
+
+// src/render/badge.ts
+function renderBadge(props = {}) {
+  const { toolName = null, label = null } = props;
+  let pretty;
+  let badgeColor = props.color ?? null;
+  let badgeIcon = props.icon ?? null;
+  if (toolName) {
+    pretty = parseToolName(toolName).pretty;
+    if (!badgeIcon) badgeIcon = getToolIcon(toolName);
+    if (!badgeColor) badgeColor = getToolColor(toolName);
+  } else {
+    pretty = label ?? "";
+    if (!badgeColor) badgeColor = "cyan";
+  }
+  const bg = getBadgeColor(badgeColor);
+  return bg.black(` ${badgeIcon ? badgeIcon + " " : ""}${pretty} `);
+}
+var Badge = class {
+  icon;
+  color;
+  label;
+  toolName;
+  constructor(props = {}) {
+    this.icon = props.icon ?? null;
+    this.color = props.color ?? null;
+    this.label = props.label ?? null;
+    this.toolName = props.toolName ?? null;
+  }
+  toString() {
+    return renderBadge({
+      toolName: this.toolName,
+      label: this.label,
+      color: this.color,
+      icon: this.icon
+    });
+  }
+};
+function renderBadges(...badges) {
+  return badges.filter((b) => Boolean(b)).map((b) => b instanceof Badge ? b.toString() : String(b)).join(" ");
+}
+var RUNNING_BADGE = new Badge({ label: "Running", color: "magenta", icon: "\u23CE " }).toString();
+var OUTPUT_BADGE = new Badge({ label: "Output", color: "brightGreen", icon: "\u2258" }).toString();
+var META_BADGE = new Badge({ label: "metadata", color: "gray", icon: "\u26C1" }).toString();
 
 // src/render/highlight.ts
 source_default.level = 3;
@@ -5370,7 +5417,13 @@ function formatMetaValue(val, depth) {
 }
 function formatMetadataCustom(obj) {
   if (!obj || typeof obj !== "object") return String(obj);
-  return Object.entries(obj).map(([k, v]) => META_KEY(k) + META_PUNCT(": ") + formatMetaValue(v, 0)).join("\n");
+  const entries = Object.entries(obj);
+  if (!entries.length) return "";
+  const keyWidth = Math.max(...entries.map(([k]) => k.length));
+  return entries.map(([k, v]) => {
+    const gap = " ".repeat(keyWidth - k.length);
+    return META_KEY(k) + META_PUNCT(":") + gap + "  " + formatMetaValue(v, 0);
+  }).join("\n");
 }
 
 // src/parsers/wcgw-trailer.ts
@@ -5414,49 +5467,72 @@ source_default.level = 3;
 function splitCommandRows(cmd) {
   const rows = [];
   let current = "";
-  let sep = "";
   let quote = null;
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i];
-    if (quote) {
+  let heredoc = null;
+  const push = (sep) => {
+    rows.push({ text: current.replace(/^\s+|\s+$/g, ""), sep });
+    current = "";
+  };
+  const lines = cmd.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (heredoc !== null) {
+      current += (current ? "\n" : "") + line;
+      if (line.trim() === heredoc) heredoc = null;
+      continue;
+    }
+    if (li > 0) current += "\n";
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (quote) {
+        current += ch;
+        if (quote === '"' && ch === "\\" && i + 1 < line.length) current += line[++i];
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        current += ch;
+        continue;
+      }
+      const here = line.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+      if (here) {
+        current += here[0];
+        i += here[0].length - 1;
+        heredoc = here[2];
+        continue;
+      }
+      if (ch === ";") {
+        push(";");
+        continue;
+      }
+      if ((ch === "&" || ch === "|") && line[i + 1] === ch) {
+        push(ch + ch);
+        i++;
+        continue;
+      }
       current += ch;
-      if (quote === '"' && ch === "\\" && i + 1 < cmd.length) current += cmd[++i];
-      else if (ch === quote) quote = null;
-      continue;
     }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if (ch === ";") {
-      rows.push({ sep, text: current.trim() });
-      current = "";
-      sep = "; ";
-      continue;
-    }
-    if (ch === "&" && cmd[i + 1] === "&") {
-      rows.push({ sep, text: current.trim() });
-      current = "";
-      sep = "&& ";
-      i++;
-      continue;
-    }
-    current += ch;
   }
-  rows.push({ sep, text: current.trim() });
+  push("");
   return rows.filter((r) => r.text.length > 0);
+}
+function commandOf(input) {
+  const raw = input.command ?? input.action_json;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+function renderCommand(cmd) {
+  return splitCommandRows(cmd).map(({ text, sep }, i) => {
+    const body = simpleHighlight(text, "bash") + (sep ? " " + source_default.gray(sep) : "");
+    return i === 0 ? source_default.gray("$ ") + body : body;
+  }).join("\n");
 }
 defineTool({
   matches: ["Bash", "mcp__wcgw__BashCommand"],
   pre(input) {
     const lines = [];
-    const cmd = input.command ?? input.action_json ?? null;
-    if (cmd) {
-      for (const { sep, text } of splitCommandRows(String(cmd))) {
-        lines.push((sep ? source_default.gray(sep) : "") + simpleHighlight(text, "bash"));
-      }
-    }
+    const cmd = commandOf(input);
+    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
     const meta = [];
     const w = input.wait_for_seconds;
     const t = input.timeout;
@@ -5471,19 +5547,14 @@ defineTool({
     const raw = extractResultText(result) ?? "";
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const cmd = _input.command ?? _input.action_json ?? null;
-    if (cmd) {
-      splitCommandRows(String(cmd).trim()).forEach(({ sep, text }, i) => {
-        const marker = i === 0 ? source_default.gray("$ ") : source_default.gray("  " + sep);
-        lines.push(marker + simpleHighlight(text, "bash"));
-      });
-    }
+    const cmd = commandOf(_input);
+    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
     if (stdout.trim()) {
       const lang = detectOutputLanguage(stdout);
       const highlighted = simpleHighlight(lang === "json" ? formatJSON(stdout) : stdout, lang);
       const processedStdout = lang === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
-      lines.push(renderBox(softCollapse(processedStdout)));
+      lines.push(renderCard(OUTPUT_BADGE, softCollapse(processedStdout)));
     }
     const trailerParts = [];
     if (status !== null) {
@@ -5722,47 +5793,6 @@ defineTool({
   }
 });
 
-// src/render/badge.ts
-function renderBadge(props = {}) {
-  const { toolName = null, label = null } = props;
-  let pretty;
-  let badgeColor = props.color ?? null;
-  let badgeIcon = props.icon ?? null;
-  if (toolName) {
-    pretty = parseToolName(toolName).pretty;
-    if (!badgeIcon) badgeIcon = getToolIcon(toolName);
-    if (!badgeColor) badgeColor = getToolColor(toolName);
-  } else {
-    pretty = label ?? "";
-    if (!badgeColor) badgeColor = "cyan";
-  }
-  const bg = getBadgeColor(badgeColor);
-  return bg.black(` ${badgeIcon ? badgeIcon + " " : ""}${pretty} `);
-}
-var Badge = class {
-  icon;
-  color;
-  label;
-  toolName;
-  constructor(props = {}) {
-    this.icon = props.icon ?? null;
-    this.color = props.color ?? null;
-    this.label = props.label ?? null;
-    this.toolName = props.toolName ?? null;
-  }
-  toString() {
-    return renderBadge({
-      toolName: this.toolName,
-      label: this.label,
-      color: this.color,
-      icon: this.icon
-    });
-  }
-};
-function renderBadges(...badges) {
-  return badges.filter((b) => Boolean(b)).map((b) => b instanceof Badge ? b.toString() : String(b)).join(" ");
-}
-
 // src/tools/edit.ts
 source_default.level = 3;
 var CONTEXT_LINES = 3;
@@ -5870,7 +5900,7 @@ defineTool({
       const text = String(input.text_or_search_replace_blocks);
       const parts = text.split("\n");
       const snippet = parts.slice(0, 6).join("\n");
-      lines.push(renderBox(snippet + (parts.length > 6 ? "\n\u2026" : "")));
+      lines.push(renderCard(OUTPUT_BADGE, snippet + (parts.length > 6 ? "\n\u2026" : "")));
     }
     const meta = [];
     if (input.percentage_to_change != null) meta.push(source_default.gray(`\xB1${input.percentage_to_change}%`));
@@ -5890,7 +5920,7 @@ defineTool({
     const action = parseSearchReplaceBlocks(input.text_or_search_replace_blocks).length ? "edit" : "write";
     const box = input.file_path ? renderFileResult(input.file_path, { action }) : null;
     if (box) lines.push(box);
-    else if (!status && text) lines.push(renderBox(text));
+    else if (!status && text) lines.push(renderCard(OUTPUT_BADGE, text));
     return { lines };
   }
 });
@@ -5946,7 +5976,7 @@ defineTool({
       if (inline.length) lines.push(...inline);
       else {
         const text = extractResultText(result);
-        if (text) lines.push(renderBox(collapsePreview(text)));
+        if (text) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text)));
       }
     }
     return { lines };
@@ -6052,8 +6082,7 @@ defineTool({
       delete metadata.prompt;
       delete metadata.description;
       if (Object.keys(metadata).length > 0) {
-        lines.push(source_default.gray("  metadata"));
-        lines.push(renderBox(formatMetadataCustom(metadata)));
+        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
       }
     }
     return { lines };
@@ -6731,7 +6760,7 @@ defineTool({
       }
     } else {
       if (result && typeof result === "object") {
-        lines.push(renderBox(formatMetadataCustom(result)));
+        lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
       }
     }
     return { lines };
@@ -6914,13 +6943,12 @@ defineGenericTool({
         if (isJSON(primary)) formatted = simpleHighlight(formatJSON(primary), "json");
         else if (isCode(primary)) formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
       }
-      lines.push(renderBox(softCollapse(formatted)));
+      lines.push(renderCard(OUTPUT_BADGE, softCollapse(formatted)));
       if (metadata && Object.keys(metadata).length) {
-        lines.push(source_default.gray("  metadata"));
-        lines.push(renderBox(formatMetadataCustom(metadata)));
+        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
       }
     } else if (result && typeof result === "object") {
-      lines.push(renderBox(formatMetadataCustom(result)));
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
     return { lines, isJson: !primary };
   }
@@ -7013,7 +7041,6 @@ function injectToolDiscriminator(toolName, input) {
 }
 
 // src/render/render-tool.ts
-var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\x1B[1B";
 function renderToolSection({
   phase,
   toolName,
@@ -7039,7 +7066,7 @@ function renderToolSection({
   }
   for (const b of section.extraBadges ?? []) badges.push(b);
   const badge = renderBadges(...badges);
-  return CLEAR_LINE_PREFIX + renderSection({ badge, lines: section.lines });
+  return renderSection({ badge, lines: section.lines });
 }
 
 // src/hooks/index.ts
@@ -7373,9 +7400,10 @@ function fitSystemMessage(message) {
   }
   return kept.join("\n") + TRIM_MARKER;
 }
+var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
 function writeOutput(data) {
   if (typeof data.systemMessage === "string" && data.systemMessage.length > 0) {
-    data.systemMessage = fitSystemMessage(data.systemMessage);
+    data.systemMessage = CLEAR_LINE_PREFIX + fitSystemMessage(data.systemMessage);
     process.stderr.write(data.systemMessage + "\n");
   }
   process.stdout.write(JSON.stringify(data, null, 2));

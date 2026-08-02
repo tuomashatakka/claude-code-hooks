@@ -1,6 +1,7 @@
 import chalk from 'chalk';
+import { META_BADGE, OUTPUT_BADGE } from '../render/badge.ts';
 import { defineGenericTool, type RenderedSection, type ToolContext } from '../registry/tool-registry.ts';
-import { renderBox, softCollapse, pushDurationLine } from '../render/primitives.ts';
+import { renderCard, softCollapse, pushDurationLine } from '../render/primitives.ts';
 import { parseToolName } from '../render/theme.ts';
 import {
   isJSON,
@@ -193,13 +194,12 @@ defineGenericTool<RawToolInput, RawToolResult>({
         if (isJSON(primary)) formatted = simpleHighlight(formatJSON(primary), 'json');
         else if (isCode(primary)) formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
       }
-      lines.push(renderBox(softCollapse(formatted)));
+      lines.push(renderCard(OUTPUT_BADGE, softCollapse(formatted)));
       if (metadata && Object.keys(metadata).length) {
-        lines.push(chalk.gray('  metadata'));
-        lines.push(renderBox(formatMetadataCustom(metadata)));
+        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
       }
     } else if (result && typeof result === 'object') {
-      lines.push(renderBox(formatMetadataCustom(result)));
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
 
     return { lines, isJson: !primary };
