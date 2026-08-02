@@ -117,6 +117,7 @@ defineHook({
     return {
       agentId: pickString(o, 'agent_id', 'agentId'),
       agentType: pickString(o, 'agent_type', 'agentType'),
+
     };
   },
   handle(input) {
@@ -137,12 +138,26 @@ defineHook({
     return { agentType: pickString(o, 'agent_type', 'agentType') };
   },
   handle(input) {
-    const heading = renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' });
-    const main = new Badge({ label: 'SubagentStop', color: 'green', icon: '⬡' });
-    const badge = input.agentType
-      ? renderBadges(main, new Badge({ label: input.agentType, color: 'gray' }))
-      : renderBadges(main);
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badges = [
+      new Badge({ label: 'SubagentStop', color: 'green', icon: '⌟' }),
+    ]
+
+    // Subagent
+    if (input.agentType) {
+      badges.push(new Badge({ label: input.agentType, color: 'gray' }))
+    }
+
+
+    // Main proc
+    else {
+      badges.push(new Badge({ label: 'Main Process', color: 'gray' }))
+    }
+
+    const badge = renderBadges(...badges)
+    return { systemMessage:
+      renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' }) +
+      renderSection({ badge, lines: [] })
+    }
   },
 });
 
@@ -338,19 +353,19 @@ defineHook({
     const rawInput = pickAny(o, 'tool_input', 'toolInput') ?? {};
     const toolResponse = (pickAny(o, 'tool_response', 'tool_result', 'toolResult') ?? null) as RawToolResult;
     return {
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput),
       toolResponse,
+      toolName,
+      toolInput:  injectToolDiscriminator(toolName, rawInput),
+      sessionId:  pickString(o, 'session_id', 'sessionId'),
       durationMs: pickNumber(o, 'duration_ms', 'durationMs'),
-      sessionId: pickString(o, 'session_id', 'sessionId'),
     };
   },
   handle(input) {
     const systemMessage = renderToolSection({
-      phase: 'post',
-      toolName: input.toolName,
-      input: input.toolInput,
-      result: input.toolResponse,
+      phase:      'post',
+      toolName:   input.toolName,
+      input:      input.toolInput,
+      result:     input.toolResponse,
       durationMs: input.durationMs,
     });
     return {

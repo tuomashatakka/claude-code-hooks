@@ -51,39 +51,9 @@ export interface HeadingArgs {
 
 export function renderHeading({ word, color = 'cyan', event, tone, width = 60, caption }: HeadingArgs): string {
   const glyphRows = renderGlyphRows(word, color)
-  const gw = glyphWidth(word)
   const gutter = 2
-  const phraseWidth = Math.max(20, width - gw - gutter)
-
-  const colorize = (chalk[color] ?? chalk.cyan) as (s: string) => string
-  const phrase = caption !== undefined
-    ? (stripAnsi(caption).length > phraseWidth
-        ? truncateAnsi(chalk.bold(colorize(caption)), Math.max(0, phraseWidth - 1))
-        : chalk.bold(colorize(caption)))
-    : generatePhrase({ event, word, color, tone, width: phraseWidth, minTokens: 4, maxTokens: 10 })
-  const phraseLines = phrase.split('\n')
-
-  // Pad/truncate to exactly 3 rows place text on rows 1 (top) and 2 (middle)
-  // for a vertically-centered look against the 3-row glyph block.
-  const slots: [string, string, string] = ['',
-      '',
-      '']
-  if (phraseLines.length === 1) {
-    slots[1] = phraseLines[0]!
-  } else if (phraseLines.length === 2) {
-    slots[0] = phraseLines[0]!
-    slots[1] = phraseLines[1]!
-  } else {
-    slots[0] = phraseLines[0]!
-    slots[1] = phraseLines[1]!
-    const tail = phraseLines.slice(2).join(' ')
-    slots[2] = stripAnsi(tail).length > phraseWidth
-      ? truncateAnsi(tail, Math.max(0, phraseWidth - 1))
-      : tail
-  }
-
   const composed = glyphRows
-    .map((g, i) => g + ' '.repeat(gutter) + (slots[i] ?? ''))
+    .map((g, i) => g + ' '.repeat(gutter)) // + (slots[i] ?? ''))
     .join('\n')
   return '\n' + composed
 }
