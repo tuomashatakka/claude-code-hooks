@@ -1,6 +1,6 @@
 {
   "name": "claude-hooks",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "smoke": "bun run scripts/smoke.ts",
     "demo:capture": "bun run scripts/capture-demo.ts",
-    "build": "esbuild hooks/bin/bind.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/hooks.mjs --banner:js=\"import{createRequire as __ccr}from'node:module';const require=__ccr(import.meta.url);\""
+    "build": "esbuild hooks/bin/bind.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist/hooks.mjs --banner:js=\"import{createRequire as __ccr}from'node:module';const require=__ccr(import.meta.url);\"",
+    "dev:refresh": "bun run scripts/dev-refresh.ts"
   },
   "dependencies": {
     "@tuomashatakka/ansi-headings": "workspace:*",
