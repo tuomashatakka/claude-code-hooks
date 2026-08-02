@@ -4,76 +4,84 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>claude-code-hooks — beautified hook output for Claude Code</title>
-  <meta name="description" content="Enhanced hooks for Claude Code: PreToolUse, PostToolUse, SessionStart and more, with beautified terminal output — block-letter headings, colored badges, diffs, and playful phrases." />
+  <meta name="description" content="A Claude Code plugin that beautifies every hook event: block-letter headings, colored badges, syntax-highlighted diffs and ASCII image previews. Install with /plugin marketplace add tuomashatakka/claude-code-hooks" />
+  <link rel="canonical" href="https://tuomashatakka.github.io/claude-code-hooks/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="claude-code-hooks" />
+  <meta property="og:description" content="Beautified terminal output for every Claude Code hook event — 14 events, block-letter headings, badges, diffs, ASCII image previews." />
+  <meta property="og:url" content="https://tuomashatakka.github.io/claude-code-hooks/" />
+  <meta name="twitter:card" content="summary" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬡</text></svg>" />
-  <link rel="stylesheet" href="index.css" />
+  <link rel="stylesheet" href="./index.css" />
 </head>
 <body>
-  <main class="wrap">
 
-    <header class="hero">
-      <p class="eyebrow">⬡ Claude Code plugin</p>
-      <h1 class="title">claude-code-hooks</h1>
-      <p class="tagline">Enhanced hooks for Claude Code — beautified terminal output for every event.</p>
-      <p class="blurb">
-        Block-letter headings, colored badges, syntax-highlighted diffs, and playful
-        kaomoji phrases. <strong>13 hook events</strong>, powered by TypeScript&nbsp;+&nbsp;Bun.
+  <main class="stage">
+    <section class="window" aria-label="Simulated Claude Code session demonstrating the claude-code-hooks plugin">
+      <p class="sr-only">
+        A replay of a Claude Code terminal session with the claude-code-hooks plugin active.
+        Every block of hook output below is captured from the real hook pipeline at build time.
       </p>
-      <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/tuomashatakka/claude-code-hooks">View on GitHub →</a>
-        <a class="btn" href="#install">Install</a>
-      </div>
-    </header>
 
-    <!-- ===== Live terminal simulator ===== -->
-    <!-- Content is captured from the real hook pipeline at build time (see
-         scripts/capture-demo.ts) - not hand-authored. -->
-    <section class="terminal" aria-label="Live-captured example of actual hook output">
-      <div class="term-bar">
-        <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-        <span class="term-title">claude — hooks demo</span>
-      </div>
-      <div class="term-body" id="term-body">
-        <span class="fg-dim">…</span>
+      <header class="titlebar">
+        <span class="lights" aria-hidden="true"><i class="l-r"></i><i class="l-y"></i><i class="l-g"></i></span>
+        <span class="titletext">✳ Claude Code</span>
+        <span class="tb-actions">
+          <button type="button" id="playpause" class="tb-btn" aria-label="Pause the demo">❚❚</button>
+          <button type="button" id="restart" class="tb-btn" aria-label="Restart the demo">↻</button>
+        </span>
+      </header>
+
+      <div class="screen">
+        <div class="scrollback" id="scrollback">
+
+          <!-- Session banner. Static: it is the plugin's own frame, and it keeps
+               the install commands on screen (and in the DOM without JS). -->
+          <div class="boot">
+            <span class="boot-legend">claude-code-hooks v2.2.0</span>
+            <div class="boot-cols">
+              <div class="boot-left">
+                <pre class="sigil" aria-hidden="true"> ▄▀▀▀▀▀▀▄
+█  ▄▀▀▄  █
+█  ▀▄▄▀  █
+ ▀▄▄▄▄▄▄▀ </pre>
+                <p class="boot-lead">14 hook events, beautified</p>
+                <p class="dim">block headings · badges · diffs · ASCII images</p>
+                <p class="dim">TypeScript + Bun · runs on plain <span class="fg">node</span></p>
+              </div>
+              <div class="boot-right">
+                <h1 class="boot-h">Install</h1>
+                <p class="cmdrow"><code id="cmd-add">/plugin marketplace add tuomashatakka/claude-code-hooks</code><button type="button" class="copy" data-copy="#cmd-add">copy</button></p>
+                <p class="cmdrow"><code id="cmd-install">/plugin install hooks@claude-code-hooks</code><button type="button" class="copy" data-copy="#cmd-install">copy</button></p>
+                <hr />
+                <h2 class="boot-h">What it does</h2>
+                <p>Renders every <span class="fg">PreToolUse</span>, <span class="fg">PostToolUse</span>, <span class="fg">SessionStart</span> — 14 events in all — as readable terminal output instead of a wall of JSON.</p>
+                <p class="dim"><a href="https://github.com/tuomashatakka/claude-code-hooks">github.com/tuomashatakka/claude-code-hooks</a> for more</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Replay target. Populated from public/demo-data.js, which is
+               captured from the live hook pipeline on every deploy. -->
+          <div id="stream"></div>
+
+        </div>
+
+        <div class="composer">
+          <span class="chev" aria-hidden="true">❯</span><span id="composer-text"></span><span class="caret" id="caret" aria-hidden="true">▌</span>
+        </div>
+
+        <div class="status" aria-hidden="true">
+          <div class="meters">
+            <div class="meter"><span class="bar bar-cyan"></span><span class="dim">0% used of rate limit budget</span></div>
+            <div class="meter"><span class="bar bar-magenta"></span><span class="dim">0% used of context budget</span></div>
+          </div>
+          <div class="statusmeta">
+            <span class="model">claude-opus-5</span><span class="sep">│</span><span class="plugin">hooks</span>
+          </div>
+        </div>
       </div>
     </section>
-
-    <!-- ===== Hook events ===== -->
-    <section class="events">
-      <h2>13 hook events, all beautified</h2>
-      <ul class="event-grid">
-        <li><span class="badge b-green">⏻ SessionStart</span></li>
-        <li><span class="badge b-red">⏼ SessionEnd</span></li>
-        <li><span class="badge b-magenta">❯ PreToolUse</span></li>
-        <li><span class="badge b-brightgreen">▤ PostToolUse</span></li>
-        <li><span class="badge b-red">⨂ PostToolUseFailure</span></li>
-        <li><span class="badge b-yellow">⟳ PreCompact</span></li>
-        <li><span class="badge b-yellow">⟳ PostCompact</span></li>
-        <li><span class="badge b-cyan">✓ InstructionsLoaded</span></li>
-        <li><span class="badge b-yellow">✎ UserPromptSubmit</span></li>
-        <li><span class="badge b-magenta">✱ UserPromptExpansion</span></li>
-        <li><span class="badge b-green">⬡ SubagentStart</span></li>
-        <li><span class="badge b-green">⬡ SubagentStop</span></li>
-        <li><span class="badge b-red">■ Stop</span></li>
-      </ul>
-    </section>
-
-    <!-- ===== Install ===== -->
-    <section class="install" id="install">
-      <h2>Install</h2>
-      <p>Clone into your Claude Code plugins directory:</p>
-      <pre class="codeblock"><code>git clone https://github.com/tuomashatakka/claude-code-hooks.git \
-  ~/.claude/plugins/hooks</code></pre>
-      <p class="fineprint">Requires <a href="https://bun.sh">Bun</a>. Hooks run directly from TypeScript — no build step.</p>
-    </section>
-
-    <footer class="foot">
-      <p>
-        <a href="https://github.com/tuomashatakka/claude-code-hooks">tuomashatakka/claude-code-hooks</a>
-        · built with TypeScript + Bun · made with ♡
-      </p>
-    </footer>
-
   </main>
 
   <script src="demo-data.js" defer></script>

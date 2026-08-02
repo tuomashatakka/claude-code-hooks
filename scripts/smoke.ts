@@ -4,9 +4,7 @@
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import fs from 'node:fs';
-import { PNG } from 'pngjs';
-import jpeg from 'jpeg-js';
+import { SMOKE_PNG, SMOKE_JPG, writeImageFixtures, removeImageFixtures } from './fixtures.ts';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const BIND = path.join(ROOT, 'hooks', 'bin', 'bind.ts');
@@ -179,7 +177,7 @@ export const CASES: Case[] = [
     event: 'PostToolUse',
     payload: {
       tool_name: 'Read',
-      tool_input: { file_path: '/tmp/test-smoke.png' },
+      tool_input: { file_path: SMOKE_PNG },
       tool_response: '[Image Data]',
       duration_ms: 5,
     },
@@ -206,7 +204,7 @@ export const CASES: Case[] = [
     event: 'PostToolUse',
     payload: {
       tool_name: 'Read',
-      tool_input: { file_path: '/tmp/test-smoke.jpg' },
+      tool_input: { file_path: SMOKE_JPG },
       tool_response: '[Image Data]',
       duration_ms: 4,
     },
@@ -219,11 +217,16 @@ export const CASES: Case[] = [
 // same generic content regardless of whose machine (or CI runner) this runs on.
 const SANDBOX_HOME = path.join(ROOT, '.smoke-home');
 
-export async function runCase(c: Case): Promise<{ stdout: string; stderr: string; code: number | null }> {
+// capture-demo.ts passes a populated fixture home instead, so the showcase
+// capture exercises the branches this sandbox deliberately leaves empty.
+export async function runCase(
+  c: Case,
+  homeDir: string = SANDBOX_HOME
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
     const child = spawn('bun', ['run', BIND, c.event], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: SANDBOX_HOME, USERPROFILE: SANDBOX_HOME },
+      env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
     });
     let out = '';
     let err = '';
@@ -236,39 +239,7 @@ export async function runCase(c: Case): Promise<{ stdout: string; stderr: string
 }
 
 if (import.meta.main) {
-  // Generate a mock PNG file to test the image-to-ascii conversion
-  const png = new PNG({ width: 8, height: 8 });
-  for (let y = 0; y < png.height; y++) {
-    for (let x = 0; x < png.width; x++) {
-      const idx = (png.width * y + x) << 2;
-      png.data[idx] = x * 32;       // R
-      png.data[idx + 1] = y * 32;   // G
-      png.data[idx + 2] = 128;      // B
-      png.data[idx + 3] = 255;      // A
-    }
-  }
-  fs.writeFileSync('/tmp/test-smoke.png', PNG.sync.write(png));
-
-  // Generate a mock JPEG file to test the image-to-ascii conversion
-  const width = 8;
-  const height = 8;
-  const frameData = Buffer.alloc(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (width * y + x) * 4;
-      frameData[idx] = x * 32;       // R
-      frameData[idx + 1] = y * 32;   // G
-      frameData[idx + 2] = 128;      // B
-      frameData[idx + 3] = 255;      // A
-    }
-  }
-  const jpegImageData = {
-    data: frameData,
-    width: width,
-    height: height,
-  };
-  const jpegBuffer = jpeg.encode(jpegImageData, 50).data;
-  fs.writeFileSync('/tmp/test-smoke.jpg', jpegBuffer);
+  writeImageFixtures();
 
   let failures = 0;
   for (const c of CASES) {
@@ -288,12 +259,7 @@ if (import.meta.main) {
     }
   }
 
-  try {
-    fs.unlinkSync('/tmp/test-smoke.png');
-  } catch {}
-  try {
-    fs.unlinkSync('/tmp/test-smoke.jpg');
-  } catch {}
+  removeImageFixtures();
 
   process.stdout.write(`\n${failures === 0 ? 'all cases passed' : failures + ' failures'}\n`);
   process.exit(failures === 0 ? 0 : 1);

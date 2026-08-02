@@ -12,8 +12,11 @@ on:
       - "public/**"
       - "src/**"
       - "hooks/**"
+      - "packages/**"
       - "scripts/capture-demo.ts"
       - "scripts/ansi-to-html.ts"
+      - "scripts/fixtures.ts"
+      - "scripts/fixtures/**"
       - "scripts/smoke.ts"
       - ".github/workflows/pages.yml"
   workflow_dispatch:

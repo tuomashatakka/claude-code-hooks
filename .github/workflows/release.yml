@@ -1,8 +1,10 @@
 name: Release
 
 # Cut a versioned GitHub Release for the plugin.
-# Distribution is git-based (installed via clone into ~/.claude/plugins/), so a
-# "release" = bump version files -> commit -> tag -> GitHub Release. No npm publish.
+# Distribution is git-based: users add this repo as a plugin marketplace
+# (.claude-plugin/marketplace.json) and Claude Code fetches the tagged repo, so a
+# "release" = bump version files -> rebuild dist/hooks.mjs -> commit -> tag ->
+# GitHub Release. No npm publish.
 on:
   workflow_dispatch:
     inputs:
@@ -46,13 +48,24 @@ jobs:
       - name: Smoke test
         run: bun run smoke
 
+      # The committed bundle is the shipped artifact. Refuse to tag a release
+      # whose dist/hooks.mjs lags behind src/ - CI keeps main in sync, so a
+      # mismatch here means something bypassed it.
+      - name: Verify bundle is current
+        run: |
+          bun run build
+          if ! git diff --quiet -- dist/hooks.mjs; then
+            echo "::error::dist/hooks.mjs is stale. Run 'bun run build' and commit before releasing."
+            exit 1
+          fi
+
       - name: Release
         uses: ./.github/actions/release-package
         with:
           version: ${{ inputs.version }}
           prerelease: ${{ inputs.prerelease }}
           package-dir: "."
-          extra-version-files: ".claude-plugin/plugin.json"
+          extra-version-files: ".claude-plugin/plugin.json,.claude-plugin/marketplace.json"
           tag-prefix: "v"
           create-git-tag: "true"
           create-github-release: "true"

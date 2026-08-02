@@ -1,0 +1,62 @@
+name: CI
+
+# Typecheck, test, smoke, and - critically - verify that the committed
+# dist/hooks.mjs bundle matches the current source. That bundle is what
+# actually runs on a user's machine: marketplace installs are copied into
+# ~/.claude/plugins/cache WITHOUT node_modules, so the hooks can only work
+# if every dependency is inlined into it. A source change that forgets
+# `bun run build` would ship stale hooks silently - this fails instead.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.19"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun test
+
+      - name: Smoke test
+        run: bun run smoke
+
+      - name: Rebuild bundle
+        run: bun run build
+
+      - name: Verify committed bundle is up to date
+        run: |
+          if ! git diff --quiet -- dist/hooks.mjs; then
+            echo "::error::dist/hooks.mjs is stale. Run 'bun run build' and commit the result."
+            git diff --stat -- dist/hooks.mjs
+            exit 1
+          fi
+
+      # Proves the bundle runs on plain node with no node_modules present -
+      # the exact condition inside ~/.claude/plugins/cache.
+      - name: Bundle runs standalone
+        run: |
+          mkdir -p /tmp/isolated && cp dist/hooks.mjs /tmp/isolated/
+          cd /tmp/isolated
+          out=$(printf '%s' '{"source":"startup","model":"claude-opus-5"}' | node hooks.mjs SessionStart)
+          echo "$out" | grep -q '"continue": true' || { echo "no continue in output"; exit 1; }
+          echo "$out" | grep -q 'systemMessage' || { echo "hook produced no systemMessage - registry likely empty"; exit 1; }

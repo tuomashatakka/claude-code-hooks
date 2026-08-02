@@ -1,82 +1,146 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "description": "Enhanced hooks for Claude Code (TypeScript + Bun)",
+  "description": "Enhanced hooks for Claude Code — runs the prebuilt bundle in dist/hooks.mjs (node, no install step)",
   "hooks": {
     "PreToolUse": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PreToolUse" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PreToolUse"
+          }
+        ]
+      }
     ],
     "PostToolUse": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PostToolUse" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PostToolUse"
+          }
+        ]
+      }
     ],
     "PostToolUseFailure": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PostToolUseFailure" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PostToolUseFailure"
+          }
+        ]
+      }
     ],
     "PostToolBatch": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PostToolBatch" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PostToolBatch"
+          }
+        ]
+      }
     ],
-
     "PreCompact": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PreCompact" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PreCompact"
+          }
+        ]
+      }
     ],
-
     "SessionStart": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SessionStart" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" SessionStart"
+          }
+        ]
+      }
     ],
     "SessionEnd": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SessionEnd" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" SessionEnd"
+          }
+        ]
+      }
     ],
-
     "PostCompact": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts PostCompact" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" PostCompact"
+          }
+        ]
+      }
     ],
-
     "InstructionsLoaded": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts InstructionsLoaded" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" InstructionsLoaded"
+          }
+        ]
+      }
     ],
-
     "UserPromptSubmit": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts UserPromptSubmit" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" UserPromptSubmit"
+          }
+        ]
+      }
     ],
     "UserPromptExpansion": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts UserPromptExpansion" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" UserPromptExpansion"
+          }
+        ]
+      }
     ],
-
     "SubagentStart": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SubagentStart" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" SubagentStart"
+          }
+        ]
+      }
     ],
     "SubagentStop": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts SubagentStop" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" SubagentStop"
+          }
+        ]
+      }
     ],
     "Stop": [
-      { "hooks": [
-        { "type": "command", "command": "bun run ${CLAUDE_PLUGIN_ROOT}/hooks/bin/bind.ts Stop" }
-      ]}
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks.mjs\" Stop"
+          }
+        ]
+      }
     ]
   }
 }

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "claude-code-hooks",
+  "description": "Beautified hook output for Claude Code",
+  "version": "2.2.0",
+  "owner": {
+    "name": "tuomashatakka",
+    "email": "tuomas.hatakka@gmail.com",
+    "url": "https://github.com/tuomashatakka"
+  },
+  "plugins": [
+    {
+      "name": "hooks",
+      "source": {
+        "source": "github",
+        "repo": "tuomashatakka/claude-code-hooks"
+      },
+      "description": "Beautified terminal output for every Claude Code hook event — block-letter headings, colored badges, syntax-highlighted diffs and ASCII image previews.",
+      "author": {
+        "name": "tuomashatakka",
+        "email": "tuomas.hatakka@gmail.com",
+        "url": "https://github.com/tuomashatakka"
+      },
+      "homepage": "https://tuomashatakka.github.io/claude-code-hooks/",
+      "license": "MIT",
+      "category": "productivity",
+      "tags": [
+        "terminal",
+        "ui",
+        "hooks",
+        "ansi",
+        "output"
+      ],
+      "keywords": [
+        "hooks",
+        "terminal",
+        "ansi",
+        "output",
+        "ui",
+        "diff",
+        "ascii"
+      ]
+    }
+  ]
+}

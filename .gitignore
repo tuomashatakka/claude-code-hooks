@@ -1,7 +1,9 @@
 .DS_Store
 node_modules/
-dist/
+dist/*
+!dist/hooks.mjs
 *.tsbuildinfo
 debug.log
 transcript.output
 public/demo-data.js
+.playwright-mcp/

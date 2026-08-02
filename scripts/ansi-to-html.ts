@@ -19,6 +19,25 @@ const NAMED: Array<{ normal: string; bright: string }> = [
   { normal: 'var(--fg)', bright: '#ffffff' }, // 7 white
 ];
 
+// image-to-ascii degrades to xterm-256 (\x1b[38;5;N) once a render would blow
+// the hook's byte budget - see its ATTEMPTS ladder - so anything but a tiny
+// image arrives palette-indexed rather than truecolor. Without this the index
+// leaks out as a bare SGR code and paints the whole image white.
+const CUBE = [0, 95, 135, 175, 215, 255];
+
+function xterm256(n: number): string {
+  if (n < 16) {
+    const base = NAMED[n % 8]!;
+    return n < 8 ? base.normal : base.bright;
+  }
+  if (n < 232) {
+    const i = n - 16;
+    return `rgb(${CUBE[Math.floor(i / 36) % 6]},${CUBE[Math.floor(i / 6) % 6]},${CUBE[i % 6]})`;
+  }
+  const v = 8 + (n - 232) * 10;
+  return `rgb(${v},${v},${v})`;
+}
+
 interface Style {
   fg: string | null;
   bg: string | null;
@@ -111,6 +130,12 @@ export function ansiToHtmlLines(text: string): string[] {
       } else if (code === 48 && codes[j + 1] === 2) {
         style.bg = `rgb(${codes[j + 2]},${codes[j + 3]},${codes[j + 4]})`;
         j += 4;
+      } else if (code === 38 && codes[j + 1] === 5) {
+        style.fg = xterm256(codes[j + 2] ?? 0);
+        j += 2;
+      } else if (code === 48 && codes[j + 1] === 5) {
+        style.bg = xterm256(codes[j + 2] ?? 0);
+        j += 2;
       }
     }
   }
