@@ -6091,300 +6091,9 @@ defineTool({
 
 // packages/ansi-headings/src/primitives.ts
 source_default.level = 3;
-function stripAnsi2(str) {
-  return String(str).replace(/\x1b\[[0-9;]*m/g, "");
-}
-function truncateAnsi2(text, maxVisibleLen, ellipsis = "\u2026") {
-  const csi = /\x1b\[[0-9;]*m/y;
-  let out = "";
-  let visible = 0;
-  let i = 0;
-  while (i < text.length && visible < maxVisibleLen) {
-    csi.lastIndex = i;
-    const m = csi.exec(text);
-    if (m) {
-      out += m[0];
-      i += m[0].length;
-      continue;
-    }
-    out += text[i];
-    visible += 1;
-    i += 1;
-  }
-  return out + "\x1B[0m" + ellipsis;
-}
 
 // packages/ansi-headings/src/phrase.ts
 source_default.level = 3;
-var SPARKLES = [
-  "\u2727",
-  "\u22C6",
-  "\u2729",
-  "\u272E",
-  "\u2740",
-  "\u2661",
-  "\u2726",
-  "\u2730",
-  "\u273F",
-  "\u2741",
-  "\u22C6\uFF61\xB0\u2729",
-  "\u0A48\u2729\u2027\u208A\u02DA",
-  "\u2606",
-  "\xB0\u02D6\u2727",
-  "\u0B68\u0B67",
-  "\u02DA\u208A\u2027\uA4B0\u10D0",
-  "\u029A\u025E",
-  "\u2727\u02D6\xB0",
-  "\uA4B0\u098C",
-  "\u0ED2\uA4B1"
-];
-var KAOMOJI = {
-  happy: ["(\u02C3\u11BA\u02C2)", "(\u30CE\u25D5\u30EE\u25D5)\u30CE*:\uFF65\uFF9F\u2727", "\u227D^\u2022\u2A4A\u2022^\u227C", "(>\u203F\u25E0)\u270C", "(\u3065\uFF61\u25D5\u203F\u203F\u25D5\uFF61)\u3065", "(\u273F\u25E0\u203F\u25E0)", "\u0669(\u25D5\u203F\u25D5)\u06F6", "( \u02D9\uA4B3\u200B\u02D9 )", "(\u201E\u2022 \u058A \u2022\u201E)"],
-  soft: ["^~^", "(*\u02CA\u15DC\u02CB)", "(\xB4\uFF61\u2022 \u1D55 \u2022\uFF61`)", "(\u25D5\u203F\u25D5)", "(\u02D8\uFF65\u1D17\uFF65\u02D8)", "( \u02D8 \xB3\u02D8)", "(\xB4\u25E1`)"],
-  wired: ["(\u2299_\u2609)", "\u0669(\u0C20\u76CA\u0C20)\u06F6", "(\uFF9F\u0434\uFF9F\uFF1B)", "(\u2256_\u2256)", "(\u2299\u03C9\u2299)", "(\u0298\u15E9\u0298')", "\u0449(\u0CA0_\u0CA0\u0449)"],
-  sleepy: ["(\xB4\u2229\uFF61\u2022 \u1D55 \u2022\uFF61\u2229`)", "(\u1D17\u02F3\u1D17)", "(\uFFE3\u03C1\uFFE3)..zzZZ", "(\xB4-\u03C9-\uFF40)", "(\uFE36\uFF61\uFE36\u273D)", "(z\u1D25z)"],
-  mysterious: ["(\xAC_\xAC)", "(\xB0_\xB0)", "(\u2565_\u2565)", "...", "(\uFFE2_\uFFE2)", "(\u2299\uFE4F\u2299)", "(\xAF \xAF\u0665)"]
-};
-var TONES = ["~", "~~", "~~~", "!", "!!", "!!!", "...", "..", "?!", "??", "...?"];
-var SUBJECTS_BY_EVENT = {
-  start: ["bestie", "my queen", "the lore", "context", "engines", "vibe check", "session", "squad", "tokens"],
-  wakeup: ["the buffers", "the cache", "memory", "context", "our lil session", "the lore"],
-  stop: ["the day", "the diff", "this turn", "the lore", "tokens", "context"],
-  bye: ["u", "the chat", "the convo", "the squad", "this little world"],
-  compact: ["the tokens", "the lore", "the context", "old logs", "the heap", "session weight"],
-  agent: ["lil helper", "the subroutine", "agent loop", "the side quest", "helper bot"],
-  idle: ["the void", "the timeline", "silence", "vibes only"]
-};
-var OPENERS_BY_EVENT = {
-  start: ["kyaa", "haii", "rise n shine", "ohaiyo", "wakey wakey", "omg yay", "engines on", "hewwo", "konnichiwa", "a wild session appears"],
-  wakeup: ["mooorning", "oof yawn", "huh? wha?", "okie eyes open", "blinking irl", "stretch.exe"],
-  stop: ["mouu", "okie bye", "bedtime", "powering down", "gn bestie", "time to log off", "ciao"],
-  bye: ["bye bye", "sayonara", "mata ne", "cya", "love u", "take care", "smol farewell"],
-  compact: ["squeezing", "condensing", "cleaning house", "tidying up", "context diet", "marie kondo mode", "tokens trimmed"],
-  agent: ["lil helper", "subroutine summoned", "agent loop done", "helper helped", "side quest cleared"],
-  idle: ["vibing", "just chilling", "thinking real hard", "daydreaming"]
-};
-var VERBS_BY_EVENT = {
-  start: ["the session is loading", "context loaded n cooked", "we are so back", "engines firing rn", "loading the lore", "everything mounted", "tokens are flowing"],
-  wakeup: ["back from the void", "stretching the buffers", "memory restored bestie", "context resumed", "rebooting the vibes", "reloading lore"],
-  stop: ["that's a wrap", "context yeet'd", "logs sealed", "goodnight world", "powering down", "signing off", "session closed"],
-  bye: ["session terminated cutely", "closing the tab", "back to lurking", "i'll miss u", "curtain falls", "window closing"],
-  compact: ["tokens trimmed", "history smashed", "lore squished", "cache purged", "old turns gone", "memory tightened", "heap shrunk"],
-  agent: ["side quest complete", "subagent did its thing", "background work shipped", "helper returned"],
-  idle: ["nothing to do", "just here", "watching the cursor blink"]
-};
-var CONNECTORS = ["n", "&", "+", "rn", "tho", "tbh", "ngl", "lowkey", "highkey", "&&"];
-var TRANSITIONS = {
-  start: [{ to: "sparkle", weight: 3 }, { to: "opener", weight: 5 }, { to: "kaomoji", weight: 2 }, { to: "cursive", weight: 1 }],
-  sparkle: [{ to: "opener", weight: 4 }, { to: "cursive", weight: 3 }, { to: "verb", weight: 2 }, { to: "kaomoji", weight: 2 }, { to: "end", weight: 1 }],
-  opener: [{ to: "verb", weight: 5 }, { to: "cursive", weight: 3 }, { to: "kaomoji", weight: 2 }, { to: "tone", weight: 2 }, { to: "connector", weight: 1 }],
-  verb: [{ to: "subject", weight: 3 }, { to: "kaomoji", weight: 4 }, { to: "tone", weight: 3 }, { to: "cursive", weight: 2 }, { to: "connector", weight: 2 }],
-  subject: [{ to: "kaomoji", weight: 4 }, { to: "tone", weight: 3 }, { to: "sparkle", weight: 2 }, { to: "end", weight: 2 }, { to: "connector", weight: 1 }],
-  kaomoji: [{ to: "sparkle", weight: 3 }, { to: "tone", weight: 2 }, { to: "opener", weight: 1 }, { to: "cursive", weight: 1 }, { to: "end", weight: 4 }],
-  tone: [{ to: "sparkle", weight: 4 }, { to: "kaomoji", weight: 3 }, { to: "subject", weight: 2 }, { to: "verb", weight: 1 }, { to: "end", weight: 3 }],
-  cursive: [{ to: "sparkle", weight: 4 }, { to: "subject", weight: 2 }, { to: "kaomoji", weight: 3 }, { to: "tone", weight: 2 }, { to: "verb", weight: 1 }, { to: "end", weight: 2 }],
-  connector: [{ to: "opener", weight: 3 }, { to: "verb", weight: 4 }, { to: "subject", weight: 2 }, { to: "kaomoji", weight: 1 }],
-  end: []
-};
-function pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-function pickOr(arr, fallback) {
-  const src = arr && arr.length ? arr : fallback;
-  return pick(src);
-}
-function weightedNext(edges, excluded) {
-  const usable = edges.filter((e) => !excluded.has(e.to));
-  if (!usable.length) return "end";
-  const total = usable.reduce((s, e) => s + e.weight, 0);
-  let r = Math.random() * total;
-  for (const e of usable) {
-    r -= e.weight;
-    if (r <= 0) return e.to;
-  }
-  return usable[usable.length - 1].to;
-}
-var CURSIVE_MAP = {
-  a: "\u{1D4B6}",
-  b: "\u{1D4B7}",
-  c: "\u{1D4B8}",
-  d: "\u{1D4B9}",
-  e: "\u212F",
-  f: "\u{1D4BB}",
-  g: "\u210A",
-  h: "\u{1D4BD}",
-  i: "\u{1D4BE}",
-  j: "\u{1D4BF}",
-  k: "\u{1D4C0}",
-  l: "\u{1D4C1}",
-  m: "\u{1D4C2}",
-  n: "\u{1D4C3}",
-  o: "\u2134",
-  p: "\u{1D4C5}",
-  q: "\u{1D4C6}",
-  r: "\u{1D4C7}",
-  s: "\u{1D4C8}",
-  t: "\u{1D4C9}",
-  u: "\u{1D4CA}",
-  v: "\u{1D4CB}",
-  w: "\u{1D4CC}",
-  x: "\u{1D4CD}",
-  y: "\u{1D4CE}",
-  z: "\u{1D4CF}",
-  A: "\u{1D49C}",
-  B: "\u212C",
-  C: "\u{1D49E}",
-  D: "\u{1D49F}",
-  E: "\u2130",
-  F: "\u2131",
-  G: "\u{1D4A2}",
-  H: "\u210B",
-  I: "\u2110",
-  J: "\u{1D4A5}",
-  K: "\u{1D4A6}",
-  L: "\u2112",
-  M: "\u2133",
-  N: "\u{1D4A9}",
-  O: "\u{1D4AA}",
-  P: "\u{1D4AB}",
-  Q: "\u{1D4AC}",
-  R: "\u211B",
-  S: "\u{1D4AE}",
-  T: "\u{1D4AF}",
-  U: "\u{1D4B0}",
-  V: "\u{1D4B1}",
-  W: "\u{1D4B2}",
-  X: "\u{1D4B3}",
-  Y: "\u{1D4B4}",
-  Z: "\u{1D4B5}",
-  " ": " "
-};
-function toCursive(text) {
-  return text.split("").map((c) => CURSIVE_MAP[c] ?? c).join("");
-}
-function emitToken(state, ctx) {
-  const accent = source_default[ctx.color] ?? source_default.cyan;
-  switch (state) {
-    case "sparkle": {
-      const s = pick(SPARKLES);
-      return { raw: s, rendered: accent(s) };
-    }
-    case "opener": {
-      const s = pickOr(OPENERS_BY_EVENT[ctx.event], OPENERS_BY_EVENT.idle);
-      return { raw: s, rendered: source_default.magenta(s) };
-    }
-    case "verb": {
-      const s = pickOr(VERBS_BY_EVENT[ctx.event], VERBS_BY_EVENT.idle);
-      return { raw: s, rendered: source_default.gray(s) };
-    }
-    case "subject": {
-      const s = pickOr(SUBJECTS_BY_EVENT[ctx.event], SUBJECTS_BY_EVENT.idle);
-      return { raw: s, rendered: source_default.gray.italic(s) };
-    }
-    case "kaomoji": {
-      const s = pick(KAOMOJI[ctx.tone]);
-      return { raw: s, rendered: source_default.magenta(s) };
-    }
-    case "tone": {
-      const s = pick(TONES);
-      return { raw: s, rendered: source_default.gray(s) };
-    }
-    case "connector": {
-      const s = pick(CONNECTORS);
-      return { raw: s, rendered: source_default.gray(s) };
-    }
-    case "cursive": {
-      const lower = ctx.word.toLowerCase();
-      const cur = toCursive(lower);
-      return { raw: lower, rendered: source_default.italic(accent(cur)) };
-    }
-    case "start":
-    case "end":
-      return null;
-  }
-}
-function wrapTokens(tokens, width) {
-  const lines = [];
-  let line = "";
-  let lineLen = 0;
-  for (const t of tokens) {
-    const tLen = stripAnsi2(t).length;
-    const sep = line ? 1 : 0;
-    if (lineLen + sep + tLen > width && line) {
-      lines.push(line);
-      line = t;
-      lineLen = tLen;
-    } else {
-      line = line ? line + " " + t : t;
-      lineLen += sep + tLen;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.join("\n");
-}
-function inferTone(event) {
-  switch (event) {
-    case "start":
-    case "wakeup":
-    case "agent":
-      return "happy";
-    case "stop":
-    case "bye":
-      return "sleepy";
-    case "compact":
-      return "soft";
-    case "idle":
-      return "soft";
-    default:
-      return "happy";
-  }
-}
-function generatePhrase(ctx) {
-  const fullCtx = {
-    event: ctx.event,
-    word: ctx.word,
-    color: ctx.color ?? "cyan",
-    tone: ctx.tone ?? inferTone(ctx.event)
-  };
-  const width = ctx.width ?? 60;
-  const minTokens = ctx.minTokens ?? 6;
-  const maxTokens = ctx.maxTokens ?? 14;
-  const rendered = [];
-  const seen = /* @__PURE__ */ new Set();
-  let state = "start";
-  let cursiveEmitted = false;
-  for (let i = 0; i < maxTokens; i++) {
-    let next = weightedNext(TRANSITIONS[state], /* @__PURE__ */ new Set());
-    if (next === "end") {
-      if (!cursiveEmitted) {
-        next = "cursive";
-      } else if (i < minTokens) {
-        next = weightedNext(TRANSITIONS.sparkle, /* @__PURE__ */ new Set(["end"]));
-      } else {
-        break;
-      }
-    }
-    if (next === state && next !== "cursive") {
-      next = weightedNext(TRANSITIONS[state], /* @__PURE__ */ new Set([next]));
-      if (next === "end" && !cursiveEmitted) next = "cursive";
-    }
-    if (next === "cursive" && cursiveEmitted) {
-      next = weightedNext(TRANSITIONS.cursive, /* @__PURE__ */ new Set(["cursive"]));
-      if (next === "end" && i < minTokens) next = "sparkle";
-    }
-    state = next;
-    if (state === "end") break;
-    if (state === "cursive") cursiveEmitted = true;
-    seen.add(state);
-    const tok = emitToken(state, fullCtx);
-    if (tok) rendered.push(tok.rendered);
-  }
-  if (!cursiveEmitted) {
-    const tok = emitToken("cursive", fullCtx);
-    rendered.splice(Math.floor(rendered.length / 2), 0, tok.rendered);
-  }
-  return wrapTokens(rendered, width);
-}
 
 // packages/ansi-headings/src/glyphs.json
 var glyphs_default = {
@@ -6635,34 +6344,10 @@ function renderGlyphRows(text, color) {
   const colorize = source_default[color] ?? source_default.cyan;
   return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
 }
-function glyphWidth(text) {
-  return 2 + text.length * 4;
-}
 function renderHeading({ word, color = "cyan", event, tone, width = 60, caption }) {
   const glyphRows = renderGlyphRows(word, color);
-  const gw = glyphWidth(word);
   const gutter = 2;
-  const phraseWidth = Math.max(20, width - gw - gutter);
-  const colorize = source_default[color] ?? source_default.cyan;
-  const phrase = caption !== void 0 ? stripAnsi2(caption).length > phraseWidth ? truncateAnsi2(source_default.bold(colorize(caption)), Math.max(0, phraseWidth - 1)) : source_default.bold(colorize(caption)) : generatePhrase({ event, word, color, tone, width: phraseWidth, minTokens: 4, maxTokens: 10 });
-  const phraseLines = phrase.split("\n");
-  const slots = [
-    "",
-    "",
-    ""
-  ];
-  if (phraseLines.length === 1) {
-    slots[1] = phraseLines[0];
-  } else if (phraseLines.length === 2) {
-    slots[0] = phraseLines[0];
-    slots[1] = phraseLines[1];
-  } else {
-    slots[0] = phraseLines[0];
-    slots[1] = phraseLines[1];
-    const tail = phraseLines.slice(2).join(" ");
-    slots[2] = stripAnsi2(tail).length > phraseWidth ? truncateAnsi2(tail, Math.max(0, phraseWidth - 1)) : tail;
-  }
-  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter) + (slots[i] ?? "")).join("\n");
+  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
   return "\n" + composed;
 }
 var CHECKBOX_ROWS = [" \u250C\u2500\u2500\u2500\u2510", " \u2502 \u2713 \u2502", " \u2514\u2500\u2500\u2500\u2518"];
@@ -7087,8 +6772,8 @@ function loadRandomAsciiArt() {
     if (!fs4.existsSync(ASCII_DIR)) return null;
     const files = fs4.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
     if (!files.length) return null;
-    const pick2 = files[Math.floor(Math.random() * files.length)];
-    return fs4.readFileSync(path4.join(ASCII_DIR, pick2), "utf8");
+    const pick = files[Math.floor(Math.random() * files.length)];
+    return fs4.readFileSync(path4.join(ASCII_DIR, pick), "utf8");
   } catch (e) {
     debugLog("SessionStart", "load-ascii", e.message);
   }
@@ -7177,10 +6862,18 @@ defineHook({
     return { agentType: pickString(o, "agent_type", "agentType") };
   },
   handle(input) {
-    const heading = renderHeading({ word: "GOIN ASLEEP", color: "green", event: "agent" });
-    const main = new Badge({ label: "SubagentStop", color: "green", icon: "\u2B21" });
-    const badge = input.agentType ? renderBadges(main, new Badge({ label: input.agentType, color: "gray" })) : renderBadges(main);
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badges = [
+      new Badge({ label: "SubagentStop", color: "green", icon: "\u231F" })
+    ];
+    if (input.agentType) {
+      badges.push(new Badge({ label: input.agentType, color: "gray" }));
+    } else {
+      badges.push(new Badge({ label: "Main Process", color: "gray" }));
+    }
+    const badge = renderBadges(...badges);
+    return {
+      systemMessage: renderHeading({ word: "GOIN ASLEEP", color: "green", event: "agent" }) + renderSection({ badge, lines: [] })
+    };
   }
 });
 defineHook({
@@ -7343,11 +7036,11 @@ defineHook({
     const rawInput = pickAny(o, "tool_input", "toolInput") ?? {};
     const toolResponse = pickAny(o, "tool_response", "tool_result", "toolResult") ?? null;
     return {
+      toolResponse,
       toolName,
       toolInput: injectToolDiscriminator(toolName, rawInput),
-      toolResponse,
-      durationMs: pickNumber(o, "duration_ms", "durationMs"),
-      sessionId: pickString(o, "session_id", "sessionId")
+      sessionId: pickString(o, "session_id", "sessionId"),
+      durationMs: pickNumber(o, "duration_ms", "durationMs")
     };
   },
   handle(input) {
