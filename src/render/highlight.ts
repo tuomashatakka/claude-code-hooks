@@ -134,11 +134,43 @@ export function simpleHighlight(code: string, language: SupportedLanguage): stri
   return fn ? fn(code) : code;
 }
 
+const ANSI_SEQ = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+/**
+ * Runs a replace pass over only the plain-text spans of a partially colored
+ * string.
+ *
+ * Each highlighter is a chain of `.replace()` calls over a string that is
+ * already accumulating escapes, so a later pass can match the *parameters* of
+ * an earlier one. A truecolor escape is all it takes: in
+ * `\x1b[38;2;224;175;104m`, the substrings `38`, `2`, `224` and `175` are each
+ * a `\b\d+\b`, so a naive number pass wraps them in their own escapes and
+ * shatters the sequence into literal text on screen. Any pattern that could
+ * match escape internals — in practice every bare-digit pass — has to go
+ * through here.
+ */
+export function replaceOutsideAnsi(
+  input: string,
+  pattern: RegExp,
+  replacer: (substring: string, ...args: string[]) => string
+): string {
+  if (!input.includes('\x1b')) return input.replace(pattern, replacer as never);
+  let out = '';
+  let last = 0;
+  ANSI_SEQ.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = ANSI_SEQ.exec(input))) {
+    out += input.slice(last, m.index).replace(pattern, replacer as never) + m[0];
+    last = ANSI_SEQ.lastIndex;
+  }
+  return out + input.slice(last).replace(pattern, replacer as never);
+}
+
 function highlightJSON(code: string): string {
   let result = code;
   result = result.replace(/"([^"]+)":/g, (_, p1) => chalk.cyan(`"${p1}"`) + chalk.gray(':'));
   result = result.replace(/: "([^"]*)"/g, (_, p1) => chalk.gray(': ') + chalk.green(`"${p1}"`));
-  result = result.replace(/: (-?\d+\.?\d*)/g, (_, p1) => chalk.gray(': ') + chalk.yellow(p1));
+  result = replaceOutsideAnsi(result, /: (-?\d+\.?\d*)/g, (_, p1) => chalk.gray(': ') + chalk.yellow(p1));
   result = result.replace(/: (true|false|null)/g, (_, p1) => chalk.gray(': ') + chalk.yellow(p1));
   return result;
 }
@@ -147,7 +179,7 @@ function highlightJS(code: string): string {
   let result = code;
   result = result.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, m => chalk.gray(m));
   result = result.replace(/(["'`])(?:(?!\1)[^\\]|\\.)*\1/g, m => chalk.green(m));
-  result = result.replace(/\b\d+\.?\d*\b/g, m => chalk.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, m => chalk.yellow(m));
   result = result.replace(
     /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|static|interface|type|enum|extends|implements|typeof|instanceof|in|of|yield|switch|case|default|break|continue|do|void|delete)\b/g,
     m => chalk.cyan(m)
@@ -180,7 +212,7 @@ function highlightBash(code: string): string {
   // Pipes and redirects.
   result = result.replace(/(\||>>?|<|2>&1|&&|\|\|)/g, m => chalk.gray(m));
   // Numbers.
-  result = result.replace(/\b\d+\b/g, m => chalk.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\b/g, m => chalk.yellow(m));
   return result;
 }
 
@@ -190,7 +222,7 @@ function highlightPython(code: string): string {
   result = result.replace(/(^|\n)(\s*#.*)/g, (_, p1, p2) => p1 + chalk.gray(p2));
   result = result.replace(/(["'])(?:(?!\1)[^\\\n]|\\.)*\1/g, m => chalk.green(m));
   result = result.replace(/(^|\n)(\s*@[\w.]+)/g, (_, p1, p2) => p1 + chalk.magenta(p2));
-  result = result.replace(/\b\d+\.?\d*\b/g, m => chalk.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, m => chalk.yellow(m));
   result = result.replace(/\b(None|True|False)\b/g, m => chalk.yellow(m));
   result = result.replace(
     /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|yield|async|await|pass|break|continue|raise|global|nonlocal|assert|del|in|not|and|or|is|match|case)\b/g,
@@ -243,7 +275,7 @@ function highlightCSS(code: string): string {
   result = result.replace(/^([^{}\n]+)(?=\s*\{)/gm, m => chalk.magenta(m));
   result = result.replace(/([\w-]+)(\s*:)/g, (_m, prop: string, colon: string) => chalk.cyan(prop) + chalk.gray(colon));
   result = result.replace(/#[0-9a-fA-F]{3,8}\b/g, m => chalk.yellow(m));
-  result = result.replace(/\b(\d+\.?\d*)(px|em|rem|vh|vw|%|s|ms|deg|fr)?\b/g, (_m, n: string, unit: string | undefined) =>
+  result = replaceOutsideAnsi(result, /\b(\d+\.?\d*)(px|em|rem|vh|vw|%|s|ms|deg|fr)?\b/g, (_m, n: string, unit: string | undefined) =>
     chalk.yellow(n) + (unit ? chalk.gray(unit) : '')
   );
   return result;
@@ -253,7 +285,7 @@ function highlightSQL(code: string): string {
   let result = code;
   result = result.replace(/(^|\n)(\s*--.*)/g, (_, p1, p2) => p1 + chalk.gray(p2));
   result = result.replace(/'(?:[^'\\]|\\.)*'/g, m => chalk.green(m));
-  result = result.replace(/\b\d+\.?\d*\b/g, m => chalk.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, m => chalk.yellow(m));
   result = result.replace(
     /\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|VIEW|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AS|AND|OR|NOT|NULL|IN|IS|LIKE|ORDER|GROUP|BY|HAVING|LIMIT|OFFSET|DISTINCT|COUNT|SUM|AVG|MIN|MAX|UNION|ALL|EXISTS|BETWEEN|CASE|WHEN|THEN|ELSE|END|PRIMARY|FOREIGN|KEY|REFERENCES|DEFAULT|UNIQUE|CONSTRAINT|IF)\b/gi,
     m => chalk.cyan(m)

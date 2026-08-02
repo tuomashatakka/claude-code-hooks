@@ -5162,11 +5162,24 @@ function simpleHighlight(code, language) {
   const fn = language ? HIGHLIGHTERS[language] : void 0;
   return fn ? fn(code) : code;
 }
+var ANSI_SEQ = /\x1b\[[0-9;]*[a-zA-Z]/g;
+function replaceOutsideAnsi(input, pattern, replacer) {
+  if (!input.includes("\x1B")) return input.replace(pattern, replacer);
+  let out = "";
+  let last = 0;
+  ANSI_SEQ.lastIndex = 0;
+  let m;
+  while (m = ANSI_SEQ.exec(input)) {
+    out += input.slice(last, m.index).replace(pattern, replacer) + m[0];
+    last = ANSI_SEQ.lastIndex;
+  }
+  return out + input.slice(last).replace(pattern, replacer);
+}
 function highlightJSON(code) {
   let result = code;
   result = result.replace(/"([^"]+)":/g, (_, p1) => source_default.cyan(`"${p1}"`) + source_default.gray(":"));
   result = result.replace(/: "([^"]*)"/g, (_, p1) => source_default.gray(": ") + source_default.green(`"${p1}"`));
-  result = result.replace(/: (-?\d+\.?\d*)/g, (_, p1) => source_default.gray(": ") + source_default.yellow(p1));
+  result = replaceOutsideAnsi(result, /: (-?\d+\.?\d*)/g, (_, p1) => source_default.gray(": ") + source_default.yellow(p1));
   result = result.replace(/: (true|false|null)/g, (_, p1) => source_default.gray(": ") + source_default.yellow(p1));
   return result;
 }
@@ -5174,7 +5187,7 @@ function highlightJS(code) {
   let result = code;
   result = result.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, (m) => source_default.gray(m));
   result = result.replace(/(["'`])(?:(?!\1)[^\\]|\\.)*\1/g, (m) => source_default.green(m));
-  result = result.replace(/\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
   result = result.replace(
     /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|static|interface|type|enum|extends|implements|typeof|instanceof|in|of|yield|switch|case|default|break|continue|do|void|delete)\b/g,
     (m) => source_default.cyan(m)
@@ -5198,7 +5211,7 @@ function highlightBash(code) {
     (m) => source_default.magenta(m)
   );
   result = result.replace(/(\||>>?|<|2>&1|&&|\|\|)/g, (m) => source_default.gray(m));
-  result = result.replace(/\b\d+\b/g, (m) => source_default.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\b/g, (m) => source_default.yellow(m));
   return result;
 }
 function highlightPython(code) {
@@ -5207,7 +5220,7 @@ function highlightPython(code) {
   result = result.replace(/(^|\n)(\s*#.*)/g, (_, p1, p2) => p1 + source_default.gray(p2));
   result = result.replace(/(["'])(?:(?!\1)[^\\\n]|\\.)*\1/g, (m) => source_default.green(m));
   result = result.replace(/(^|\n)(\s*@[\w.]+)/g, (_, p1, p2) => p1 + source_default.magenta(p2));
-  result = result.replace(/\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
   result = result.replace(/\b(None|True|False)\b/g, (m) => source_default.yellow(m));
   result = result.replace(
     /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|yield|async|await|pass|break|continue|raise|global|nonlocal|assert|del|in|not|and|or|is|match|case)\b/g,
@@ -5257,7 +5270,8 @@ function highlightCSS(code) {
   result = result.replace(/^([^{}\n]+)(?=\s*\{)/gm, (m) => source_default.magenta(m));
   result = result.replace(/([\w-]+)(\s*:)/g, (_m, prop, colon) => source_default.cyan(prop) + source_default.gray(colon));
   result = result.replace(/#[0-9a-fA-F]{3,8}\b/g, (m) => source_default.yellow(m));
-  result = result.replace(
+  result = replaceOutsideAnsi(
+    result,
     /\b(\d+\.?\d*)(px|em|rem|vh|vw|%|s|ms|deg|fr)?\b/g,
     (_m, n, unit) => source_default.yellow(n) + (unit ? source_default.gray(unit) : "")
   );
@@ -5267,7 +5281,7 @@ function highlightSQL(code) {
   let result = code;
   result = result.replace(/(^|\n)(\s*--.*)/g, (_, p1, p2) => p1 + source_default.gray(p2));
   result = result.replace(/'(?:[^'\\]|\\.)*'/g, (m) => source_default.green(m));
-  result = result.replace(/\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
+  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
   result = result.replace(
     /\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|VIEW|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AS|AND|OR|NOT|NULL|IN|IS|LIKE|ORDER|GROUP|BY|HAVING|LIMIT|OFFSET|DISTINCT|COUNT|SUM|AVG|MIN|MAX|UNION|ALL|EXISTS|BETWEEN|CASE|WHEN|THEN|ELSE|END|PRIMARY|FOREIGN|KEY|REFERENCES|DEFAULT|UNIQUE|CONSTRAINT|IF)\b/gi,
     (m) => source_default.cyan(m)
