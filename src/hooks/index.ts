@@ -80,7 +80,7 @@ defineHook({
     return {
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
-        ...(systemPrompt ? { appendToSystemPrompt: systemPrompt } : {}),
+        ...(systemPrompt ? { additionalContext: systemPrompt } : {}),
       },
       systemMessage: asciiBlock + heading + renderSection({ badge, lines }),
     };
@@ -337,10 +337,7 @@ defineHook({
       toolName: input.toolName,
       input: input.toolInput,
     });
-    return {
-      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
-      systemMessage,
-    };
+    return { systemMessage };
   },
 });
 
@@ -368,9 +365,6 @@ defineHook({
       result:     input.toolResponse,
       durationMs: input.durationMs,
     });
-    return {
-      hookSpecificOutput: { hookEventName: 'PostToolUse', toolName: input.toolName },
-      systemMessage,
-    };
+    return { systemMessage };
   },
 });

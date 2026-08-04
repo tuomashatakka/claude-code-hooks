@@ -9,11 +9,11 @@ export async function runHook<E extends HookEventName>(name: E, handler: HookHan
   try {
     const data = await readInput();
     const out = (await handler(data ?? {})) ?? ({} as HookOutput<E>);
-    writeOutput({ continue: true, ...out });
+    writeOutput({ ...out });
   } catch (err) {
     const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
     debugLog(name, 'CRASH', detail);
-    writeOutput({ continue: true });
+    writeOutput({});
   }
   // Unreachable — writeOutput exits.
   process.exit(0);

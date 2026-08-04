@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import '../src/tools/index.ts';
 import '../src/hooks/index.ts';
-import { listHooks } from '../src/registry/hook-registry.ts';
+import { dispatchHook, listHooks } from '../src/registry/hook-registry.ts';
 import { HOOK_EVENT_NAMES } from '../src/types/hook-events.ts';
 
 const ROOT = path.resolve(import.meta.dir, '..');
@@ -22,5 +23,31 @@ describe('hook registration', () => {
     ) as { hooks: Record<string, unknown> };
 
     expect(sorted(Object.keys(hooksConfig.hooks))).toEqual(sorted(HOOK_EVENT_NAMES));
+  });
+});
+
+describe('codex-compatible tool hook output', () => {
+  const input = {
+    session_id: 'test-session',
+    tool_name: 'Bash',
+    tool_input: { command: 'git status --short' },
+  };
+
+  test('allows PreToolUse implicitly without an unsupported allow decision', () => {
+    const output = dispatchHook('PreToolUse', input);
+
+    expect(output.systemMessage).toBeString();
+    expect(output.continue).toBeUndefined();
+    expect(output.hookSpecificOutput).toBeUndefined();
+  });
+
+  test('renders PostToolUse without unsupported hook-specific fields', () => {
+    const output = dispatchHook('PostToolUse', {
+      ...input,
+      tool_response: { stdout: 'clean' },
+    });
+
+    expect(output.systemMessage).toBeString();
+    expect(output.hookSpecificOutput).toBeUndefined();
   });
 });

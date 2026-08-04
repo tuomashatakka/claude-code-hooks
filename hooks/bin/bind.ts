@@ -11,7 +11,7 @@ const argEvent = process.argv[2];
 
 if (!isHookEventName(argEvent)) {
   debugLog('bind', 'unknown-event', String(argEvent));
-  process.stdout.write(JSON.stringify({ continue: true }, null, 2));
+  process.stdout.write('{}');
   process.exit(0);
 }
 

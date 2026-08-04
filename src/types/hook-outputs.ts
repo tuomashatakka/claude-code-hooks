@@ -11,11 +11,11 @@ export interface PreToolUseHookSpecific {
   hookEventName: 'PreToolUse';
   permissionDecision?: 'allow' | 'deny' | 'ask';
   permissionDecisionReason?: string;
+  updatedInput?: Record<string, unknown>;
 }
 
 export interface PostToolUseHookSpecific {
   hookEventName: 'PostToolUse';
-  toolName?: string;
   additionalContext?: string;
 }
 
@@ -26,7 +26,7 @@ export interface PostToolUseFailureHookSpecific {
 
 export interface SessionStartHookSpecific {
   hookEventName: 'SessionStart';
-  appendToSystemPrompt?: string;
+  additionalContext?: string;
 }
 
 export interface InstructionsLoadedHookSpecific {

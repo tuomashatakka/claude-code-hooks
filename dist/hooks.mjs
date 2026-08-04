@@ -6809,7 +6809,7 @@ defineHook({
     return {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        ...systemPrompt ? { appendToSystemPrompt: systemPrompt } : {}
+        ...systemPrompt ? { additionalContext: systemPrompt } : {}
       },
       systemMessage: asciiBlock + heading + renderSection({ badge, lines })
     };
@@ -7022,10 +7022,7 @@ defineHook({
       toolName: input.toolName,
       input: input.toolInput
     });
-    return {
-      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
-      systemMessage
-    };
+    return { systemMessage };
   }
 });
 defineHook({
@@ -7051,10 +7048,7 @@ defineHook({
       result: input.toolResponse,
       durationMs: input.durationMs
     });
-    return {
-      hookSpecificOutput: { hookEventName: "PostToolUse", toolName: input.toolName },
-      systemMessage
-    };
+    return { systemMessage };
   }
 });
 
@@ -7108,11 +7102,11 @@ async function runHook(name, handler) {
   try {
     const data = await readInput();
     const out = await handler(data ?? {}) ?? {};
-    writeOutput({ continue: true, ...out });
+    writeOutput({ ...out });
   } catch (err) {
     const detail = err instanceof Error ? err.stack ?? err.message : String(err);
     debugLog(name, "CRASH", detail);
-    writeOutput({ continue: true });
+    writeOutput({});
   }
   process.exit(0);
 }
@@ -7142,7 +7136,7 @@ function isHookEventName(x) {
 var argEvent = process.argv[2];
 if (!isHookEventName(argEvent)) {
   debugLog("bind", "unknown-event", String(argEvent));
-  process.stdout.write(JSON.stringify({ continue: true }, null, 2));
+  process.stdout.write("{}");
   process.exit(0);
 }
 await runHook(argEvent, (raw) => dispatchHook(argEvent, raw));
