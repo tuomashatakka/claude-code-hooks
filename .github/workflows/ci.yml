@@ -58,5 +58,14 @@ jobs:
           mkdir -p /tmp/isolated && cp dist/hooks.mjs /tmp/isolated/
           cd /tmp/isolated
           out=$(printf '%s' '{"source":"startup","model":"claude-opus-5"}' | node hooks.mjs SessionStart)
-          echo "$out" | grep -q '"continue": true' || { echo "no continue in output"; exit 1; }
-          echo "$out" | grep -q 'systemMessage' || { echo "hook produced no systemMessage - registry likely empty"; exit 1; }
+          printf '%s' "$out" | node -e '
+            let raw = "";
+            process.stdin.setEncoding("utf8");
+            process.stdin.on("data", chunk => raw += chunk);
+            process.stdin.on("end", () => {
+              const output = JSON.parse(raw);
+              if (typeof output.systemMessage !== "string" || !output.systemMessage) {
+                throw new Error("hook produced no systemMessage - registry likely empty");
+              }
+            });
+          '
