@@ -11,6 +11,7 @@ import {
   simpleHighlight,
   formatMetadataCustom,
 } from '../render/highlight.ts';
+import { operationBadges, playwrightOperation } from './browser-operations.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -178,7 +179,8 @@ defineGenericTool<RawToolInput, RawToolResult>({
       lines.push(chalk.gray(`${label}: `) + formatValue(v));
     }
 
-    return { lines };
+    const operation = playwrightOperation(rawTool);
+    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
   },
 
   post(input, result, durationMs, ctx): RenderedSection {
@@ -202,6 +204,11 @@ defineGenericTool<RawToolInput, RawToolResult>({
       lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
 
-    return { lines, isJson: !primary };
+    const operation = playwrightOperation(rawTool);
+    return {
+      lines,
+      isJson: !primary,
+      extraBadges: operationBadges(operation ? [operation] : []),
+    };
   },
 });

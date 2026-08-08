@@ -2,7 +2,7 @@
 
 Enhanced hooks for Claude Code — beautified terminal output for every event.
 
-Block-letter headings, colored badges, syntax-highlighted diffs, ASCII image
+Block-letter headings, colored badges, syntax-highlighted diffs, sextant image
 previews and playful kaomoji phrases, across **14 hook events**.
 
 **[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)**
@@ -34,8 +34,8 @@ claude --plugin-dir /path/to/claude-code-hooks
 | --- | --- |
 | `SessionStart` | ASCII art, `BEGIN AGAIN` block heading, source + model badges, system-prompt confirmation |
 | `SessionEnd` / `Stop` | `BYE` / `STOP` block heading with a generated kaomoji phrase |
-| `PreToolUse` | Tool badge, the command or arguments, syntax-highlighted search/replace blocks |
-| `PostToolUse` | Tool badge, duration, sectioned output, diffs, JSON cards, file previews |
+| `PreToolUse` | Tool badge, the command or arguments, syntax-highlighted search/replace blocks, browser-operation badges |
+| `PostToolUse` | Tool badge, duration, tab-titled output cards, diffs, JSON cards, file previews, task state headings |
 | `PostToolUseFailure` | Failure badge plus the error body |
 | `PostToolBatch` | One summary line per tool in a resolved parallel batch |
 | `PreCompact` / `PostCompact` | Compaction headings and badges |
@@ -43,9 +43,25 @@ claude --plugin-dir /path/to/claude-code-hooks
 | `UserPromptSubmit` / `UserPromptExpansion` | The prompt, and what a command expanded into |
 | `SubagentStart` / `SubagentStop` | Agent id, type, and lifecycle badges |
 
-Images read through `Read` are rendered as ANSI half-block previews, degrading
-from 24-bit color through channel quantization to xterm-256 so the whole preview
-fits inside Claude Code's 10KB hook display limit rather than being truncated.
+Cards attach their title badge to a hairline across the top edge, so `Running`,
+`Output`, and metadata labels read like tabs instead of floating chips.
+Playwright and `agent-browser` calls add a compact operation badge such as
+`navigate`, `click`, or `snapshot`. `TaskCreate`, `TaskUpdate`, and `TaskList`
+share the same large block-weight checkbox: newly queued or active tasks stay
+empty, completed tasks show a checkmark, and descriptions sit directly beneath
+the task-state caption.
+
+Images read through `Read` are rendered as ANSI 2x3 sextant previews. Each cell
+chooses an exact two-colour clustering of six image samples, using Unicode block
+sextants and separated sextants through U+1CE86 for sharper edges. The renderer
+still degrades from 24-bit color through channel quantization to xterm-256 so the
+whole preview fits inside Claude Code's 10KB hook display limit. Set
+`CLAUDE_HOOKS_IMAGE_MODE=half` (or use `TERM=dumb`) for the legacy half-block
+fallback when a terminal font does not cover the sextant glyphs.
+
+For Codex, tool-hook output is emitted once as stdout JSON. `PreToolUse` and
+`PostToolUse` deliberately do not mirror the same `systemMessage` to stderr,
+preventing doubled cards while preserving the strict hook wire envelope.
 
 ## Development
 

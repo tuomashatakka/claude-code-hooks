@@ -1,9 +1,9 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
 import { pushDurationLine, renderCard } from '../render/primitives.ts';
-import { renderHeading } from '@tuomashatakka/ansi-headings';
 import { formatMetadataCustom } from '../render/highlight.ts';
-import { Badge, renderBadges, META_BADGE } from '../render/badge.ts';
+import { META_BADGE } from '../render/badge.ts';
+import { normalizeStatus, renderTask, taskFromResult } from './task-shared.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -21,38 +21,11 @@ defineTool<RawToolInput, RawToolResult>({
     const statusChangeTo = result && typeof result === 'object' && (result as any).statusChange?.to;
     const status = statusChangeTo || (result && typeof result === 'object' && (result as any).status) || (input && typeof input === 'object' && (input as any).status) || '';
 
-    const normalizedStatus = String(status).toLowerCase().trim();
-    const task = result && typeof result === 'object' ? (result as any).task : null;
-    const subject = task?.subject ?? (input as any)?.subject;
-
-    if (normalizedStatus === 'completed') {
-      const heading = renderHeading({
-        word: 'COMPLETED',
-        color: 'green',
-        event: 'agent',
-        caption: 'TASK COMPLETED',
-      });
-      lines.push(...heading.split('\n'));
-      if (subject) {
-        lines.push('');
-        lines.push(renderBadges(new Badge({ label: subject, color: 'green' })));
-      }
-    } else if (normalizedStatus === 'in_progress' || normalizedStatus === 'in-progress') {
-      const heading = renderHeading({
-        word: 'IN PROGRESS',
-        color: 'yellow',
-        event: 'agent',
-        caption: 'TASK STARTED',
-      });
-      lines.push(...heading.split('\n'));
-      if (subject) {
-        lines.push('');
-        lines.push(renderBadges(new Badge({ label: subject, color: 'yellow' })));
-      }
-    } else {
-      if (result && typeof result === 'object') {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
-      }
+    const normalizedStatus = normalizeStatus(status, 'updated');
+    const task = taskFromResult(input, result, normalizedStatus);
+    if (task) lines.push(...renderTask({ ...task, status: normalizedStatus }));
+    else if (result && typeof result === 'object') {
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
 
     return { lines };

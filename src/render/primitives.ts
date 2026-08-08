@@ -53,6 +53,11 @@ export function stripAnsi(str: unknown): string {
   return String(str).replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+/** Terminal-cell width for the glyphs this renderer emits (ANSI is zero-width). */
+export function visibleWidth(str: unknown): number {
+  return Array.from(stripAnsi(str)).length;
+}
+
 // Truncates by visible-character count, passing ANSI escape sequences
 // through untouched (they don't count against the budget) so a cut never
 // lands mid-sequence and drops a style's closing reset code - which would
@@ -85,6 +90,7 @@ export function truncateAnsi(text: string, maxVisibleLen: number, ellipsis = '�
 const FALLBACK_CONTENT_WIDTH = 96;
 const OUTER_INDENT_MARGIN = 6;
 const H_PADDING = 2;
+const MIN_CARD_HAIRLINE = 4;
 
 export function getMaxContentWidth(): number {
   const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
@@ -129,27 +135,43 @@ export function pickResultText(
  * below. The margin is part of the box rather than the caller's job, because
  * ten call sites across src/tools would otherwise each have to remember it.
  */
-export function renderBox(content: string): string {
+interface PreparedBox {
+  lines: string[];
+  width: number;
+}
+
+function prepareBox(content: string, minimumWidth = 0): PreparedBox {
   const maxWidth = getMaxContentWidth();
   const lines = String(content)
     // Blank leading/trailing rows would stack on top of the card's own vertical
     // padding and read as a ragged gap inside the fill.
     .replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, '')
     .split('\n')
-    .map(l => (stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l));
-  const maxLen = Math.min(Math.max(...lines.map(l => stripAnsi(l).length), 0), maxWidth);
-  const width = maxLen + H_PADDING * 2;
+    .map(l => (visibleWidth(l) > maxWidth ? truncateAnsi(l, maxWidth - 1) : l));
+  const maxLen = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
+  const width = Math.max(maxLen + H_PADDING * 2, minimumWidth);
   const bg = chalk.bgHex('#252525');
   const pad = bg(' '.repeat(width));
   const body = lines.map(l =>
-    bg(' '.repeat(H_PADDING) + l + ' '.repeat(Math.max(0, width - H_PADDING - stripAnsi(l).length)))
+    bg(' '.repeat(H_PADDING) + l + ' '.repeat(Math.max(0, width - H_PADDING - visibleWidth(l))))
   );
-  return ['', pad, ...body, pad, ''].join('\n');
+  return { lines: [pad, ...body, pad], width };
+}
+
+export function renderBox(content: string): string {
+  const box = prepareBox(content);
+  return ['', ...box.lines, ''].join('\n');
 }
 
 /** A card with a badge naming what it holds, e.g. ` ⏎  Running ` over a command. */
 export function renderCard(badge: string, content: string): string {
-  return '\n' + badge + renderBox(content);
+  const badgeWidth = visibleWidth(badge);
+  // Keep a visible rule even when the title is wider than the body. Without a
+  // minimum tail, small Output cards looked like a floating badge over a box
+  // instead of a tab attached to its top edge.
+  const box = prepareBox(content, badgeWidth + MIN_CARD_HAIRLINE);
+  const hairline = chalk.hex('#4a4a4a')('─'.repeat(Math.max(0, box.width - badgeWidth)));
+  return ['', badge + hairline, ...box.lines, ''].join('\n');
 }
 
 export interface RenderSectionOptions {
@@ -214,5 +236,13 @@ function extractResultTextRaw(toolResponse: unknown): string | null {
   }
   const o = toolResponse as Record<string, unknown>;
   const candidate = o.stdout ?? o.output ?? o.text ?? o.content;
-  return typeof candidate === 'string' ? candidate : null;
+  if (typeof candidate === 'string') return candidate;
+  // MCP clients commonly wrap content blocks in a CallToolResult object:
+  // `{ content: [{ type: 'text', text: '…' }], isError: false }`.
+  // Re-enter the same normalizer so Bash/wcgw and generic tools do not lose
+  // otherwise valid output merely because the blocks gained an outer envelope.
+  if (candidate && typeof candidate === 'object' && candidate !== toolResponse) {
+    return extractResultTextRaw(candidate);
+  }
+  return null;
 }

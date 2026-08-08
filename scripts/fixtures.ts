@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Procedurally generated image fixtures, shared by scripts/smoke.ts (which
-// asserts the Read hook renders ANSI half-blocks instead of "[Image Data]")
+// asserts the Read hook renders ANSI block/sextant pixels instead of "[Image Data]")
 // and scripts/capture-demo.ts (which needs the same rendering for the
 // showcase page). Generated rather than committed so the repo carries no
 // binary blobs and both consumers stay byte-identical.

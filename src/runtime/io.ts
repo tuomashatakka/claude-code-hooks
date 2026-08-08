@@ -50,10 +50,17 @@ function fitSystemMessage(message: string): string {
  */
 export const CLEAR_LINE_PREFIX = '\x1b[1A\x1b[2K\r';
 
-export function writeOutput(data: Record<string, unknown> & { systemMessage?: string }): never {
+export interface WriteOutputOptions {
+  mirrorSystemMessageToStderr?: boolean;
+}
+
+export function writeOutput(
+  data: Record<string, unknown> & { systemMessage?: string },
+  { mirrorSystemMessageToStderr = true }: WriteOutputOptions = {},
+): never {
   if (typeof data.systemMessage === 'string' && data.systemMessage.length > 0) {
     data.systemMessage = CLEAR_LINE_PREFIX + fitSystemMessage(data.systemMessage);
-    process.stderr.write(data.systemMessage + '\n');
+    if (mirrorSystemMessageToStderr) process.stderr.write(data.systemMessage + '\n');
   }
   process.stdout.write(JSON.stringify(data, null, 2));
   process.exit(0);

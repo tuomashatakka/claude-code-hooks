@@ -1,8 +1,22 @@
 # @tuomashatakka/ansi-headings
 
-ANSI block-letter headings with generated flavor-text phrases, extracted from
+ANSI block-letter headings and matching block-weight checkbox headings,
+extracted from
 [claude-code-hooks](https://github.com/tuomashatakka/claude-code-hooks).
 
-This package is built and published from `src/render/headings.ts` in that
-repo via `.github/workflows/publish-headings.yml` — see that repo for source
-and usage.
+```ts
+import { renderCheckboxHeading, renderHeading } from '@tuomashatakka/ansi-headings';
+
+renderHeading({ word: 'BEGIN', color: 'cyan', event: 'start' });
+
+renderCheckboxHeading({
+  caption: 'ADDED TASK',
+  checked: false,
+  color: 'cyan',
+  description: 'The description wraps beneath the caption beside the checkbox.',
+});
+```
+
+Pass `checked: true` to draw the completed-state checkmark. The older
+`renderCheckboxHeading(caption, color)` signature remains available as a
+deprecated checked-state compatibility shim.

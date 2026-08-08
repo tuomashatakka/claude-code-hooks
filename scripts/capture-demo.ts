@@ -3,8 +3,8 @@
 //
 // Every `hook` beat below is fed through the real hook pipeline
 // (hooks/bin/bind.ts, same binary Claude Code runs) and its actual ANSI
-// stderr is converted to HTML. Nothing on the page is hand-authored terminal
-// output, so the showcase cannot drift from what the hooks really render.
+// systemMessage is converted to HTML. Nothing on the page is hand-authored
+// terminal output, so the showcase cannot drift from the live hook renderer.
 // Regenerated on every Pages deploy - see .github/workflows/pages.yml.
 //
 // HOME points at scripts/fixtures/demo-home so SessionStart finds a
@@ -14,7 +14,7 @@
 import { writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runCase, type Case } from './smoke.ts';
+import { renderedHookOutput, runCase, type Case } from './smoke.ts';
 import { ansiToHtmlLines } from './ansi-to-html.ts';
 import { DEMO_PNG, writeImageFixtures, removeImageFixtures } from './fixtures.ts';
 
@@ -192,7 +192,7 @@ const SCRIPT: Beat[] = [
     duration_ms: 5,
   }, {
     header: 'Read(docs/sigil.png)',
-    note: 'Images become ANSI half-block previews, sized to fit the 10KB hook display limit.',
+    note: 'Images become high-fidelity ANSI sextant previews, with a half-block fallback for limited fonts.',
   }),
 
   hook('PostToolUse:TaskUpdate says:', 'PostToolUse', {
@@ -232,9 +232,10 @@ const examples: unknown[] = [];
 
 for (const beat of SCRIPT) {
   const c: Case = { label: beat.caption, event: beat.event, payload: beat.payload };
-  const { stderr, code } = await runCase(c, DEMO_HOME);
+  const { stdout, stderr, code } = await runCase(c, DEMO_HOME);
   if (code !== 0) throw new Error(beat.event + ' exited ' + code);
-  const lines = ansiToHtmlLines(normalizePaths(stderr.replace(/\n+$/, '')));
+  const rendered = renderedHookOutput(stdout, stderr);
+  const lines = ansiToHtmlLines(normalizePaths(rendered.replace(/\n+$/, '')));
   if (!lines.length) throw new Error(beat.event + ' produced no output — hook registry empty?');
   examples.push({
     event: beat.event,

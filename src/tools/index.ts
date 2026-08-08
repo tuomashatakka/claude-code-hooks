@@ -12,4 +12,6 @@ import './agent.ts';
 import './exit-plan.ts';
 import './task-create.ts';
 import './task-update.ts';
+import './task-list.ts';
+import './browser.ts';
 import './generic.ts';

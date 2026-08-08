@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Feeds canned JSON into hooks/bin/bind.ts for each event/tool combo and prints
-// stderr (the systemMessage). Used as a quick visual sanity check + smoke test.
+// the rendered systemMessage. Tool hooks carry it on stdout only; lifecycle
+// hooks keep the legacy stderr mirror used by Claude Code.
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -65,6 +66,42 @@ export const CASES: Case[] = [
       tool_input: { type: 'command', thread_id: 'i6314', command: 'ls' },
       tool_response: 'a\nb\nc\n\n---\nstatus = 0\ncwd = /home/user\nThis is the main shell. No command running in background.',
       duration_ms: 21,
+    },
+  },
+  {
+    label: 'PostToolUse — wcgw BashCommand (nested MCP content)',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'mcp__wcgw__BashCommand',
+      tool_input: { type: 'command', thread_id: 'i6314', command: 'git diff --cached --shortstat' },
+      tool_response: {
+        content: [{
+          type: 'text',
+          text: '37 files changed, 1434 insertions(+), 245 deletions(-)\n\n---\nstatus = process exited\ncwd = /home/user',
+        }],
+        isError: false,
+      },
+      duration_ms: 19,
+    },
+  },
+  {
+    label: 'PreToolUse — agent-browser operations',
+    event: 'PreToolUse',
+    payload: {
+      tool_name: 'Bash',
+      tool_input: {
+        command: 'agent-browser --session demo press Enter && agent-browser --session demo snapshot',
+      },
+    },
+  },
+  {
+    label: 'PostToolUse — Playwright navigate',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'mcp__playwright__browser_navigate',
+      tool_input: { url: 'https://example.com' },
+      tool_response: { content: [{ type: 'text', text: 'page loaded' }], isError: false },
+      duration_ms: 31,
     },
   },
   {
@@ -173,6 +210,31 @@ export const CASES: Case[] = [
     },
   },
   {
+    label: 'PostToolUse — TaskList',
+    event: 'PostToolUse',
+    payload: {
+      tool_name: 'TaskList',
+      tool_input: {},
+      tool_response: {
+        tasks: [
+          {
+            id: 1,
+            subject: 'Fix syntax highlighting for TSX',
+            description: 'Keep terminal colours intact while parsing output.',
+            status: 'completed',
+          },
+          {
+            id: 2,
+            subject: 'Verify the hook bundle',
+            description: 'Replay the compiled pre and post tool wire format.',
+            status: 'pending',
+          },
+        ],
+      },
+      duration_ms: 9,
+    },
+  },
+  {
     label: 'PostToolUse — Read (PNG Image)',
     event: 'PostToolUse',
     payload: {
@@ -238,24 +300,54 @@ export async function runCase(
   });
 }
 
+export function renderedHookOutput(stdout: string, stderr: string): string {
+  if (stderr.trim()) return stderr;
+  try {
+    const output = JSON.parse(stdout) as { systemMessage?: unknown };
+    return typeof output.systemMessage === 'string' ? output.systemMessage : '';
+  } catch {
+    return '';
+  }
+}
+
 if (import.meta.main) {
   writeImageFixtures();
 
   let failures = 0;
   for (const c of CASES) {
     const { stdout, stderr, code } = await runCase(c);
+    let output: Record<string, unknown> | null = null;
+    try {
+      output = JSON.parse(stdout) as Record<string, unknown>;
+    } catch {
+      // Reported below with the raw stdout payload.
+    }
+    const rendered = renderedHookOutput(stdout, stderr);
+    const isToolHook = c.event === 'PreToolUse' || c.event === 'PostToolUse';
     const imageAssertion = c.expectAsciiImage && (
-      stderr.includes('[Image Data]') || !/[\u2580\u2584\u2588]/.test(stderr)
+      rendered.includes('[Image Data]')
+      || !/[\u2580\u2584\u2588\u{1FB00}-\u{1FB3B}\u{1CE51}-\u{1CE8F}]/u.test(rendered)
     )
       ? 'expected image read to render ANSI block ascii instead of the raw image placeholder'
       : null;
-    const ok = code === 0 && stdout.includes('"continue": true') && !imageAssertion;
+    const wireAssertion = output === null
+      ? 'stdout was not valid hook JSON'
+      : typeof output.systemMessage !== 'string'
+        ? 'hook JSON did not contain a systemMessage'
+        : isToolHook && stderr !== ''
+          ? 'tool hook mirrored its systemMessage to stderr'
+          : isToolHook && ('continue' in output || 'hookSpecificOutput' in output)
+            ? 'tool hook emitted unsupported wire fields'
+            : null;
+    const ok = code === 0 && !wireAssertion && !imageAssertion;
     process.stdout.write(`\n=== ${c.label} ${ok ? 'OK' : 'FAIL'} (exit ${code}) ===\n`);
-    process.stdout.write(stderr);
+    process.stdout.write(rendered);
     if (!ok) {
       failures += 1;
+      if (wireAssertion) process.stdout.write('\n--- assertion ---\n' + wireAssertion + '\n');
       if (imageAssertion) process.stdout.write('\n--- assertion ---\n' + imageAssertion + '\n');
       process.stdout.write('\n--- stdout ---\n' + stdout + '\n');
+      if (stderr) process.stdout.write('\n--- stderr ---\n' + stderr + '\n');
     }
   }
 

@@ -4,6 +4,7 @@ import { renderCard, softCollapse, extractResultText, renderRuler, pushDurationL
 import { RUNNING_BADGE, OUTPUT_BADGE } from '../render/badge.ts';
 import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
+import { agentBrowserOperations, operationBadges } from './browser-operations.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -125,7 +126,8 @@ defineTool<AnyBashInput, RawToolResult>({
     if (c != null) meta.push(chalk.gray(`chat: ${c}`));
     if (meta.length) lines.push(meta.join('  '));
 
-    return { lines };
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map(row => row.text)) : [];
+    return { lines, extraBadges: operationBadges(operations) };
   },
 
   post(_input, result, durationMs): import('../registry/tool-registry.ts').RenderedSection {
@@ -165,6 +167,7 @@ defineTool<AnyBashInput, RawToolResult>({
     }
     if (trailerParts.length) lines.push('  ' + trailerParts.join('  '));
 
-    return { lines };
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map(row => row.text)) : [];
+    return { lines, extraBadges: operationBadges(operations) };
   },
 });

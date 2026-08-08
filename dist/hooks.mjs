@@ -4796,9 +4796,9 @@ function getToolDefinition(rawName) {
 import { readFileSync } from "node:fs";
 source_default.level = 3;
 var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
-function expandPersistedOutput(text) {
-  if (typeof text !== "string" || !text.includes("<persisted-output>")) return text;
-  return text.replace(PERSISTED_RE, (match, path5) => {
+function expandPersistedOutput(text2) {
+  if (typeof text2 !== "string" || !text2.includes("<persisted-output>")) return text2;
+  return text2.replace(PERSISTED_RE, (match, path5) => {
     try {
       return readFileSync(path5, "utf8");
     } catch {
@@ -4812,9 +4812,9 @@ function renderRuler(line) {
   const m = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
   if (!m) return null;
   const ch = m[1][0] === "=" || m[1][0] === "\u2550" ? "\u2550" : "\u2500";
-  const text = m[2].replace(/[-=─═]{3,}\s*$/, "").trim();
-  if (!text) return source_default.gray(ch.repeat(DIVIDER_WIDTH));
-  const label = ` ${text} `;
+  const text2 = m[2].replace(/[-=─═]{3,}\s*$/, "").trim();
+  if (!text2) return source_default.gray(ch.repeat(DIVIDER_WIDTH));
+  const label = ` ${text2} `;
   const remaining = Math.max(6, DIVIDER_WIDTH - label.length);
   const left = Math.floor(remaining / 2);
   return source_default.gray(ch.repeat(left)) + source_default.bold(label) + source_default.gray(ch.repeat(remaining - left));
@@ -4827,20 +4827,23 @@ function renderMetaTag(label, value) {
 function stripAnsi(str) {
   return String(str).replace(/\x1b\[[0-9;]*m/g, "");
 }
-function truncateAnsi(text, maxVisibleLen, ellipsis = "\u2026") {
+function visibleWidth(str) {
+  return Array.from(stripAnsi(str)).length;
+}
+function truncateAnsi(text2, maxVisibleLen, ellipsis = "\u2026") {
   const csi = /\x1b\[[0-9;]*m/y;
   let out = "";
   let visible = 0;
   let i = 0;
-  while (i < text.length && visible < maxVisibleLen) {
+  while (i < text2.length && visible < maxVisibleLen) {
     csi.lastIndex = i;
-    const m = csi.exec(text);
+    const m = csi.exec(text2);
     if (m) {
       out += m[0];
       i += m[0].length;
       continue;
     }
-    out += text[i];
+    out += text2[i];
     visible += 1;
     i += 1;
   }
@@ -4849,6 +4852,7 @@ function truncateAnsi(text, maxVisibleLen, ellipsis = "\u2026") {
 var FALLBACK_CONTENT_WIDTH = 96;
 var OUTER_INDENT_MARGIN = 6;
 var H_PADDING = 2;
+var MIN_CARD_HAIRLINE = 4;
 function getMaxContentWidth() {
   const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
   const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN - H_PADDING * 2;
@@ -4875,20 +4879,27 @@ function pickResultText(result, keys = ["text", "result", "output"]) {
   }
   return null;
 }
-function renderBox(content) {
+function prepareBox(content, minimumWidth = 0) {
   const maxWidth = getMaxContentWidth();
-  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((l) => stripAnsi(l).length > maxWidth ? truncateAnsi(l, maxWidth - 1) : l);
-  const maxLen = Math.min(Math.max(...lines.map((l) => stripAnsi(l).length), 0), maxWidth);
-  const width = maxLen + H_PADDING * 2;
+  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((l) => visibleWidth(l) > maxWidth ? truncateAnsi(l, maxWidth - 1) : l);
+  const maxLen = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
+  const width = Math.max(maxLen + H_PADDING * 2, minimumWidth);
   const bg = source_default.bgHex("#252525");
   const pad = bg(" ".repeat(width));
   const body = lines.map(
-    (l) => bg(" ".repeat(H_PADDING) + l + " ".repeat(Math.max(0, width - H_PADDING - stripAnsi(l).length)))
+    (l) => bg(" ".repeat(H_PADDING) + l + " ".repeat(Math.max(0, width - H_PADDING - visibleWidth(l))))
   );
-  return ["", pad, ...body, pad, ""].join("\n");
+  return { lines: [pad, ...body, pad], width };
+}
+function renderBox(content) {
+  const box = prepareBox(content);
+  return ["", ...box.lines, ""].join("\n");
 }
 function renderCard(badge, content) {
-  return "\n" + badge + renderBox(content);
+  const badgeWidth = visibleWidth(badge);
+  const box = prepareBox(content, badgeWidth + MIN_CARD_HAIRLINE);
+  const hairline = source_default.hex("#4a4a4a")("\u2500".repeat(Math.max(0, box.width - badgeWidth)));
+  return ["", badge + hairline, ...box.lines, ""].join("\n");
 }
 function renderSection({ badge, lines = [] }) {
   let out = badge;
@@ -4900,9 +4911,9 @@ function renderSection({ badge, lines = [] }) {
 }
 var SAFETY_MAX_LINES = 2e3;
 function softCollapse(content, { maxLines = SAFETY_MAX_LINES, label = "lines" } = {}) {
-  const text = String(content);
-  const lines = text.split("\n");
-  if (lines.length <= maxLines) return text;
+  const text2 = String(content);
+  const lines = text2.split("\n");
+  if (lines.length <= maxLines) return text2;
   const head = lines.slice(0, maxLines).join("\n");
   return head + "\n" + source_default.gray.italic(`  \u2026 +${lines.length - maxLines} more ${label}`);
 }
@@ -4922,7 +4933,11 @@ function extractResultTextRaw(toolResponse) {
   }
   const o = toolResponse;
   const candidate = o.stdout ?? o.output ?? o.text ?? o.content;
-  return typeof candidate === "string" ? candidate : null;
+  if (typeof candidate === "string") return candidate;
+  if (candidate && typeof candidate === "object" && candidate !== toolResponse) {
+    return extractResultTextRaw(candidate);
+  }
+  return null;
 }
 
 // src/render/theme.ts
@@ -5177,8 +5192,8 @@ function detectContentLanguage(content) {
   if (yamlKeys && yamlKeys.length >= 2 && !/[{};]/.test(content)) return "yaml";
   return null;
 }
-function detectOutputLanguage(text) {
-  return detectContentLanguage(text) ?? "output";
+function detectOutputLanguage(text2) {
+  return detectContentLanguage(text2) ?? "output";
 }
 function detectLanguage(content, toolName) {
   const { tool } = parseToolName(toolName);
@@ -5377,7 +5392,7 @@ function highlightMarkdown(code) {
   result = result.replace(/`([^`\n]+)`/g, (_m, t) => source_default.bgHex("#1e1e1e").white(t));
   result = result.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    (_m, text, url) => source_default.cyan(text) + source_default.gray(" (") + source_default.gray.underline(url) + source_default.gray(")")
+    (_m, text2, url) => source_default.cyan(text2) + source_default.gray(" (") + source_default.gray.underline(url) + source_default.gray(")")
   );
   return result;
 }
@@ -5450,9 +5465,9 @@ function parseWcgwTrailer(rawOutput) {
   }
   return { stdout, status, cwd, extra };
 }
-function extractField(text, key) {
+function extractField(text2, key) {
   const re = new RegExp(`(?:^|\\n)${key}\\s*=\\s*([^\\n]*)`, "i");
-  const m = re.exec(text);
+  const m = re.exec(text2);
   return m ? m[1].trim() : null;
 }
 function shortenPath(p, home) {
@@ -5460,6 +5475,102 @@ function shortenPath(p, home) {
   const h = home ?? process.env.HOME ?? process.env.USERPROFILE ?? "";
   if (h && p.startsWith(h)) return "~" + p.slice(h.length);
   return p;
+}
+
+// src/tools/browser-operations.ts
+var VALUE_OPTIONS = /* @__PURE__ */ new Set([
+  "--session",
+  "--session-name",
+  "--profile",
+  "--state",
+  "--headers",
+  "--executable-path",
+  "--extension",
+  "--init-script",
+  "--enable",
+  "--args",
+  "--user-agent",
+  "--proxy",
+  "--proxy-bypass",
+  "--hide-scrollbars",
+  "--provider",
+  "--device",
+  "--screenshot-dir",
+  "--screenshot-quality",
+  "--screenshot-format",
+  "--cdp",
+  "--color-scheme",
+  "--download-path",
+  "--max-output",
+  "--allowed-domains",
+  "--action-policy",
+  "--confirm-actions",
+  "--engine",
+  "--model",
+  "--config",
+  "-p"
+]);
+function shellWords(command) {
+  const words = [];
+  let current = "";
+  let quote = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      if (quote === '"' && ch === "\\" && i + 1 < command.length) current += command[++i];
+      else if (ch === quote) quote = null;
+      else current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current) words.push(current);
+      current = "";
+      continue;
+    }
+    if (ch === "\\" && i + 1 < command.length) current += command[++i];
+    else current += ch;
+  }
+  if (current) words.push(current);
+  return words;
+}
+function executableName(token) {
+  return token.split("/").pop() ?? token;
+}
+function operationFromAgentBrowserSegment(segment) {
+  const words = shellWords(segment);
+  const executableIndex = words.findIndex((word) => executableName(word) === "agent-browser");
+  if (executableIndex < 0) return null;
+  for (let i = executableIndex + 1; i < words.length; i++) {
+    const word = words[i];
+    if (word === "--") return words[i + 1] ?? null;
+    if (!word.startsWith("-")) return word;
+    const option = word.includes("=") ? word.slice(0, word.indexOf("=")) : word;
+    if (!word.includes("=") && VALUE_OPTIONS.has(option)) i++;
+  }
+  return null;
+}
+function agentBrowserOperations(segments) {
+  const operations = [];
+  for (const segment of segments) {
+    const operation = operationFromAgentBrowserSegment(segment);
+    if (operation && !operations.includes(operation)) operations.push(operation);
+  }
+  return operations;
+}
+function playwrightOperation(toolName) {
+  const match = toolName.match(/playwright.*__browser_(.+)$/i);
+  return match?.[1]?.replace(/_/g, " ") ?? null;
+}
+function operationBadges(operations) {
+  return operations.map((operation) => new Badge({
+    label: operation,
+    color: "brightBlue",
+    icon: "\u0192"
+  }));
 }
 
 // src/tools/bash.ts
@@ -5522,8 +5633,8 @@ function commandOf(input) {
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 function renderCommand(cmd) {
-  return splitCommandRows(cmd).map(({ text, sep }, i) => {
-    const body = simpleHighlight(text, "bash") + (sep ? " " + source_default.gray(sep) : "");
+  return splitCommandRows(cmd).map(({ text: text2, sep }, i) => {
+    const body = simpleHighlight(text2, "bash") + (sep ? " " + source_default.gray(sep) : "");
     return i === 0 ? source_default.gray("$ ") + body : body;
   }).join("\n");
 }
@@ -5541,7 +5652,8 @@ defineTool({
     if (t != null) meta.push(source_default.gray(`timeout: ${t}s`));
     if (c != null) meta.push(source_default.gray(`chat: ${c}`));
     if (meta.length) lines.push(meta.join("  "));
-    return { lines };
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
+    return { lines, extraBadges: operationBadges(operations) };
   },
   post(_input, result, durationMs) {
     const raw = extractResultText(result) ?? "";
@@ -5565,7 +5677,8 @@ defineTool({
       trailerParts.push(source_default.gray(`${k}:`) + v);
     }
     if (trailerParts.length) lines.push("  " + trailerParts.join("  "));
-    return { lines };
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
+    return { lines, extraBadges: operationBadges(operations) };
   }
 });
 
@@ -5619,77 +5732,203 @@ function decodeWebp(buffer) {
     }
   }
 }
+var LEFT_HALF_MASK = 21;
+var RIGHT_HALF_MASK = 42;
+var LAST_SEPARATED_MASK = 54;
+function regularSextant(mask) {
+  if (mask <= 0) return " ";
+  if (mask >= 63) return "\u2588";
+  if (mask === LEFT_HALF_MASK) return "\u258C";
+  if (mask === RIGHT_HALF_MASK) return "\u2590";
+  const skippedLeft = mask > LEFT_HALF_MASK ? 1 : 0;
+  const skippedRight = mask > RIGHT_HALF_MASK ? 1 : 0;
+  return String.fromCodePoint(129792 + mask - 1 - skippedLeft - skippedRight);
+}
+function separatedSextant(mask) {
+  return mask >= 1 && mask <= LAST_SEPARATED_MASK ? String.fromCodePoint(118352 + mask) : null;
+}
+function mean(samples, mask, selected) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+  for (let i = 0; i < samples.length; i++) {
+    if (Boolean(mask & 1 << i) !== selected) continue;
+    r += samples[i].r;
+    g += samples[i].g;
+    b += samples[i].b;
+    count++;
+  }
+  return count ? { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) } : { r: 0, g: 0, b: 0 };
+}
+function colorError(sample, color) {
+  const dr = sample.r - color.r;
+  const dg = sample.g - color.g;
+  const db = sample.b - color.b;
+  return dr * dr + dg * dg + db * db;
+}
+function opaqueCell(samples) {
+  const flat = mean(samples, 0, false);
+  let bestError = samples.reduce((sum, sample) => sum + colorError(sample, flat), 0);
+  let best = { char: "\u2588", fg: flat, bg: null };
+  for (let mask = 1; mask < 63; mask++) {
+    const fg = mean(samples, mask, true);
+    const bg = mean(samples, mask, false);
+    let error = 0;
+    for (let i = 0; i < samples.length; i++) {
+      error += colorError(samples[i], mask & 1 << i ? fg : bg);
+    }
+    if (error < bestError) {
+      bestError = error;
+      best = { char: regularSextant(mask), fg, bg };
+    }
+  }
+  return best;
+}
+function transparentCell(samples) {
+  let mask = 0;
+  const opaque = [];
+  for (let i = 0; i < samples.length; i++) {
+    if (!samples[i].opaque) continue;
+    mask |= 1 << i;
+    opaque.push(samples[i]);
+  }
+  if (!mask) return { char: " ", fg: null, bg: null };
+  const fg = mean(opaque, (1 << opaque.length) - 1, true);
+  return {
+    // Separated cells keep the terminal background visible between isolated
+    // transparent-edge samples. Masks beyond the requested cutoff use the
+    // classic series rather than silently pulling in U+1CE87..U+1CE8F.
+    char: separatedSextant(mask) ?? regularSextant(mask),
+    fg,
+    bg: null
+  };
+}
+function fitGeometry(width, height, requestedCols) {
+  let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / 2)));
+  let rows = Math.max(1, Math.round(height * cols / (width * 2)));
+  if (rows > MAX_ROWS) {
+    cols = Math.max(1, Math.floor(cols * MAX_ROWS / rows));
+    rows = Math.max(1, Math.min(MAX_ROWS, Math.round(height * cols / (width * 2))));
+  }
+  return { cols, rows };
+}
+function imageSample(img, sampleX, sampleY, sampleCols, sampleRows) {
+  const x = Math.min(img.width - 1, Math.floor((sampleX + 0.5) * img.width / sampleCols));
+  const y = Math.min(img.height - 1, Math.floor((sampleY + 0.5) * img.height / sampleRows));
+  const idx = (y * img.width + x) * 4;
+  return {
+    r: img.data[idx] ?? 0,
+    g: img.data[idx + 1] ?? 0,
+    b: img.data[idx + 2] ?? 0,
+    opaque: (img.data[idx + 3] ?? 255) >= ALPHA_OPAQUE
+  };
+}
+function renderSextants(img, requestedCols, attempt) {
+  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols);
+  const sampleCols = cols * 2;
+  const sampleRows = rows * 3;
+  const sgrTail = attempt.palette ? (color) => `5;${to256(color.r, color.g, color.b)}` : (color) => `2;${color.r & attempt.mask};${color.g & attempt.mask};${color.b & attempt.mask}`;
+  const lines = [];
+  for (let cellY = 0; cellY < rows; cellY++) {
+    let line = "";
+    let fg = null;
+    let bg = null;
+    const put = (cell) => {
+      const wantFg = cell.fg ? sgrTail(cell.fg) : null;
+      const wantBg = cell.bg ? sgrTail(cell.bg) : null;
+      const parts = [];
+      if (wantFg !== null && wantFg !== fg) {
+        parts.push(`38;${wantFg}`);
+        fg = wantFg;
+      }
+      if (wantBg !== bg) {
+        parts.push(wantBg === null ? "49" : `48;${wantBg}`);
+        bg = wantBg;
+      }
+      line += parts.length ? `\x1B[${parts.join(";")}m${cell.char}` : cell.char;
+    };
+    for (let cellX = 0; cellX < cols; cellX++) {
+      const samples = [];
+      for (let subY = 0; subY < 3; subY++) {
+        for (let subX = 0; subX < 2; subX++) {
+          samples.push(imageSample(
+            img,
+            cellX * 2 + subX,
+            cellY * 3 + subY,
+            sampleCols,
+            sampleRows
+          ));
+        }
+      }
+      put(samples.every((sample) => sample.opaque) ? opaqueCell(samples) : transparentCell(samples));
+    }
+    if (fg !== null) line += FG_RESET;
+    if (bg !== null) line += BG_RESET;
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
+function renderHalfBlocks(img, requestedCols, attempt) {
+  const scale = Math.max(1, img.width / requestedCols, img.height / (MAX_ROWS * 2));
+  const targetWidth = Math.max(1, Math.round(img.width / scale));
+  const pxRows = Math.max(1, Math.round(img.height / scale));
+  const tail = attempt.palette ? (sample) => `5;${to256(sample.r, sample.g, sample.b)}` : (sample) => `2;${sample.r & attempt.mask};${sample.g & attempt.mask};${sample.b & attempt.mask}`;
+  const px = (col, row) => {
+    const sample = imageSample(img, col, row, targetWidth, pxRows);
+    return sample.opaque ? tail(sample) : null;
+  };
+  const lines = [];
+  for (let y = 0; y < pxRows; y += 2) {
+    let line = "";
+    let fg = null;
+    let bg = null;
+    const put = (char, wantFg, wantBg) => {
+      const parts = [];
+      if (wantFg !== null && wantFg !== fg) {
+        parts.push(`38;${wantFg}`);
+        fg = wantFg;
+      }
+      if (wantBg !== bg) {
+        parts.push(wantBg === null ? "49" : `48;${wantBg}`);
+        bg = wantBg;
+      }
+      line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
+    };
+    for (let x = 0; x < targetWidth; x++) {
+      const top = px(x, y);
+      const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
+      if (top === null && bottom === null) put(" ", null, null);
+      else if (top !== null && bottom === null) put("\u2580", top, null);
+      else if (top === null && bottom !== null) put("\u2584", bottom, null);
+      else if (top === bottom) put("\u2588", top, bg);
+      else put("\u2580", top, bottom);
+    }
+    if (fg !== null) line += FG_RESET;
+    if (bg !== null) line += BG_RESET;
+    lines.push(line);
+  }
+  return lines.join("\n");
+}
 function imageToAscii(buffer, ext, maxWidth = 80) {
   let img;
   const normalizedExt = ext.toLowerCase().replace(/^\./, "");
   try {
-    if (normalizedExt === "png") {
-      img = import_pngjs.PNG.sync.read(buffer);
-    } else if (normalizedExt === "jpg" || normalizedExt === "jpeg") {
-      img = import_jpeg_js.default.decode(buffer, { useTArray: true });
-    } else if (normalizedExt === "webp") {
-      img = decodeWebp(buffer);
-    } else {
-      return null;
-    }
+    if (normalizedExt === "png") img = import_pngjs.PNG.sync.read(buffer);
+    else if (normalizedExt === "jpg" || normalizedExt === "jpeg") img = import_jpeg_js.default.decode(buffer, { useTArray: true });
+    else if (normalizedExt === "webp") img = decodeWebp(buffer);
+    else return null;
   } catch {
     return null;
   }
-  const { width, height, data } = img;
-  if (!width || !height) return null;
-  const render = (cols, attempt) => {
-    const scale = Math.max(1, width / cols, height / (MAX_ROWS * 2));
-    const targetWidth = Math.max(1, Math.round(width / scale));
-    const pxRows = Math.max(1, Math.round(height / scale));
-    const sgrTail = attempt.palette ? (r, g, b) => `5;${to256(r, g, b)}` : (r, g, b) => `2;${r & attempt.mask};${g & attempt.mask};${b & attempt.mask}`;
-    const px = (col, row) => {
-      const idx = (Math.min(height - 1, Math.floor(row * scale)) * width + Math.min(width - 1, Math.floor(col * scale))) * 4;
-      if ((data[idx + 3] ?? 255) < ALPHA_OPAQUE) return null;
-      return sgrTail(data[idx] ?? 0, data[idx + 1] ?? 0, data[idx + 2] ?? 0);
-    };
-    const lines = [];
-    for (let y = 0; y < pxRows; y += 2) {
-      let line = "";
-      let fg = null;
-      let bg = null;
-      const put = (char, wantFg, wantBg) => {
-        const parts = [];
-        if (wantFg !== null && wantFg !== fg) {
-          parts.push(`38;${wantFg}`);
-          fg = wantFg;
-        }
-        if (wantBg !== bg) {
-          parts.push(wantBg === null ? "49" : `48;${wantBg}`);
-          bg = wantBg;
-        }
-        line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
-      };
-      for (let x = 0; x < targetWidth; x++) {
-        const top = px(x, y);
-        const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
-        if (top === null && bottom === null) {
-          put(" ", null, null);
-        } else if (top !== null && bottom === null) {
-          put("\u2580", top, null);
-        } else if (top === null && bottom !== null) {
-          put("\u2584", bottom, null);
-        } else if (top === bottom) {
-          put("\u2588", top, bg);
-        } else {
-          put("\u2580", top, bottom);
-        }
-      }
-      if (fg !== null) line += FG_RESET;
-      if (bg !== null) line += BG_RESET;
-      lines.push(line);
-    }
-    return lines.join("\n");
-  };
-  let out = "";
+  if (!img.width || !img.height) return null;
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  for (let cols = Math.min(width, requestedMax); ; ) {
+  const forceHalfBlocks = process.env.CLAUDE_HOOKS_IMAGE_MODE === "half" || process.env.TERM === "dumb";
+  let out = "";
+  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / 2), requestedMax);
+  for (let cols = Math.max(1, initialCols); ; ) {
     for (const attempt of ATTEMPTS) {
-      out = render(cols, attempt);
+      out = forceHalfBlocks ? renderHalfBlocks(img, cols, attempt) : renderSextants(img, cols, attempt);
       if (out.length <= BYTE_BUDGET) return out;
     }
     if (cols <= MIN_COLS) break;
@@ -5736,11 +5975,11 @@ function renderFilePreview(filePath, options = {}) {
 }
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
-  const text = String(rawPath);
-  const match = LINE_RANGE_RE.exec(text);
-  if (!match) return { path: text, range: null };
+  const text2 = String(rawPath);
+  const match = LINE_RANGE_RE.exec(text2);
+  if (!match) return { path: text2, range: null };
   return {
-    path: text.slice(0, match.index),
+    path: text2.slice(0, match.index),
     range: { start: Number(match[1]), end: match[2] ? Number(match[2]) : null }
   };
 }
@@ -5846,8 +6085,8 @@ defineTool({
     }) : null;
     if (box) lines.push(box);
     else {
-      const text = pickResultText(result);
-      if (text) lines.push(source_default.green("\u2713 ") + firstLine(text, 120));
+      const text2 = pickResultText(result);
+      if (text2) lines.push(source_default.green("\u2713 ") + firstLine(text2, 120));
     }
     return { lines };
   }
@@ -5897,8 +6136,8 @@ defineTool({
       if (rendered) lines.push(rendered);
       lines.push(source_default.gray(`  ${blocks.length} hunk${blocks.length > 1 ? "s" : ""}`));
     } else if (input.text_or_search_replace_blocks) {
-      const text = String(input.text_or_search_replace_blocks);
-      const parts = text.split("\n");
+      const text2 = String(input.text_or_search_replace_blocks);
+      const parts = text2.split("\n");
       const snippet = parts.slice(0, 6).join("\n");
       lines.push(renderCard(OUTPUT_BADGE, snippet + (parts.length > 6 ? "\n\u2026" : "")));
     }
@@ -5913,14 +6152,14 @@ defineTool({
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const text = extractResultText(result);
-    const status = text ? firstLine(text, 200) : null;
+    const text2 = extractResultText(result);
+    const status = text2 ? firstLine(text2, 200) : null;
     const failed = status ? FAILURE_RE.test(status) : false;
     if (status) lines.push((failed ? source_default.red("\u2A02 ") : source_default.green("\u2713 ")) + status);
     const action = parseSearchReplaceBlocks(input.text_or_search_replace_blocks).length ? "edit" : "write";
     const box = input.file_path ? renderFileResult(input.file_path, { action }) : null;
     if (box) lines.push(box);
-    else if (!status && text) lines.push(renderCard(OUTPUT_BADGE, text));
+    else if (!status && text2) lines.push(renderCard(OUTPUT_BADGE, text2));
     return { lines };
   }
 });
@@ -5975,8 +6214,8 @@ defineTool({
       const inline = renderInlineContents(result);
       if (inline.length) lines.push(...inline);
       else {
-        const text = extractResultText(result);
-        if (text) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text)));
+        const text2 = extractResultText(result);
+        if (text2) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text2)));
       }
     }
     return { lines };
@@ -5997,9 +6236,9 @@ defineTool({
   post(_input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const text = pickResultText(result, ["text", "output"]);
-    if (text) {
-      const summary = String(text).split("\n").slice(0, 3).join("\n");
+    const text2 = pickResultText(result, ["text", "output"]);
+    if (text2) {
+      const summary = String(text2).split("\n").slice(0, 3).join("\n");
       lines.push(source_default.green("\u23FB ") + summary);
     }
     return { lines };
@@ -6045,16 +6284,16 @@ defineTool({
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const text = extractResultText(result);
-    const saved = savedContextPath(input, text);
-    const prose = text?.trim() && text.trim() !== saved ? firstLine(text.trim(), 200) : null;
+    const text2 = extractResultText(result);
+    const saved = savedContextPath(input, text2);
+    const prose = text2?.trim() && text2.trim() !== saved ? firstLine(text2.trim(), 200) : null;
     if (prose) {
       const failed = /\b(error|warning|no files found)\b/i.test(prose);
       lines.push((failed ? source_default.yellow("\u26A0 ") : source_default.green("\u29FA ")) + prose);
     }
     const box = saved ? renderFileResult(saved, { action: "context save", transform: dropInlinedFiles }) : null;
     if (box) lines.push(box);
-    else if (text && !prose) lines.push(source_default.green("\u29FA ") + firstLine(text, 200));
+    else if (text2 && !prose) lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
     return { lines };
   }
 });
@@ -6332,8 +6571,8 @@ var glyphs_default = {
 // packages/ansi-headings/src/headings.ts
 source_default.level = 3;
 var glyphs = glyphs_default;
-function renderGlyphRows(text, color) {
-  const chars = text.toUpperCase().split("");
+function renderGlyphRows(text2, color) {
+  const chars = text2.toUpperCase().split("");
   const rows = ["  ", "  ", "  "];
   for (const ch of chars) {
     const glyph = glyphs[ch] ?? glyphs[" "];
@@ -6350,14 +6589,48 @@ function renderHeading({ word, color = "cyan", event, tone, width = 60, caption 
   const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
   return "\n" + composed;
 }
-var CHECKBOX_ROWS = [" \u250C\u2500\u2500\u2500\u2510", " \u2502 \u2713 \u2502", " \u2514\u2500\u2500\u2500\u2518"];
-function renderCheckboxHeading(caption, color = "green") {
+var EMPTY_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588   \u2588", " \u2588\u2584\u2584\u2584\u2588"];
+var CHECKED_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588\u2584 \u2588\u2588", " \u2588\u2584\u2588\u2584\u2588"];
+function wrapDescription(description, width) {
+  const lines = [];
+  for (const sourceLine of description.trim().split(/\r?\n/)) {
+    const words = sourceLine.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (Array.from(next).length <= width || !line) line = next;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+function renderCheckboxHeading(value, legacyColor = "green") {
+  const args = typeof value === "string" ? { caption: value, checked: true, color: legacyColor } : value;
+  const color = args.color ?? "green";
   const colorize = source_default[color] ?? source_default.green;
-  const rows = CHECKBOX_ROWS.map((r) => colorize(r));
+  const rows = (args.checked ? CHECKED_CHECKBOX_ROWS : EMPTY_CHECKBOX_ROWS).map((r) => colorize(r));
   const gutter = 2;
-  const slots = ["", source_default.bold(colorize(caption)), ""];
-  const composed = rows.map((r, i) => r + " ".repeat(gutter) + (slots[i] ?? "")).join("\n");
-  return "\n" + composed;
+  const textIndent = Array.from(EMPTY_CHECKBOX_ROWS[0]).length + gutter;
+  const descriptionWidth = Math.max(20, (args.width ?? 60) - textIndent);
+  const description = args.description?.trim() ? wrapDescription(args.description, descriptionWidth) : [];
+  const slots = [
+    source_default.bold(colorize(args.caption)),
+    description[0] ? source_default.gray(description[0]) : "",
+    description[1] ? source_default.gray(description[1]) : ""
+  ];
+  const composed = rows.map((r, i) => r + " ".repeat(gutter) + slots[i]);
+  for (const line of description.slice(2)) {
+    composed.push(" ".repeat(textIndent) + source_default.gray(line));
+  }
+  return "\n" + composed.join("\n");
 }
 
 // src/tools/exit-plan.ts
@@ -6383,6 +6656,101 @@ defineTool({
   }
 });
 
+// src/tools/task-shared.ts
+source_default.level = 3;
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function text(record, ...keys) {
+  if (!record) return void 0;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return void 0;
+}
+function normalizeStatus(value, fallback = "pending") {
+  const normalized = String(value ?? fallback).trim().toLowerCase().replace(/-/g, "_");
+  return normalized || fallback;
+}
+function normalizeTask(value, fallback = {}, fallbackStatus = "pending") {
+  const task = asRecord(value);
+  const subject = text(task, "subject", "title", "name") ?? text(fallback, "subject", "title", "name");
+  if (!subject) return null;
+  const id = task?.id ?? task?.taskId ?? fallback.id ?? fallback.task_id;
+  const description = text(task, "description", "details") ?? text(fallback, "description", "details");
+  const status = normalizeStatus(
+    task?.status ?? fallback.status,
+    fallbackStatus
+  );
+  return {
+    ...typeof id === "string" || typeof id === "number" ? { id } : {},
+    subject,
+    ...description ? { description } : {},
+    status
+  };
+}
+function taskFromResult(input, result, fallbackStatus) {
+  const record = asRecord(result);
+  const nested = record?.task ?? record?.item ?? result;
+  return normalizeTask(nested, input, fallbackStatus);
+}
+function parseMaybeJson(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || !trimmed.startsWith("[") && !trimmed.startsWith("{")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+function tasksFromResult(result) {
+  let candidate = parseMaybeJson(result);
+  const record = asRecord(candidate);
+  if (record) {
+    candidate = parseMaybeJson(
+      record.tasks ?? record.items ?? record.result ?? record.output ?? record.content
+    );
+  }
+  if (!Array.isArray(candidate)) return [];
+  return candidate.map((item) => normalizeTask(item)).filter((task) => task !== null);
+}
+function taskAppearance(status) {
+  switch (normalizeStatus(status)) {
+    case "completed":
+      return { caption: "TASK COMPLETED", checked: true, color: "green" };
+    case "in_progress":
+      return { caption: "TASK STARTED", checked: false, color: "yellow" };
+    case "blocked":
+      return { caption: "TASK BLOCKED", checked: false, color: "red" };
+    case "cancelled":
+    case "canceled":
+      return { caption: "TASK CANCELLED", checked: false, color: "gray" };
+    case "pending":
+    case "todo":
+      return { caption: "TASK QUEUED", checked: false, color: "cyan" };
+    default:
+      return { caption: "TASK UPDATED", checked: false, color: "blue" };
+  }
+}
+function renderTask(task, captionOverride) {
+  const appearance = taskAppearance(task.status);
+  const caption = captionOverride ?? appearance.caption;
+  const heading = renderCheckboxHeading({
+    caption,
+    checked: appearance.checked,
+    color: appearance.color,
+    description: task.description
+  });
+  const subjectLabel = task.id == null ? task.subject : `#${task.id}  ${task.subject}`;
+  return [
+    ...heading.split("\n"),
+    "",
+    renderBadges(new Badge({ label: subjectLabel, color: appearance.color }))
+  ];
+}
+
 // src/tools/task-create.ts
 source_default.level = 3;
 defineTool({
@@ -6393,13 +6761,8 @@ defineTool({
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    lines.push(...renderCheckboxHeading("ADDED TASK").split("\n"));
-    const task = result && typeof result === "object" ? result.task : null;
-    const subject = task?.subject ?? input?.subject;
-    if (subject) {
-      lines.push("");
-      lines.push(renderBadges(new Badge({ label: subject, color: "green", icon: "\u2713" })));
-    }
+    const task = taskFromResult(input, result, "pending");
+    if (task) lines.push(...renderTask(task, "ADDED TASK"));
     return { lines };
   }
 });
@@ -6416,39 +6779,86 @@ defineTool({
     pushDurationLine(lines, durationMs);
     const statusChangeTo = result && typeof result === "object" && result.statusChange?.to;
     const status = statusChangeTo || result && typeof result === "object" && result.status || input && typeof input === "object" && input.status || "";
-    const normalizedStatus = String(status).toLowerCase().trim();
-    const task = result && typeof result === "object" ? result.task : null;
-    const subject = task?.subject ?? input?.subject;
-    if (normalizedStatus === "completed") {
-      const heading = renderHeading({
-        word: "COMPLETED",
-        color: "green",
-        event: "agent",
-        caption: "TASK COMPLETED"
-      });
-      lines.push(...heading.split("\n"));
-      if (subject) {
-        lines.push("");
-        lines.push(renderBadges(new Badge({ label: subject, color: "green" })));
-      }
-    } else if (normalizedStatus === "in_progress" || normalizedStatus === "in-progress") {
-      const heading = renderHeading({
-        word: "IN PROGRESS",
-        color: "yellow",
-        event: "agent",
-        caption: "TASK STARTED"
-      });
-      lines.push(...heading.split("\n"));
-      if (subject) {
-        lines.push("");
-        lines.push(renderBadges(new Badge({ label: subject, color: "yellow" })));
-      }
-    } else {
-      if (result && typeof result === "object") {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
-      }
+    const normalizedStatus = normalizeStatus(status, "updated");
+    const task = taskFromResult(input, result, normalizedStatus);
+    if (task) lines.push(...renderTask({ ...task, status: normalizedStatus }));
+    else if (result && typeof result === "object") {
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
     return { lines };
+  }
+});
+
+// src/tools/task-list.ts
+source_default.level = 3;
+defineTool({
+  matches: "TaskList",
+  pre() {
+    return { lines: [] };
+  },
+  post(_input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const tasks = tasksFromResult(result);
+    for (const [index, task] of tasks.entries()) {
+      if (index > 0) lines.push("");
+      lines.push(...renderTask(task));
+    }
+    if (!tasks.length && result && typeof result === "object") {
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+    }
+    return { lines, isJson: !tasks.length };
+  }
+});
+
+// src/tools/browser.ts
+source_default.level = 3;
+var PRIMARY_KEYS = [
+  "url",
+  "element",
+  "ref",
+  "selector",
+  "text",
+  "key",
+  "code",
+  "function",
+  "filename",
+  "path"
+];
+function formatValue(value) {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+defineTool({
+  matches: (rawName) => /^mcp__playwright__browser_/i.test(rawName),
+  pre(input, ctx) {
+    const operation = playwrightOperation(ctx.toolName);
+    const lines = [];
+    const primaryKey = PRIMARY_KEYS.find((key) => input[key] != null);
+    if (primaryKey) lines.push(formatValue(input[primaryKey]));
+    for (const [key, value] of Object.entries(input)) {
+      if (key === primaryKey || value == null || value === "") continue;
+      lines.push(source_default.gray(`${key}: `) + formatValue(value));
+    }
+    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
+  },
+  post(_input, result, durationMs, ctx) {
+    const operation = playwrightOperation(ctx.toolName);
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const text2 = extractResultText(result);
+    if (text2?.trim()) {
+      const language = detectOutputLanguage(text2);
+      const formatted = language === "json" ? formatJSON(text2) : text2;
+      lines.push(renderCard(OUTPUT_BADGE, softCollapse(simpleHighlight(formatted, language))));
+    } else if (result && typeof result === "object") {
+      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+    }
+    return {
+      lines,
+      isJson: !text2?.trim(),
+      extraBadges: operationBadges(operation ? [operation] : [])
+    };
   }
 });
 
@@ -6594,7 +7004,7 @@ var FIELD_LABELS = {
   prompt: "Prompt",
   plan: "Plan"
 };
-function formatValue(value) {
+function formatValue2(value) {
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object" && value !== null) return JSON.stringify(value, null, 2);
   return String(value);
@@ -6605,7 +7015,7 @@ defineGenericTool({
     const { key: primaryKey, value: primaryValue } = pickPrimaryInput(rawTool, input);
     const lines = [];
     if (primaryValue != null) {
-      const formatted = formatValue(primaryValue);
+      const formatted = formatValue2(primaryValue);
       const lang = primaryKey === "command" ? "bash" : detectLanguage(formatted, rawTool);
       lines.push(simpleHighlight(formatted, lang));
     }
@@ -6613,9 +7023,10 @@ defineGenericTool({
       if (k === primaryKey) continue;
       const v = input[k];
       if (v == null || v === "") continue;
-      lines.push(source_default.gray(`${label}: `) + formatValue(v));
+      lines.push(source_default.gray(`${label}: `) + formatValue2(v));
     }
-    return { lines };
+    const operation = playwrightOperation(rawTool);
+    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
   },
   post(input, result, durationMs, ctx) {
     const rawTool = ctx.toolName;
@@ -6635,7 +7046,12 @@ defineGenericTool({
     } else if (result && typeof result === "object") {
       lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
     }
-    return { lines, isJson: !primary };
+    const operation = playwrightOperation(rawTool);
+    return {
+      lines,
+      isJson: !primary,
+      extraBadges: operationBadges(operation ? [operation] : [])
+    };
   }
 });
 
@@ -7088,10 +7504,10 @@ function fitSystemMessage(message) {
   return kept.join("\n") + TRIM_MARKER;
 }
 var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
-function writeOutput(data) {
+function writeOutput(data, { mirrorSystemMessageToStderr = true } = {}) {
   if (typeof data.systemMessage === "string" && data.systemMessage.length > 0) {
     data.systemMessage = CLEAR_LINE_PREFIX + fitSystemMessage(data.systemMessage);
-    process.stderr.write(data.systemMessage + "\n");
+    if (mirrorSystemMessageToStderr) process.stderr.write(data.systemMessage + "\n");
   }
   process.stdout.write(JSON.stringify(data, null, 2));
   process.exit(0);
@@ -7099,14 +7515,15 @@ function writeOutput(data) {
 
 // src/runtime/run-hook.ts
 async function runHook(name, handler) {
+  const mirrorSystemMessageToStderr = name !== "PreToolUse" && name !== "PostToolUse";
   try {
     const data = await readInput();
     const out = await handler(data ?? {}) ?? {};
-    writeOutput({ ...out });
+    writeOutput({ ...out }, { mirrorSystemMessageToStderr });
   } catch (err) {
     const detail = err instanceof Error ? err.stack ?? err.message : String(err);
     debugLog(name, "CRASH", detail);
-    writeOutput({});
+    writeOutput({}, { mirrorSystemMessageToStderr });
   }
   process.exit(0);
 }
