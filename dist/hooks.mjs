@@ -4806,24 +4806,6 @@ function expandPersistedOutput(text2) {
     }
   });
 }
-var DIVIDER_WIDTH = 60;
-function renderRuler(line) {
-  const plain = stripAnsi(line).trim();
-  const m = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
-  if (!m) return null;
-  const ch = m[1][0] === "=" || m[1][0] === "\u2550" ? "\u2550" : "\u2500";
-  const text2 = m[2].replace(/[-=─═]{3,}\s*$/, "").trim();
-  if (!text2) return source_default.gray(ch.repeat(DIVIDER_WIDTH));
-  const label = ` ${text2} `;
-  const remaining = Math.max(6, DIVIDER_WIDTH - label.length);
-  const left = Math.floor(remaining / 2);
-  return source_default.gray(ch.repeat(left)) + source_default.bold(label) + source_default.gray(ch.repeat(remaining - left));
-}
-function renderMetaTag(label, value) {
-  const labelChip = source_default.bgHex("#3a3a3a").black(` ${label} `);
-  const corner = source_default.hex("#3a3a3a")("\u25E4");
-  return labelChip + corner + ` ${value} ` + source_default.hex("#3a3a3a")("\u275A");
-}
 function stripAnsi(str) {
   return String(str).replace(/\x1b\[[0-9;]*m/g, "");
 }
@@ -4849,22 +4831,6 @@ function truncateAnsi(text2, maxVisibleLen, ellipsis = "\u2026") {
   }
   return out + "\x1B[0m" + ellipsis;
 }
-var FALLBACK_CONTENT_WIDTH = 96;
-var OUTER_INDENT_MARGIN = 6;
-var H_PADDING = 2;
-var MIN_CARD_HAIRLINE = 4;
-function getMaxContentWidth() {
-  const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
-  const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN - H_PADDING * 2;
-  return Math.max(20, usable);
-}
-function renderDuration(durationMs) {
-  return durationMs == null ? null : source_default.gray(`\u0394 ${durationMs}ms`);
-}
-function pushDurationLine(lines, durationMs) {
-  const line = renderDuration(durationMs);
-  if (line) lines.push(line);
-}
 function firstLine(value, maxLength) {
   const line = String(value ?? "").split("\n")[0] ?? "";
   return maxLength == null ? line : line.slice(0, maxLength);
@@ -4878,36 +4844,6 @@ function pickResultText(result, keys = ["text", "result", "output"]) {
     if (typeof value === "string") return value;
   }
   return null;
-}
-function prepareBox(content, minimumWidth = 0) {
-  const maxWidth = getMaxContentWidth();
-  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((l) => visibleWidth(l) > maxWidth ? truncateAnsi(l, maxWidth - 1) : l);
-  const maxLen = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
-  const width = Math.max(maxLen + H_PADDING * 2, minimumWidth);
-  const bg = source_default.bgHex("#252525");
-  const pad = bg(" ".repeat(width));
-  const body = lines.map(
-    (l) => bg(" ".repeat(H_PADDING) + l + " ".repeat(Math.max(0, width - H_PADDING - visibleWidth(l))))
-  );
-  return { lines: [pad, ...body, pad], width };
-}
-function renderBox(content) {
-  const box = prepareBox(content);
-  return ["", ...box.lines, ""].join("\n");
-}
-function renderCard(badge, content) {
-  const badgeWidth = visibleWidth(badge);
-  const box = prepareBox(content, badgeWidth + MIN_CARD_HAIRLINE);
-  const hairline = source_default.hex("#4a4a4a")("\u2500".repeat(Math.max(0, box.width - badgeWidth)));
-  return ["", badge + hairline, ...box.lines, ""].join("\n");
-}
-function renderSection({ badge, lines = [] }) {
-  let out = badge;
-  const body = lines.filter((l) => Boolean(l));
-  if (body.length) {
-    out += "\n\n" + body.join("\n");
-  }
-  return out;
 }
 var SAFETY_MAX_LINES = 2e3;
 function softCollapse(content, { maxLines = SAFETY_MAX_LINES, label = "lines" } = {}) {
@@ -4940,7 +4876,7 @@ function extractResultTextRaw(toolResponse) {
   return null;
 }
 
-// src/render/theme.ts
+// src/tui/theme.ts
 source_default.level = 3;
 var TOOL_ICONS = {
   Bash: "\u276F",
@@ -5027,7 +4963,7 @@ function getToolColor(rawName) {
   if (/search|find|grep|query|glob/i.test(tool)) return "red";
   return TOOL_COLORS.default;
 }
-var COLOR_MAP = {
+var BACKGROUND_COLOR_MAP = {
   blue: source_default.bgBlue,
   green: source_default.bgGreen,
   yellow: source_default.bgYellow,
@@ -5046,53 +4982,525 @@ var COLOR_MAP = {
   brightGray: source_default.bgGray,
   brightWhite: source_default.bgWhiteBright
 };
+var FOREGROUND_COLOR_MAP = {
+  blue: source_default.blue,
+  green: source_default.green,
+  yellow: source_default.yellow,
+  red: source_default.red,
+  magenta: source_default.magenta,
+  cyan: source_default.cyan,
+  gray: source_default.gray,
+  white: source_default.white,
+  black: source_default.black,
+  brightBlue: source_default.blueBright,
+  brightGreen: source_default.greenBright,
+  brightYellow: source_default.yellowBright,
+  brightRed: source_default.redBright,
+  brightMagenta: source_default.magentaBright,
+  brightCyan: source_default.cyanBright,
+  brightGray: source_default.gray,
+  brightWhite: source_default.whiteBright
+};
 function getBadgeColor(name) {
-  return COLOR_MAP[name] ?? source_default.bgBlue;
+  return BACKGROUND_COLOR_MAP[name] ?? source_default.bgBlue;
+}
+function getBadgeTextColor(name) {
+  return FOREGROUND_COLOR_MAP[name] ?? source_default.blue;
 }
 
-// src/render/badge.ts
-function renderBadge(props = {}) {
-  const { toolName = null, label = null } = props;
-  let pretty;
-  let badgeColor = props.color ?? null;
-  let badgeIcon = props.icon ?? null;
-  if (toolName) {
-    pretty = parseToolName(toolName).pretty;
-    if (!badgeIcon) badgeIcon = getToolIcon(toolName);
-    if (!badgeColor) badgeColor = getToolColor(toolName);
-  } else {
-    pretty = label ?? "";
-    if (!badgeColor) badgeColor = "cyan";
+// src/tui/badge.ts
+function resolveBadge(props) {
+  if (props.toolName) {
+    return {
+      text: parseToolName(props.toolName).pretty,
+      color: props.color ?? getToolColor(props.toolName),
+      icon: props.icon ?? getToolIcon(props.toolName)
+    };
   }
-  const bg = getBadgeColor(badgeColor);
-  return bg.black(` ${badgeIcon ? badgeIcon + " " : ""}${pretty} `);
+  return {
+    text: props.label ?? "",
+    color: props.color ?? "cyan",
+    icon: props.icon ?? null
+  };
+}
+function renderBadge(props = {}) {
+  const { text: text2, color, icon } = resolveBadge(props);
+  return getBadgeColor(color).black(` ${icon ? icon + " " : ""}${text2} `);
 }
 var Badge = class {
-  icon;
-  color;
-  label;
-  toolName;
   constructor(props = {}) {
-    this.icon = props.icon ?? null;
-    this.color = props.color ?? null;
-    this.label = props.label ?? null;
-    this.toolName = props.toolName ?? null;
+    this.props = props;
   }
+  props;
   toString() {
-    return renderBadge({
-      toolName: this.toolName,
-      label: this.label,
-      color: this.color,
-      icon: this.icon
-    });
+    return renderBadge(this.props);
+  }
+  renderRule(length, character = "\u2581") {
+    const { color } = resolveBadge(this.props);
+    return getBadgeTextColor(color)(character.repeat(Math.max(0, length)));
   }
 };
 function renderBadges(...badges) {
-  return badges.filter((b) => Boolean(b)).map((b) => b instanceof Badge ? b.toString() : String(b)).join(" ");
+  return badges.filter((badge) => Boolean(badge)).map((badge) => badge instanceof Badge ? badge.toString() : String(badge)).join(" ");
 }
-var RUNNING_BADGE = new Badge({ label: "Running", color: "magenta", icon: "\u23CE " }).toString();
-var OUTPUT_BADGE = new Badge({ label: "Output", color: "brightGreen", icon: "\u2258" }).toString();
-var META_BADGE = new Badge({ label: "metadata", color: "gray", icon: "\u26C1" }).toString();
+var RUNNING_BADGE = new Badge({ label: "Running", color: "magenta", icon: "\u23CE " });
+var OUTPUT_BADGE = new Badge({ label: "Output", color: "brightGreen", icon: "\u2258" });
+var META_BADGE = new Badge({ label: "metadata", color: "gray", icon: "\u26C1" });
+
+// src/tui/tokens.ts
+var TUI_TOKENS = {
+  width: {
+    fallbackContent: 96,
+    outerIndentMargin: 6,
+    divider: 60
+  },
+  card: {
+    background: "#252525",
+    ruleFallback: "#4a4a4a",
+    horizontalPadding: 2,
+    minimumHairline: 4
+  },
+  columns: {
+    gap: 3,
+    comfortMargin: 4
+  }
+};
+
+// src/tui/card.ts
+source_default.level = 3;
+function getMaxLayoutWidth() {
+  const columns = process.stdout.columns || Number(process.env.COLUMNS) || 0;
+  const { fallbackContent, outerIndentMargin } = TUI_TOKENS.width;
+  return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin);
+}
+function getMaxContentWidth() {
+  return Math.max(20, getMaxLayoutWidth() - TUI_TOKENS.card.horizontalPadding * 2);
+}
+function prepareBox({ content, minimumWidth = 0 }) {
+  const maxWidth = getMaxContentWidth();
+  const { background, horizontalPadding } = TUI_TOKENS.card;
+  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
+  const contentWidth = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
+  const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
+  const fill = source_default.bgHex(background);
+  const padding = fill(" ".repeat(width));
+  const body = lines.map(
+    (line) => fill(
+      " ".repeat(horizontalPadding) + line + " ".repeat(Math.max(0, width - horizontalPadding - visibleWidth(line)))
+    )
+  );
+  return { lines: [padding, ...body, padding], width };
+}
+function renderBox(props) {
+  const box = prepareBox(props);
+  return ["", ...box.lines, ""].join("\n");
+}
+function renderCard({ badges, content, minimumWidth = 0 }) {
+  const badgeList = Array.isArray(badges) ? badges : [badges];
+  const title = renderBadges(...badgeList);
+  if (!title) return renderBox({ content, minimumWidth });
+  const badgeWidth = visibleWidth(title);
+  const box = prepareBox({
+    content,
+    minimumWidth: Math.max(minimumWidth, badgeWidth + TUI_TOKENS.card.minimumHairline)
+  });
+  const ruleLength = Math.max(0, box.width - badgeWidth);
+  const ruleBadge = badgeList.find((badge) => badge instanceof Badge);
+  const rule = ruleBadge ? ruleBadge.renderRule(ruleLength) : source_default.hex(TUI_TOKENS.card.ruleFallback)("\u2581".repeat(ruleLength));
+  return ["", title + rule, ...box.lines, ""].join("\n");
+}
+
+// src/tui/columns.ts
+function prepareColumn(item) {
+  const lines = item.replace(/^\n+|\n+$/g, "").split("\n");
+  return {
+    lines,
+    width: Math.max(...lines.map(visibleWidth), 0)
+  };
+}
+function renderColumns({
+  items,
+  gap = TUI_TOKENS.columns.gap,
+  maximumWidth = getMaxLayoutWidth() - TUI_TOKENS.columns.comfortMargin
+}) {
+  const visibleItems = items.filter(Boolean);
+  if (visibleItems.length < 2) return visibleItems[0] ?? "";
+  const columns = visibleItems.map(prepareColumn);
+  const combinedWidth = columns.reduce((total, column) => total + column.width, 0) + gap * (columns.length - 1);
+  if (combinedWidth > maximumWidth) return visibleItems.join("\n");
+  const height = Math.max(...columns.map((column) => column.lines.length));
+  const rows = Array.from(
+    { length: height },
+    (_, row) => columns.map((column) => {
+      const line = column.lines[row] ?? "";
+      return line + " ".repeat(Math.max(0, column.width - visibleWidth(line)));
+    }).join(" ".repeat(gap)).trimEnd()
+  );
+  return "\n" + rows.join("\n") + "\n";
+}
+
+// src/tui/duration.ts
+source_default.level = 3;
+function renderDuration(durationMs) {
+  return durationMs == null ? null : source_default.gray(`\u0394 ${durationMs}ms`);
+}
+function pushDurationLine(lines, durationMs) {
+  const duration = renderDuration(durationMs);
+  if (duration) lines.push(duration);
+}
+
+// src/tui/file-card.ts
+function renderFileCard({
+  path: path5,
+  content,
+  details = null,
+  badges = []
+}) {
+  return renderCard({
+    badges: [
+      new Badge({ label: path5, color: "cyan", icon: "\u25A4" }),
+      details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : null,
+      ...badges
+    ],
+    content
+  });
+}
+
+// packages/ansi-headings/src/primitives.ts
+source_default.level = 3;
+
+// packages/ansi-headings/src/phrase.ts
+source_default.level = 3;
+
+// packages/ansi-headings/src/glyphs.json
+var glyphs_default = {
+  " ": [
+    "    ",
+    "    ",
+    "    "
+  ],
+  A: [
+    " \u2584\u2580\u2584",
+    " \u2588\u2580\u2588",
+    " \u2580 \u2580"
+  ],
+  B: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  C: [
+    " \u2584\u2580\u2580",
+    " \u2588  ",
+    " \u2580\u2580\u2580"
+  ],
+  D: [
+    " \u2588\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2580 "
+  ],
+  E: [
+    " \u2588\u2580\u2580",
+    " \u2588\u2580 ",
+    " \u2580\u2580\u2580"
+  ],
+  F: [
+    " \u2588\u2580\u2580",
+    " \u2588\u2580 ",
+    " \u2580  "
+  ],
+  G: [
+    " \u2584\u2580\u2580",
+    " \u2588 \u2584",
+    " \u2580\u2580\u2580"
+  ],
+  H: [
+    " \u2588 \u2588",
+    " \u2588\u2580\u2588",
+    " \u2580 \u2580"
+  ],
+  I: [
+    " \u2588",
+    " \u2588",
+    " \u2580"
+  ],
+  J: [
+    "   \u2588",
+    " \u2584 \u2588",
+    " \u2580\u2580 "
+  ],
+  K: [
+    " \u2588 \u2588",
+    " \u2588\u2580\u2584",
+    " \u2580 \u2580"
+  ],
+  L: [
+    " \u2588  ",
+    " \u2588  ",
+    " \u2580\u2580\u2580"
+  ],
+  M: [
+    " \u2588\u2588\u2584\u2588\u2584",
+    " \u2588 \u2588 \u2588",
+    " \u2580 \u2580 \u2580"
+  ],
+  N: [
+    " \u2588\u2584 \u2588",
+    " \u2588 \u2580\u2588",
+    " \u2580  \u2580"
+  ],
+  O: [
+    " \u2588\u2580\u2588",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2580"
+  ],
+  P: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580 ",
+    " \u2580  "
+  ],
+  Q: [
+    " \u2584\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2584"
+  ],
+  R: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580\u2584",
+    " \u2580 \u2580"
+  ],
+  S: [
+    " \u2584\u2580\u2580",
+    "  \u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  T: [
+    " \u2580\u2588\u2580",
+    "  \u2588 ",
+    "  \u2580 "
+  ],
+  U: [
+    " \u2588 \u2588",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2580"
+  ],
+  V: [
+    " \u2588 \u2588",
+    " \u2588 \u2588",
+    "  \u2580 "
+  ],
+  W: [
+    " \u2588 \u2588 \u2588",
+    " \u2588 \u2588 \u2588",
+    "  \u2580 \u2580 "
+  ],
+  X: [
+    " \u2588\u2584\u2588",
+    " \u2584\u2588\u2584",
+    " \u2580 \u2580"
+  ],
+  Y: [
+    " \u2588 \u2588",
+    "  \u2588 ",
+    "  \u2580 "
+  ],
+  Z: [
+    " \u2580\u2580\u2588",
+    " \u2584\u2584 ",
+    " \u2580\u2580\u2580"
+  ],
+  "0": [
+    " \u2584\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2584\u2580"
+  ],
+  "1": [
+    " \u2588 ",
+    " \u2588 ",
+    " \u2580 "
+  ],
+  "2": [
+    " \u2584\u2580\u2584",
+    "  \u2584\u2580",
+    " \u2580\u2580\u2580"
+  ],
+  "3": [
+    " \u2580\u2580\u2584",
+    "  \u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "4": [
+    " \u2588 \u2588",
+    " \u2580\u2580\u2588",
+    "   \u2580"
+  ],
+  "5": [
+    " \u2588\u2580\u2580",
+    " \u2580\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "6": [
+    " \u2584\u2580\u2580",
+    " \u2588\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "7": [
+    " \u2580\u2580\u2588",
+    "  \u2584\u2580",
+    "  \u2588 "
+  ],
+  "8": [
+    " \u2584\u2580\u2584",
+    " \u2584\u2580\u2584",
+    "  \u2580 "
+  ],
+  "9": [
+    " \u2584\u2580\u2584",
+    "  \u2580\u2588",
+    "  \u2580 "
+  ],
+  "!": [
+    " \u2588 ",
+    " \u2580 ",
+    " \u2580 "
+  ],
+  "?": [
+    " \u2580\u2580\u2584",
+    "  \u2584\u2580",
+    "  \u2580 "
+  ],
+  ".": [
+    "   ",
+    "   ",
+    " \u2580 "
+  ],
+  ",": [
+    "    ",
+    "    ",
+    " \u2580\u2588 "
+  ],
+  ":": [
+    " \u2584 ",
+    "   ",
+    " \u2580 "
+  ],
+  ";": [
+    " \u2584\u2584 ",
+    "    ",
+    " \u2580\u2588 "
+  ],
+  "-": [
+    "     ",
+    " \u2584\u2584\u2584 ",
+    "     "
+  ],
+  _: [
+    "     ",
+    "     ",
+    " \u2580\u2580\u2580 "
+  ],
+  "/": [
+    "   \u2588 ",
+    "  \u2588  ",
+    " \u2580   "
+  ]
+};
+
+// packages/ansi-headings/src/headings.ts
+source_default.level = 3;
+var glyphs = glyphs_default;
+function renderGlyphRows(text2, color) {
+  const chars = text2.toUpperCase().split("");
+  const rows = ["  ", "  ", "  "];
+  for (const ch of chars) {
+    const glyph = glyphs[ch] ?? glyphs[" "];
+    rows[0] += glyph[0];
+    rows[1] += glyph[1];
+    rows[2] += glyph[2];
+  }
+  const colorize = source_default[color] ?? source_default.cyan;
+  return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
+}
+function renderHeading({ word, color = "cyan", event, tone, width = 60, caption }) {
+  const glyphRows = renderGlyphRows(word, color);
+  const gutter = 2;
+  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
+  return "\n" + composed;
+}
+var EMPTY_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588   \u2588", " \u2588\u2584\u2584\u2584\u2588"];
+var CHECKED_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588\u2584 \u2588\u2588", " \u2588\u2584\u2588\u2584\u2588"];
+function wrapDescription(description, width) {
+  const lines = [];
+  for (const sourceLine of description.trim().split(/\r?\n/)) {
+    const words = sourceLine.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (Array.from(next).length <= width || !line) line = next;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+function renderCheckboxHeading(value, legacyColor = "green") {
+  const args = typeof value === "string" ? { caption: value, checked: true, color: legacyColor } : value;
+  const color = args.color ?? "green";
+  const colorize = source_default[color] ?? source_default.green;
+  const rows = (args.checked ? CHECKED_CHECKBOX_ROWS : EMPTY_CHECKBOX_ROWS).map((r) => colorize(r));
+  const gutter = 2;
+  const textIndent = Array.from(EMPTY_CHECKBOX_ROWS[0]).length + gutter;
+  const descriptionWidth = Math.max(20, (args.width ?? 60) - textIndent);
+  const description = args.description?.trim() ? wrapDescription(args.description, descriptionWidth) : [];
+  const slots = [
+    source_default.bold(colorize(args.caption)),
+    description[0] ? source_default.gray(description[0]) : "",
+    description[1] ? source_default.gray(description[1]) : ""
+  ];
+  const composed = rows.map((r, i) => r + " ".repeat(gutter) + slots[i]);
+  for (const line of description.slice(2)) {
+    composed.push(" ".repeat(textIndent) + source_default.gray(line));
+  }
+  return "\n" + composed.join("\n");
+}
+
+// src/tui/output-limit.ts
+source_default.level = 3;
+function renderOutputLimit({ omitted, unit }) {
+  const label = omitted === 1 ? unit.slice(0, -1) : unit;
+  return source_default.gray.italic(`  \u2026 ${omitted.toLocaleString("en-US")} ${label} omitted \u2026`);
+}
+
+// src/tui/ruler.ts
+source_default.level = 3;
+function renderRuler(line) {
+  const plain = stripAnsi(line).trim();
+  const match = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
+  if (!match) return null;
+  const character = match[1][0] === "=" || match[1][0] === "\u2550" ? "\u2550" : "\u2500";
+  const text2 = match[2].replace(/[-=─═]{3,}\s*$/, "").trim();
+  if (!text2) return source_default.gray(character.repeat(TUI_TOKENS.width.divider));
+  const label = ` ${text2} `;
+  const remaining = Math.max(6, TUI_TOKENS.width.divider - label.length);
+  const left = Math.floor(remaining / 2);
+  return source_default.gray(character.repeat(left)) + source_default.bold(label) + source_default.gray(character.repeat(remaining - left));
+}
+
+// src/tui/section.ts
+function renderSection({ badges, lines = [] }) {
+  const badgeList = Array.isArray(badges) ? badges : [badges];
+  let output = renderBadges(...badgeList);
+  const body = lines.filter((line) => Boolean(line));
+  if (body.length) output += "\n\n" + body.join("\n");
+  return output;
+}
 
 // src/render/highlight.ts
 source_default.level = 3;
@@ -5640,34 +6048,21 @@ function renderCommand(cmd) {
 }
 defineTool({
   matches: ["Bash", "mcp__wcgw__BashCommand"],
-  pre(input) {
-    const lines = [];
-    const cmd = commandOf(input);
-    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
-    const meta = [];
-    const w = input.wait_for_seconds;
-    const t = input.timeout;
-    const c = input.chats_id;
-    if (w != null) meta.push(source_default.gray(`wait: ${w}s`));
-    if (t != null) meta.push(source_default.gray(`timeout: ${t}s`));
-    if (c != null) meta.push(source_default.gray(`chat: ${c}`));
-    if (meta.length) lines.push(meta.join("  "));
-    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
-    return { lines, extraBadges: operationBadges(operations) };
-  },
   post(_input, result, durationMs) {
     const raw = extractResultText(result) ?? "";
     const lines = [];
     pushDurationLine(lines, durationMs);
+    const cards = [];
     const cmd = commandOf(_input);
-    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
+    if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
     if (stdout.trim()) {
       const lang = detectOutputLanguage(stdout);
       const highlighted = simpleHighlight(lang === "json" ? formatJSON(stdout) : stdout, lang);
       const processedStdout = lang === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
-      lines.push(renderCard(OUTPUT_BADGE, softCollapse(processedStdout)));
+      cards.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(processedStdout) }));
     }
+    if (cards.length) lines.push(renderColumns({ items: cards }));
     const trailerParts = [];
     if (status !== null) {
       trailerParts.push(status === "0" ? source_default.green(`exit:${status}`) : source_default.red(`exit:${status}`));
@@ -5685,34 +6080,13 @@ defineTool({
 // src/render/file-preview.ts
 import fs2 from "node:fs";
 
-// packages/image-to-ascii/src/index.ts
+// packages/image-to-ascii/src/decode.ts
 var import_pngjs = __toESM(require_png(), 1);
 var import_jpeg_js = __toESM(require_jpeg_js(), 1);
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os2 from "node:os";
 import path from "node:path";
-var MAX_ROWS = 120;
-var ALPHA_OPAQUE = 128;
-var BYTE_BUDGET = 9200;
-var ATTEMPTS = [
-  { mask: 255 },
-  { mask: 252 },
-  { mask: 248 },
-  { palette: true }
-];
-var MIN_COLS = 24;
-var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
-function to256(r, g, b) {
-  if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
-    if (r < 8) return 16;
-    if (r > 238) return 231;
-    return 232 + Math.min(23, Math.round((r - 8) / 10));
-  }
-  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
-}
-var FG_RESET = "\x1B[39m";
-var BG_RESET = "\x1B[49m";
 function decodeWebp(buffer) {
   const base = path.join(os2.tmpdir(), `claude-webp-${process.pid}-${Date.now()}`);
   const inPath = `${base}.webp`;
@@ -5732,6 +6106,572 @@ function decodeWebp(buffer) {
     }
   }
 }
+function decodeImage(buffer, ext) {
+  const normalizedExt = ext.toLowerCase().replace(/^\./, "");
+  let img;
+  try {
+    if (normalizedExt === "png") img = import_pngjs.PNG.sync.read(buffer);
+    else if (normalizedExt === "jpg" || normalizedExt === "jpeg") img = import_jpeg_js.default.decode(buffer, { useTArray: true });
+    else if (normalizedExt === "webp") img = decodeWebp(buffer);
+    else return null;
+  } catch {
+    return null;
+  }
+  return img.width && img.height ? img : null;
+}
+
+// packages/image-to-ascii/src/sat.ts
+var MAX_SAT_PIXELS = 4e6;
+function decimationFactor(width, height) {
+  let factor = 1;
+  while (width / factor * (height / factor) > MAX_SAT_PIXELS) factor++;
+  return factor;
+}
+function buildSAT(img) {
+  const factor = decimationFactor(img.width, img.height);
+  const width = Math.max(1, Math.floor(img.width / factor));
+  const height = Math.max(1, Math.floor(img.height / factor));
+  const stride = width + 1;
+  const planes = [
+    new Uint32Array(stride * (height + 1)),
+    new Uint32Array(stride * (height + 1)),
+    new Uint32Array(stride * (height + 1)),
+    new Uint32Array(stride * (height + 1))
+  ];
+  for (let y = 0; y < height; y++) {
+    const rowAbove = y * stride;
+    const row = (y + 1) * stride;
+    for (let x = 0; x < width; x++) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      let n = 0;
+      const sx1 = Math.min(img.width, (x + 1) * factor);
+      const sy1 = Math.min(img.height, (y + 1) * factor);
+      for (let sy = y * factor; sy < sy1; sy++) {
+        for (let sx = x * factor; sx < sx1; sx++) {
+          const i = (sy * img.width + sx) * 4;
+          const alpha = img.data[i + 3] ?? 255;
+          r += Math.round((img.data[i] ?? 0) * alpha / 255);
+          g += Math.round((img.data[i + 1] ?? 0) * alpha / 255);
+          b += Math.round((img.data[i + 2] ?? 0) * alpha / 255);
+          a += alpha;
+          n++;
+        }
+      }
+      const inv = n || 1;
+      const values = [Math.round(r / inv), Math.round(g / inv), Math.round(b / inv), Math.round(a / inv)];
+      for (let p = 0; p < 4; p++) {
+        const plane = planes[p];
+        plane[row + x + 1] = values[p] + plane[row + x] + plane[rowAbove + x + 1] - plane[rowAbove + x];
+      }
+    }
+  }
+  return { width, height, stride, planes };
+}
+function rectMean(sat, x0, y0, x1, y1, out, withAlpha = true) {
+  const { stride, width, height, planes } = sat;
+  const area = (x1 - x0) * (y1 - y0);
+  if (!(area > 0)) {
+    out.r = 0;
+    out.g = 0;
+    out.b = 0;
+    out.a = 0;
+    return out;
+  }
+  const cx0 = x0 < 0 ? 0 : x0 > width ? width : x0;
+  const cy0 = y0 < 0 ? 0 : y0 > height ? height : y0;
+  const cx1 = x1 < 0 ? 0 : x1 > width ? width : x1;
+  const cy1 = y1 < 0 ? 0 : y1 > height ? height : y1;
+  const xi0 = cx0 < width - 1 ? cx0 | 0 : width - 1;
+  const xi1 = cx1 < width - 1 ? cx1 | 0 : width - 1;
+  const yi0 = cy0 < height - 1 ? cy0 | 0 : height - 1;
+  const yi1 = cy1 < height - 1 ? cy1 | 0 : height - 1;
+  const fx0 = cx0 - xi0;
+  const fx1 = cx1 - xi1;
+  const fy0 = cy0 - yi0;
+  const fy1 = cy1 - yi1;
+  const rowA0 = yi0 * stride;
+  const rowB0 = rowA0 + stride;
+  const rowA1 = yi1 * stride;
+  const rowB1 = rowA1 + stride;
+  const w00a = (1 - fx0) * (1 - fy0), w10a = fx0 * (1 - fy0), w01a = (1 - fx0) * fy0, w11a = fx0 * fy0;
+  const w00b = (1 - fx1) * (1 - fy0), w10b = fx1 * (1 - fy0), w01b = (1 - fx1) * fy0, w11b = fx1 * fy0;
+  const w00c = (1 - fx0) * (1 - fy1), w10c = fx0 * (1 - fy1), w01c = (1 - fx0) * fy1, w11c = fx0 * fy1;
+  const w00d = (1 - fx1) * (1 - fy1), w10d = fx1 * (1 - fy1), w01d = (1 - fx1) * fy1, w11d = fx1 * fy1;
+  const inv = 1 / area;
+  const count = withAlpha ? 4 : 3;
+  let r = 0, g = 0, b = 0, a = 0;
+  for (let p = 0; p < count; p++) {
+    const plane = planes[p];
+    const s11 = plane[rowA1 + xi1] * w00d + plane[rowA1 + xi1 + 1] * w10d + plane[rowB1 + xi1] * w01d + plane[rowB1 + xi1 + 1] * w11d;
+    const s01 = plane[rowA1 + xi0] * w00c + plane[rowA1 + xi0 + 1] * w10c + plane[rowB1 + xi0] * w01c + plane[rowB1 + xi0 + 1] * w11c;
+    const s10 = plane[rowA0 + xi1] * w00b + plane[rowA0 + xi1 + 1] * w10b + plane[rowB0 + xi1] * w01b + plane[rowB0 + xi1 + 1] * w11b;
+    const s00 = plane[rowA0 + xi0] * w00a + plane[rowA0 + xi0 + 1] * w10a + plane[rowB0 + xi0] * w01a + plane[rowB0 + xi0 + 1] * w11a;
+    const value = (s11 - s01 - s10 + s00) * inv;
+    if (p === 0) r = value;
+    else if (p === 1) g = value;
+    else if (p === 2) b = value;
+    else a = value;
+  }
+  if (!withAlpha) a = 255;
+  const scale = a > 0 ? 255 / a : 0;
+  out.r = r * scale;
+  out.g = g * scale;
+  out.b = b * scale;
+  out.a = a;
+  return out;
+}
+function subCellRect(sat, gridX, gridY, gridCols, gridRows) {
+  return [
+    gridX * sat.width / gridCols,
+    gridY * sat.height / gridRows,
+    (gridX + 1) * sat.width / gridCols,
+    (gridY + 1) * sat.height / gridRows
+  ];
+}
+
+// packages/image-to-ascii/src/budget.ts
+var DEFAULT_BUDGET = { total: 9200 };
+var BG_RESET = "\x1B[49m";
+function normalizeBudget(budget) {
+  if (budget === void 0) return DEFAULT_BUDGET;
+  return typeof budget === "number" ? { total: budget } : budget;
+}
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    count++;
+    at = haystack.indexOf(needle, at + needle.length);
+  }
+  return count;
+}
+function costOf(lines, spec) {
+  const perRow = spec.perRow ?? 0;
+  const surcharge = spec.bgResetSurcharge ?? 0;
+  let total = spec.overhead ?? 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    total += line.length + perRow;
+    if (i > 0) total += 1;
+    if (surcharge) total += countOccurrences(line, BG_RESET) * surcharge;
+  }
+  return total;
+}
+
+// packages/image-to-ascii/src/glyphs/coverage.ts
+function coverageFromRects(basis2, rects) {
+  const w = new Float64Array(basis2.size);
+  const cellW = 1 / basis2.cols;
+  const cellH = 1 / basis2.rows;
+  const subArea = cellW * cellH;
+  for (let row = 0; row < basis2.rows; row++) {
+    for (let col = 0; col < basis2.cols; col++) {
+      const sx0 = col * cellW;
+      const sy0 = row * cellH;
+      const sx1 = sx0 + cellW;
+      const sy1 = sy0 + cellH;
+      let covered = 0;
+      for (const [x0, y0, x1, y1] of rects) {
+        const ox = Math.min(sx1, x1) - Math.max(sx0, x0);
+        const oy = Math.min(sy1, y1) - Math.max(sy0, y0);
+        if (ox > 0 && oy > 0) covered += ox * oy;
+      }
+      w[row * basis2.cols + col] = Math.min(1, covered / subArea);
+    }
+  }
+  return w;
+}
+function coverageUniform(basis2, alpha) {
+  return new Float64Array(basis2.size).fill(alpha);
+}
+function rectsForMask(basis2, mask) {
+  const rects = [];
+  const cellW = 1 / basis2.cols;
+  const cellH = 1 / basis2.rows;
+  for (let i = 0; i < basis2.size; i++) {
+    if (!(mask & 1 << i)) continue;
+    const col = i % basis2.cols;
+    const row = i / basis2.cols | 0;
+    rects.push([col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH]);
+  }
+  return rects;
+}
+
+// packages/image-to-ascii/src/glyphs/types.ts
+function basis(id, cols, rows) {
+  return { id, cols, rows, size: cols * rows };
+}
+var BASES = {
+  "1x1": basis("1x1", 1, 1),
+  "1x2": basis("1x2", 1, 2),
+  "2x2": basis("2x2", 2, 2),
+  "2x3": basis("2x3", 2, 3),
+  "2x4": basis("2x4", 2, 4),
+  "1x8": basis("1x8", 1, 8),
+  "8x1": basis("8x1", 8, 1),
+  "4x6": basis("4x6", 4, 6)
+};
+function solveConstants(w) {
+  let a2 = 0;
+  let cross = 0;
+  let b2 = 0;
+  for (let i = 0; i < w.length; i++) {
+    const v = w[i];
+    a2 += v * v;
+    cross += v * (1 - v);
+    b2 += (1 - v) * (1 - v);
+  }
+  a2 /= w.length;
+  cross /= w.length;
+  b2 /= w.length;
+  return { a2, cross, b2, det: a2 * b2 - cross * cross };
+}
+function makeGlyph(char, family, coverageBasis, w, mask = -1) {
+  let area = 0;
+  let binary = true;
+  let uniform = true;
+  const first = w[0];
+  for (let i = 0; i < w.length; i++) {
+    const v = w[i];
+    area += v;
+    if (v !== 0 && v !== 1) binary = false;
+    if (v !== first) uniform = false;
+  }
+  return {
+    char,
+    units: char.length === 2 ? 2 : 1,
+    family,
+    basis: coverageBasis,
+    w,
+    area: area / w.length,
+    binary,
+    uniform,
+    mask,
+    solve: solveConstants(w)
+  };
+}
+
+// packages/image-to-ascii/src/glyphs/eighths.ts
+var VERTICAL = [
+  [1, true, "\u2581"],
+  [2, true, "\u2582"],
+  [3, true, "\u2583"],
+  [4, true, "\u2584"],
+  [5, true, "\u2585"],
+  [6, true, "\u2586"],
+  [7, true, "\u2587"],
+  [1, false, "\u2594"],
+  [2, false, "\u{1FB82}"],
+  [3, false, "\u{1FB83}"],
+  [4, false, "\u2580"],
+  [5, false, "\u{1FB84}"],
+  [6, false, "\u{1FB85}"],
+  [7, false, "\u{1FB86}"]
+];
+var HORIZONTAL = [
+  [1, true, "\u258F"],
+  [2, true, "\u258E"],
+  [3, true, "\u258D"],
+  [4, true, "\u258C"],
+  [5, true, "\u258B"],
+  [6, true, "\u258A"],
+  [7, true, "\u2589"],
+  [1, false, "\u2595"]
+];
+function verticalEighthFamily() {
+  const b = BASES["1x8"];
+  return VERTICAL.map(([eighths, fromBottom, char]) => {
+    const height = eighths / 8;
+    const rect = fromBottom ? [0, 1 - height, 1, 1] : [0, 0, 1, height];
+    return makeGlyph(char, "eighth-v", b, coverageFromRects(b, [rect]));
+  });
+}
+function horizontalEighthFamily() {
+  const b = BASES["8x1"];
+  return HORIZONTAL.map(([eighths, fromLeft, char]) => {
+    const width = eighths / 8;
+    const rect = fromLeft ? [0, 0, width, 1] : [1 - width, 0, 1, 1];
+    return makeGlyph(char, "eighth-h", b, coverageFromRects(b, [rect]));
+  });
+}
+
+// packages/image-to-ascii/src/glyphs/octant-table.ts
+var OCTANT_CHARS = [
+  " ",
+  "\u{1CEA8}",
+  "\u{1CEAB}",
+  "\u{1FB82}",
+  "\u{1CD00}",
+  "\u2598",
+  "\u{1CD01}",
+  "\u{1CD02}",
+  "\u{1CD03}",
+  "\u{1CD04}",
+  "\u259D",
+  "\u{1CD05}",
+  "\u{1CD06}",
+  "\u{1CD07}",
+  "\u{1CD08}",
+  "\u2580",
+  "\u{1CD09}",
+  "\u{1CD0A}",
+  "\u{1CD0B}",
+  "\u{1CD0C}",
+  "\u{1FBE6}",
+  "\u{1CD0D}",
+  "\u{1CD0E}",
+  "\u{1CD0F}",
+  "\u{1CD10}",
+  "\u{1CD11}",
+  "\u{1CD12}",
+  "\u{1CD13}",
+  "\u{1CD14}",
+  "\u{1CD15}",
+  "\u{1CD16}",
+  "\u{1CD17}",
+  "\u{1CD18}",
+  "\u{1CD19}",
+  "\u{1CD1A}",
+  "\u{1CD1B}",
+  "\u{1CD1C}",
+  "\u{1CD1D}",
+  "\u{1CD1E}",
+  "\u{1CD1F}",
+  "\u{1FBE7}",
+  "\u{1CD20}",
+  "\u{1CD21}",
+  "\u{1CD22}",
+  "\u{1CD23}",
+  "\u{1CD24}",
+  "\u{1CD25}",
+  "\u{1CD26}",
+  "\u{1CD27}",
+  "\u{1CD28}",
+  "\u{1CD29}",
+  "\u{1CD2A}",
+  "\u{1CD2B}",
+  "\u{1CD2C}",
+  "\u{1CD2D}",
+  "\u{1CD2E}",
+  "\u{1CD2F}",
+  "\u{1CD30}",
+  "\u{1CD31}",
+  "\u{1CD32}",
+  "\u{1CD33}",
+  "\u{1CD34}",
+  "\u{1CD35}",
+  "\u{1FB85}",
+  "\u{1CEA3}",
+  "\u{1CD36}",
+  "\u{1CD37}",
+  "\u{1CD38}",
+  "\u{1CD39}",
+  "\u{1CD3A}",
+  "\u{1CD3B}",
+  "\u{1CD3C}",
+  "\u{1CD3D}",
+  "\u{1CD3E}",
+  "\u{1CD3F}",
+  "\u{1CD40}",
+  "\u{1CD41}",
+  "\u{1CD42}",
+  "\u{1CD43}",
+  "\u{1CD44}",
+  "\u2596",
+  "\u{1CD45}",
+  "\u{1CD46}",
+  "\u{1CD47}",
+  "\u{1CD48}",
+  "\u258C",
+  "\u{1CD49}",
+  "\u{1CD4A}",
+  "\u{1CD4B}",
+  "\u{1CD4C}",
+  "\u259E",
+  "\u{1CD4D}",
+  "\u{1CD4E}",
+  "\u{1CD4F}",
+  "\u{1CD50}",
+  "\u259B",
+  "\u{1CD51}",
+  "\u{1CD52}",
+  "\u{1CD53}",
+  "\u{1CD54}",
+  "\u{1CD55}",
+  "\u{1CD56}",
+  "\u{1CD57}",
+  "\u{1CD58}",
+  "\u{1CD59}",
+  "\u{1CD5A}",
+  "\u{1CD5B}",
+  "\u{1CD5C}",
+  "\u{1CD5D}",
+  "\u{1CD5E}",
+  "\u{1CD5F}",
+  "\u{1CD60}",
+  "\u{1CD61}",
+  "\u{1CD62}",
+  "\u{1CD63}",
+  "\u{1CD64}",
+  "\u{1CD65}",
+  "\u{1CD66}",
+  "\u{1CD67}",
+  "\u{1CD68}",
+  "\u{1CD69}",
+  "\u{1CD6A}",
+  "\u{1CD6B}",
+  "\u{1CD6C}",
+  "\u{1CD6D}",
+  "\u{1CD6E}",
+  "\u{1CD6F}",
+  "\u{1CD70}",
+  "\u{1CEA0}",
+  "\u{1CD71}",
+  "\u{1CD72}",
+  "\u{1CD73}",
+  "\u{1CD74}",
+  "\u{1CD75}",
+  "\u{1CD76}",
+  "\u{1CD77}",
+  "\u{1CD78}",
+  "\u{1CD79}",
+  "\u{1CD7A}",
+  "\u{1CD7B}",
+  "\u{1CD7C}",
+  "\u{1CD7D}",
+  "\u{1CD7E}",
+  "\u{1CD7F}",
+  "\u{1CD80}",
+  "\u{1CD81}",
+  "\u{1CD82}",
+  "\u{1CD83}",
+  "\u{1CD84}",
+  "\u{1CD85}",
+  "\u{1CD86}",
+  "\u{1CD87}",
+  "\u{1CD88}",
+  "\u{1CD89}",
+  "\u{1CD8A}",
+  "\u{1CD8B}",
+  "\u{1CD8C}",
+  "\u{1CD8D}",
+  "\u{1CD8E}",
+  "\u{1CD8F}",
+  "\u2597",
+  "\u{1CD90}",
+  "\u{1CD91}",
+  "\u{1CD92}",
+  "\u{1CD93}",
+  "\u259A",
+  "\u{1CD94}",
+  "\u{1CD95}",
+  "\u{1CD96}",
+  "\u{1CD97}",
+  "\u2590",
+  "\u{1CD98}",
+  "\u{1CD99}",
+  "\u{1CD9A}",
+  "\u{1CD9B}",
+  "\u259C",
+  "\u{1CD9C}",
+  "\u{1CD9D}",
+  "\u{1CD9E}",
+  "\u{1CD9F}",
+  "\u{1CDA0}",
+  "\u{1CDA1}",
+  "\u{1CDA2}",
+  "\u{1CDA3}",
+  "\u{1CDA4}",
+  "\u{1CDA5}",
+  "\u{1CDA6}",
+  "\u{1CDA7}",
+  "\u{1CDA8}",
+  "\u{1CDA9}",
+  "\u{1CDAA}",
+  "\u{1CDAB}",
+  "\u2582",
+  "\u{1CDAC}",
+  "\u{1CDAD}",
+  "\u{1CDAE}",
+  "\u{1CDAF}",
+  "\u{1CDB0}",
+  "\u{1CDB1}",
+  "\u{1CDB2}",
+  "\u{1CDB3}",
+  "\u{1CDB4}",
+  "\u{1CDB5}",
+  "\u{1CDB6}",
+  "\u{1CDB7}",
+  "\u{1CDB8}",
+  "\u{1CDB9}",
+  "\u{1CDBA}",
+  "\u{1CDBB}",
+  "\u{1CDBC}",
+  "\u{1CDBD}",
+  "\u{1CDBE}",
+  "\u{1CDBF}",
+  "\u{1CDC0}",
+  "\u{1CDC1}",
+  "\u{1CDC2}",
+  "\u{1CDC3}",
+  "\u{1CDC4}",
+  "\u{1CDC5}",
+  "\u{1CDC6}",
+  "\u{1CDC7}",
+  "\u{1CDC8}",
+  "\u{1CDC9}",
+  "\u{1CDCA}",
+  "\u{1CDCB}",
+  "\u{1CDCC}",
+  "\u{1CDCD}",
+  "\u{1CDCE}",
+  "\u{1CDCF}",
+  "\u{1CDD0}",
+  "\u{1CDD1}",
+  "\u{1CDD2}",
+  "\u{1CDD3}",
+  "\u{1CDD4}",
+  "\u{1CDD5}",
+  "\u{1CDD6}",
+  "\u{1CDD7}",
+  "\u{1CDD8}",
+  "\u{1CDD9}",
+  "\u{1CDDA}",
+  "\u2584",
+  "\u{1CDDB}",
+  "\u{1CDDC}",
+  "\u{1CDDD}",
+  "\u{1CDDE}",
+  "\u2599",
+  "\u{1CDDF}",
+  "\u{1CDE0}",
+  "\u{1CDE1}",
+  "\u{1CDE2}",
+  "\u259F",
+  "\u{1CDE3}",
+  "\u2586",
+  "\u{1CDE4}",
+  "\u{1CDE5}",
+  "\u2588"
+];
+
+// packages/image-to-ascii/src/glyphs/octants.ts
+function octantChar(mask) {
+  return OCTANT_CHARS[mask & 255];
+}
+function octantFamily() {
+  const b = BASES["2x4"];
+  const out = [];
+  for (let mask = 0; mask < 256; mask++) {
+    out.push(makeGlyph(octantChar(mask), "octant", b, coverageFromRects(b, rectsForMask(b, mask)), mask));
+  }
+  return out;
+}
+
+// packages/image-to-ascii/src/glyphs/sextants.ts
 var LEFT_HALF_MASK = 21;
 var RIGHT_HALF_MASK = 42;
 var LAST_SEPARATED_MASK = 54;
@@ -5747,135 +6687,585 @@ function regularSextant(mask) {
 function separatedSextant(mask) {
   return mask >= 1 && mask <= LAST_SEPARATED_MASK ? String.fromCodePoint(118352 + mask) : null;
 }
-function mean(samples, mask, selected) {
+function sextantFamily() {
+  const b = BASES["2x3"];
+  const out = [];
+  for (let mask = 0; mask < 64; mask++) {
+    out.push(makeGlyph(regularSextant(mask), "sextant", b, coverageFromRects(b, rectsForMask(b, mask)), mask));
+  }
+  return out;
+}
+var SEPARATED_INSET = 0.15;
+function separatedFamily() {
+  const b = BASES["2x3"];
+  const out = [];
+  for (let mask = 1; mask <= LAST_SEPARATED_MASK; mask++) {
+    const char = separatedSextant(mask);
+    if (char === null) continue;
+    const rects = rectsForMask(b, mask).map(([x0, y0, x1, y1]) => {
+      const ix = (x1 - x0) * SEPARATED_INSET;
+      const iy = (y1 - y0) * SEPARATED_INSET;
+      return [x0 + ix, y0 + iy, x1 - ix, y1 - iy];
+    });
+    out.push(makeGlyph(char, "separated", b, coverageFromRects(b, rects), mask));
+  }
+  return out;
+}
+
+// packages/image-to-ascii/src/glyphs/shades.ts
+var SHADES = [
+  [0.25, "\u2591"],
+  [0.5, "\u2592"],
+  [0.75, "\u2593"]
+];
+function shadeFamily() {
+  const b = BASES["1x1"];
+  return SHADES.map(([alpha, char]) => makeGlyph(char, "shade", b, coverageUniform(b, alpha)));
+}
+
+// packages/image-to-ascii/src/glyphs/table.ts
+var BUILDERS = {
+  sextant: sextantFamily,
+  octant: octantFamily,
+  separated: separatedFamily,
+  "eighth-v": verticalEighthFamily,
+  "eighth-h": horizontalEighthFamily,
+  shade: shadeFamily
+};
+var POWER_SETS = /* @__PURE__ */ new Set(["sextant", "octant", "braille"]);
+function buildTable(families) {
+  const glyphs2 = [];
+  const claimed = /* @__PURE__ */ new Set();
+  const enabled = [];
+  for (const family of families) {
+    const build = BUILDERS[family];
+    if (!build) continue;
+    enabled.push(family);
+    const isPowerSet = POWER_SETS.has(family);
+    for (const glyph of build()) {
+      if (!isPowerSet && claimed.has(glyph.char)) continue;
+      claimed.add(glyph.char);
+      glyphs2.push(glyph);
+    }
+  }
+  const byBasis = /* @__PURE__ */ new Map();
+  for (let i = 0; i < glyphs2.length; i++) {
+    const id = glyphs2[i].basis.id;
+    const list = byBasis.get(id);
+    if (list) list.push(i);
+    else byBasis.set(id, [i]);
+  }
+  const bases = [];
+  for (const id of byBasis.keys()) {
+    const glyph = glyphs2.find((g) => g.basis.id === id);
+    if (glyph) bases.push(glyph.basis);
+  }
+  return {
+    glyphs: glyphs2,
+    families: enabled,
+    byBasis: new Map([...byBasis].map(([id, list]) => [id, Int32Array.from(list)])),
+    bases,
+    complement: buildComplements(glyphs2),
+    chars: claimed
+  };
+}
+function buildComplements(glyphs2) {
+  const out = new Int32Array(glyphs2.length).fill(-1);
+  const key = (w) => w.join(",");
+  const index = /* @__PURE__ */ new Map();
+  for (let i = 0; i < glyphs2.length; i++) {
+    const id = `${glyphs2[i].basis.id}|${key(glyphs2[i].w)}`;
+    if (!index.has(id)) index.set(id, i);
+  }
+  for (let i = 0; i < glyphs2.length; i++) {
+    const g = glyphs2[i];
+    const inverted = Float64Array.from(g.w, (v) => 1 - v);
+    const found = index.get(`${g.basis.id}|${key(inverted)}`);
+    if (found !== void 0 && found !== i) out[i] = found;
+  }
+  return out;
+}
+
+// packages/image-to-ascii/src/fit.ts
+function grayOrder(bits) {
+  const count = 1 << bits;
+  const order = new Int32Array(count);
+  const flipBit = new Int32Array(count);
+  const flipOn = new Uint8Array(count);
+  for (let i = 0; i < count; i++) order[i] = i ^ i >> 1;
+  for (let i = 1; i < count; i++) {
+    const changed = order[i] ^ order[i - 1];
+    flipBit[i] = Math.log2(changed) | 0;
+    flipOn[i] = (order[i] & changed) !== 0 ? 1 : 0;
+  }
+  return { order, flipBit, flipOn };
+}
+function compileTable(table) {
+  const powerSets = [];
+  const shaped = [];
+  const uniformShaped = [];
+  const bases = /* @__PURE__ */ new Map();
+  const byFamilyBasis = /* @__PURE__ */ new Map();
+  for (const glyph of table.glyphs) {
+    const key = `${glyph.family}|${glyph.basis.id}`;
+    const list = byFamilyBasis.get(key);
+    if (list) list.push(glyph);
+    else byFamilyBasis.set(key, [glyph]);
+  }
+  for (const [key, glyphs2] of byFamilyBasis) {
+    const basis2 = glyphs2[0].basis;
+    if (glyphs2[0].family === "separated") continue;
+    const complete = glyphs2.length === 1 << basis2.size && glyphs2.every((g) => g.mask >= 0 && g.binary);
+    if (complete) {
+      const chars = new Array(glyphs2.length);
+      const ordered = new Array(glyphs2.length);
+      for (const g of glyphs2) {
+        chars[g.mask] = g.char;
+        ordered[g.mask] = g;
+      }
+      const walk = grayOrder(basis2.size);
+      powerSets.push({ basis: basis2, chars, glyphs: ordered, ...walk });
+      bases.set(basis2.id, basis2);
+      continue;
+    }
+    for (const glyph of glyphs2) {
+      const index = [];
+      const weight = [];
+      for (let i = 0; i < glyph.w.length; i++) {
+        if (glyph.w[i] > 0) {
+          index.push(i);
+          weight.push(glyph.w[i]);
+        }
+      }
+      const entry = { glyph, index: Int32Array.from(index), weight: Float64Array.from(weight) };
+      if (glyph.uniform) uniformShaped.push(entry);
+      else shaped.push(entry);
+      bases.set(basis2.id, basis2);
+    }
+    void key;
+  }
+  bases.set("1x1", BASES["1x1"]);
+  bases.set("2x3", BASES["2x3"]);
+  return { powerSets, shaped, uniformShaped, bases: [...bases.values()] };
+}
+var rectScratch = { r: 0, g: 0, b: 0, a: 0 };
+function makeCellSamples(compiled) {
+  const planes = /* @__PURE__ */ new Map();
+  for (const basis2 of compiled.bases) planes.set(basis2.id, new Float64Array(basis2.size * 3));
+  return {
+    planes,
+    mean: new Float64Array(3),
+    alpha: new Float64Array(BASES["2x3"].size),
+    meanAlpha: 0
+  };
+}
+function sampleCell(sat, compiled, cellX, cellY, cols, rows, out) {
+  const cellW = sat.width / cols;
+  const cellH = sat.height / rows;
+  const left = cellX * cellW;
+  const top = cellY * cellH;
+  for (const basis2 of compiled.bases) {
+    const plane = out.planes.get(basis2.id);
+    const needsAlpha = basis2.id === "2x3";
+    const subW = cellW / basis2.cols;
+    const subH = cellH / basis2.rows;
+    for (let row = 0; row < basis2.rows; row++) {
+      for (let col = 0; col < basis2.cols; col++) {
+        const x0 = left + col * subW;
+        const y0 = top + row * subH;
+        rectMean(sat, x0, y0, x0 + subW, y0 + subH, rectScratch, needsAlpha);
+        const at = (row * basis2.cols + col) * 3;
+        plane[at] = rectScratch.r;
+        plane[at + 1] = rectScratch.g;
+        plane[at + 2] = rectScratch.b;
+        if (basis2.id === "2x3") out.alpha[row * basis2.cols + col] = rectScratch.a;
+      }
+    }
+  }
+  rectMean(sat, left, top, left + cellW, top + cellH, rectScratch);
+  out.mean[0] = rectScratch.r;
+  out.mean[1] = rectScratch.g;
+  out.mean[2] = rectScratch.b;
+  out.meanAlpha = rectScratch.a;
+}
+var CLAMP_LO = 0;
+var CLAMP_HI = 255;
+var clamp = (v) => v < CLAMP_LO ? CLAMP_LO : v > CLAMP_HI ? CLAMP_HI : v;
+function scoreBinary(px, py, pz, mx, my, mz, a, n) {
+  const P = 1 / n;
+  const p0 = px * P;
+  const p1 = py * P;
+  const p2 = pz * P;
+  if (a <= 0 || a >= 1) return mx * mx + my * my + mz * mz;
+  const q0 = mx - p0;
+  const q1 = my - p1;
+  const q2 = mz - p2;
+  const ia = 1 / a;
+  const ib = 1 / (1 - a);
+  return (p0 * p0 + p1 * p1 + p2 * p2) * ia + (q0 * q0 + q1 * q1 + q2 * q2) * ib;
+}
+function fitCell(compiled, samples, out, margin = 0) {
+  const mx = samples.mean[0];
+  const my = samples.mean[1];
+  const mz = samples.mean[2];
+  const flatScore = mx * mx + my * my + mz * mz;
+  let bestScore = flatScore + margin;
+  let bestGlyph = null;
+  let bestFg = [mx, my, mz];
+  let bestBg = [mx, my, mz];
+  for (const family of compiled.powerSets) {
+    const plane = samples.planes.get(family.basis.id);
+    const n = family.basis.size;
+    let px = 0;
+    let py = 0;
+    let pz = 0;
+    for (let step = 1; step < family.order.length; step++) {
+      const bit = family.flipBit[step];
+      const sign = family.flipOn[step] ? 1 : -1;
+      const at = bit * 3;
+      px += sign * plane[at];
+      py += sign * plane[at + 1];
+      pz += sign * plane[at + 2];
+      const mask = family.order[step];
+      const glyph = family.glyphs[mask];
+      const a = glyph.area;
+      const score = scoreBinary(px, py, pz, mx, my, mz, a, n);
+      if (score > bestScore) {
+        bestScore = score;
+        bestGlyph = glyph;
+        const inv = 1 / n;
+        const p0 = px * inv;
+        const p1 = py * inv;
+        const p2 = pz * inv;
+        if (a <= 0 || a >= 1) {
+          bestFg = [mx, my, mz];
+          bestBg = [mx, my, mz];
+        } else {
+          const ia = 1 / a;
+          const ib = 1 / (1 - a);
+          bestFg = [p0 * ia, p1 * ia, p2 * ia];
+          bestBg = [(mx - p0) * ib, (my - p1) * ib, (mz - p2) * ib];
+        }
+      }
+    }
+  }
+  for (const entry of compiled.shaped) {
+    const glyph = entry.glyph;
+    const plane = samples.planes.get(glyph.basis.id);
+    const n = glyph.basis.size;
+    let px = 0;
+    let py = 0;
+    let pz = 0;
+    for (let i = 0; i < entry.index.length; i++) {
+      const at = entry.index[i] * 3;
+      const w = entry.weight[i];
+      px += w * plane[at];
+      py += w * plane[at + 1];
+      pz += w * plane[at + 2];
+    }
+    const inv = 1 / n;
+    const p0 = px * inv;
+    const p1 = py * inv;
+    const p2 = pz * inv;
+    const q0 = mx - p0;
+    const q1 = my - p1;
+    const q2 = mz - p2;
+    const { a2, cross, b2, det } = glyph.solve;
+    if (Math.abs(det) < 1e-12) continue;
+    const f0 = clamp((b2 * p0 - cross * q0) / det);
+    const f1 = clamp((b2 * p1 - cross * q1) / det);
+    const f2 = clamp((b2 * p2 - cross * q2) / det);
+    const g0 = clamp((a2 * q0 - cross * p0) / det);
+    const g1 = clamp((a2 * q1 - cross * p1) / det);
+    const g2 = clamp((a2 * q2 - cross * p2) / det);
+    const dot = f0 * p0 + f1 * p1 + f2 * p2 + g0 * q0 + g1 * q1 + g2 * q2;
+    const energy = a2 * (f0 * f0 + f1 * f1 + f2 * f2) + 2 * cross * (f0 * g0 + f1 * g1 + f2 * g2) + b2 * (g0 * g0 + g1 * g1 + g2 * g2);
+    const score = 2 * dot - energy;
+    if (score > bestScore) {
+      bestScore = score;
+      bestGlyph = glyph;
+      bestFg = [f0, f1, f2];
+      bestBg = [g0, g1, g2];
+    }
+  }
+  out.glyph = bestGlyph;
+  out.fg[0] = bestFg[0];
+  out.fg[1] = bestFg[1];
+  out.fg[2] = bestFg[2];
+  out.bg[0] = bestBg[0];
+  out.bg[1] = bestBg[1];
+  out.bg[2] = bestBg[2];
+  out.score = bestGlyph === null ? flatScore : bestScore - margin;
+  return out;
+}
+function makeFitResult() {
+  return { glyph: null, fg: new Float64Array(3), bg: new Float64Array(3), score: 0 };
+}
+
+// packages/image-to-ascii/src/index.ts
+var MAX_ROWS = 120;
+var ALPHA_OPAQUE = 128;
+function quantizeChannel(value, levels) {
+  if (levels >= 256) return value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
+  const steps = levels - 1;
+  const index = Math.round(value * steps / 255);
+  return Math.round(Math.min(steps, Math.max(0, index)) * 255 / steps);
+}
+var MIN_COLS = 24;
+var DEFAULT_TIERS = [256, 64, 32, "palette"];
+function toAttempt(tier) {
+  return tier === "palette" ? { palette: true } : { levels: tier };
+}
+function attemptsFor(mode, tiers) {
+  const kept = tiers.filter((tier) => {
+    if (mode === "truecolor") return tier !== "palette";
+    if (mode === "palette") return tier === "palette";
+    return true;
+  });
+  return (kept.length ? kept : tiers).map(toAttempt);
+}
+function resolveColorMode(requested) {
+  const env2 = process.env.CLAUDE_HOOKS_IMAGE_COLOR;
+  if (env2 === "truecolor" || env2 === "palette" || env2 === "auto") return env2;
+  return requested ?? "auto";
+}
+function cellAspect() {
+  const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_CELL_ASPECT);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2;
+}
+var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
+function to256(r, g, b) {
+  if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
+    if (r < 8) return 16;
+    if (r > 238) return 231;
+    return 232 + Math.min(23, Math.round((r - 8) / 10));
+  }
+  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
+}
+var FG_RESET = "\x1B[39m";
+var BG_RESET2 = "\x1B[49m";
+var PALETTE_256 = (() => {
+  const levels = [0, 95, 135, 175, 215, 255];
+  const out = [];
+  for (let i = 0; i < 16; i++) {
+    const v = i & 8 ? 255 : 128;
+    out.push({ r: i & 1 ? v : 0, g: i & 2 ? v : 0, b: i & 4 ? v : 0 });
+  }
+  for (let i = 16; i < 232; i++) {
+    const j = i - 16;
+    out.push({ r: levels[j / 36 | 0], g: levels[(j / 6 | 0) % 6], b: levels[j % 6] });
+  }
+  for (let i = 232; i < 256; i++) {
+    const v = 8 + (i - 232) * 10;
+    out.push({ r: v, g: v, b: v });
+  }
+  return out;
+})();
+function drawsItsOwnGlyphs() {
+  const program = (process.env.TERM_PROGRAM ?? "").toLowerCase();
+  if (program === "ghostty" || program === "wezterm") return true;
+  return Boolean(process.env.KITTY_WINDOW_ID) || process.env.TERM === "xterm-kitty";
+}
+function resolveGlyphMode() {
+  const env2 = process.env.CLAUDE_HOOKS_IMAGE_MODE;
+  if (env2 === "sextant" || env2 === "octant" || env2 === "half") return env2;
+  if (process.env.TERM === "dumb") return "half";
+  if (drawsItsOwnGlyphs() && cellAspect() >= 1.75) return "octant";
+  return "sextant";
+}
+var CONTEXTS = /* @__PURE__ */ new Map();
+function contextFor(mode, palette) {
+  const key = `${mode}|${palette ? "shade" : "plain"}`;
+  const cached = CONTEXTS.get(key);
+  if (cached) return cached;
+  const primary = mode === "octant" ? "octant" : "sextant";
+  const families = [primary, "separated", "eighth-v", "eighth-h"];
+  if (palette) families.push("shade");
+  const table = buildTable(families);
+  const complement = /* @__PURE__ */ new Map();
+  for (let i = 0; i < table.glyphs.length; i++) {
+    const j = table.complement[i];
+    if (j >= 0) complement.set(table.glyphs[i].char, table.glyphs[j].char);
+  }
+  const compiled = compileTable(table);
+  const context = {
+    table,
+    compiled,
+    complement,
+    samples: makeCellSamples(compiled),
+    fit: makeFitResult(),
+    basis: mode === "octant" ? BASES["2x4"] : BASES["2x3"],
+    chars: table.chars
+  };
+  CONTEXTS.set(key, context);
+  return context;
+}
+var KEEP = /* @__PURE__ */ Symbol("keep");
+function dist2(a, b) {
+  const dr = a.r - b.r;
+  const dg = a.g - b.g;
+  const db = a.b - b.b;
+  return dr * dr + dg * dg + db * db;
+}
+var SNAP_TOLERANCE = 160;
+var FIT_MARGIN = 200;
+function fitMargin() {
+  const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_FIT_MARGIN);
+  return Number.isFinite(raw) && raw >= 0 ? raw : FIT_MARGIN;
+}
+function classify(alpha) {
+  let opaque = 0;
+  for (let i = 0; i < alpha.length; i++) if (alpha[i] >= ALPHA_OPAQUE) opaque++;
+  if (opaque === alpha.length) return 0 /* Opaque */;
+  return opaque === 0 ? 1 /* Clear */ : 2 /* Mixed */;
+}
+function transparentCell(alpha, plane) {
+  let mask = 0;
   let r = 0;
   let g = 0;
   let b = 0;
   let count = 0;
-  for (let i = 0; i < samples.length; i++) {
-    if (Boolean(mask & 1 << i) !== selected) continue;
-    r += samples[i].r;
-    g += samples[i].g;
-    b += samples[i].b;
+  for (let i = 0; i < alpha.length; i++) {
+    if (alpha[i] < ALPHA_OPAQUE) continue;
+    mask |= 1 << i;
+    const at = i * 3;
+    r += plane[at];
+    g += plane[at + 1];
+    b += plane[at + 2];
     count++;
   }
-  return count ? { r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) } : { r: 0, g: 0, b: 0 };
-}
-function colorError(sample, color) {
-  const dr = sample.r - color.r;
-  const dg = sample.g - color.g;
-  const db = sample.b - color.b;
-  return dr * dr + dg * dg + db * db;
-}
-function opaqueCell(samples) {
-  const flat = mean(samples, 0, false);
-  let bestError = samples.reduce((sum, sample) => sum + colorError(sample, flat), 0);
-  let best = { char: "\u2588", fg: flat, bg: null };
-  for (let mask = 1; mask < 63; mask++) {
-    const fg = mean(samples, mask, true);
-    const bg = mean(samples, mask, false);
-    let error = 0;
-    for (let i = 0; i < samples.length; i++) {
-      error += colorError(samples[i], mask & 1 << i ? fg : bg);
-    }
-    if (error < bestError) {
-      bestError = error;
-      best = { char: regularSextant(mask), fg, bg };
-    }
-  }
-  return best;
-}
-function transparentCell(samples) {
-  let mask = 0;
-  const opaque = [];
-  for (let i = 0; i < samples.length; i++) {
-    if (!samples[i].opaque) continue;
-    mask |= 1 << i;
-    opaque.push(samples[i]);
-  }
-  if (!mask) return { char: " ", fg: null, bg: null };
-  const fg = mean(opaque, (1 << opaque.length) - 1, true);
+  if (!count) return { char: " ", fg: KEEP, bg: null, area: 0 };
   return {
     // Separated cells keep the terminal background visible between isolated
-    // transparent-edge samples. Masks beyond the requested cutoff use the
-    // classic series rather than silently pulling in U+1CE87..U+1CE8F.
+    // transparent-edge samples.
     char: separatedSextant(mask) ?? regularSextant(mask),
-    fg,
-    bg: null
+    fg: { r: r / count, g: g / count, b: b / count },
+    bg: null,
+    area: count / alpha.length
   };
 }
-function fitGeometry(width, height, requestedCols) {
-  let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / 2)));
-  let rows = Math.max(1, Math.round(height * cols / (width * 2)));
+function fittedCell(fit) {
+  const glyph = fit.glyph;
+  const fg = { r: fit.fg[0], g: fit.fg[1], b: fit.fg[2] };
+  if (glyph === null || glyph.area >= 1) return { char: "\u2588", fg, bg: KEEP, area: 1 };
+  const bg = { r: fit.bg[0], g: fit.bg[1], b: fit.bg[2] };
+  if (glyph.area <= 0) return { char: " ", fg: KEEP, bg, area: 0 };
+  return { char: glyph.char, fg, bg, area: glyph.area };
+}
+function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect()) {
+  let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis2.cols)));
+  let rows = Math.max(1, Math.round(height * cols / (width * aspect)));
   if (rows > MAX_ROWS) {
     cols = Math.max(1, Math.floor(cols * MAX_ROWS / rows));
-    rows = Math.max(1, Math.min(MAX_ROWS, Math.round(height * cols / (width * 2))));
+    rows = Math.max(1, Math.min(MAX_ROWS, Math.round(height * cols / (width * aspect))));
   }
   return { cols, rows };
 }
-function imageSample(img, sampleX, sampleY, sampleCols, sampleRows) {
-  const x = Math.min(img.width - 1, Math.floor((sampleX + 0.5) * img.width / sampleCols));
-  const y = Math.min(img.height - 1, Math.floor((sampleY + 0.5) * img.height / sampleRows));
-  const idx = (y * img.width + x) * 4;
+var scratch = { r: 0, g: 0, b: 0, a: 0 };
+function imageSample(sat, sampleX, sampleY, sampleCols, sampleRows) {
+  const [x0, y0, x1, y1] = subCellRect(sat, sampleX, sampleY, sampleCols, sampleRows);
+  rectMean(sat, x0, y0, x1, y1, scratch);
   return {
-    r: img.data[idx] ?? 0,
-    g: img.data[idx + 1] ?? 0,
-    b: img.data[idx + 2] ?? 0,
-    opaque: (img.data[idx + 3] ?? 255) >= ALPHA_OPAQUE
+    r: Math.round(scratch.r),
+    g: Math.round(scratch.g),
+    b: Math.round(scratch.b),
+    opaque: scratch.a >= ALPHA_OPAQUE
   };
 }
-function renderSextants(img, requestedCols, attempt) {
-  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols);
-  const sampleCols = cols * 2;
-  const sampleRows = rows * 3;
-  const sgrTail = attempt.palette ? (color) => `5;${to256(color.r, color.g, color.b)}` : (color) => `2;${color.r & attempt.mask};${color.g & attempt.mask};${color.b & attempt.mask}`;
-  const lines = [];
-  for (let cellY = 0; cellY < rows; cellY++) {
-    let line = "";
-    let fg = null;
-    let bg = null;
-    const put = (cell) => {
-      const wantFg = cell.fg ? sgrTail(cell.fg) : null;
-      const wantBg = cell.bg ? sgrTail(cell.bg) : null;
-      const parts = [];
-      if (wantFg !== null && wantFg !== fg) {
-        parts.push(`38;${wantFg}`);
-        fg = wantFg;
-      }
-      if (wantBg !== bg) {
-        parts.push(wantBg === null ? "49" : `48;${wantBg}`);
-        bg = wantBg;
-      }
-      line += parts.length ? `\x1B[${parts.join(";")}m${cell.char}` : cell.char;
+function quantizer(attempt) {
+  if (attempt.palette) {
+    return (color) => {
+      const index = to256(color.r, color.g, color.b);
+      return { tail: `5;${index}`, color: PALETTE_256[index] };
     };
-    for (let cellX = 0; cellX < cols; cellX++) {
-      const samples = [];
-      for (let subY = 0; subY < 3; subY++) {
-        for (let subX = 0; subX < 2; subX++) {
-          samples.push(imageSample(
-            img,
-            cellX * 2 + subX,
-            cellY * 3 + subY,
-            sampleCols,
-            sampleRows
-          ));
-        }
-      }
-      put(samples.every((sample) => sample.opaque) ? opaqueCell(samples) : transparentCell(samples));
+  }
+  const levels = attempt.levels;
+  return (color) => {
+    const r = quantizeChannel(color.r, levels);
+    const g = quantizeChannel(color.g, levels);
+    const b = quantizeChannel(color.b, levels);
+    return { tail: `2;${r};${g};${b}`, color: { r, g, b } };
+  };
+}
+function resolveSlot(slot, penTail, penColor, weight, quantize) {
+  if (slot === KEEP) return { tail: penTail, color: penColor };
+  if (slot === null) return { tail: null, color: null };
+  if (penTail !== null && penColor !== null && weight * dist2(slot, penColor) <= SNAP_TOLERANCE) {
+    return { tail: penTail, color: penColor };
+  }
+  const q = quantize(slot);
+  return { tail: q.tail, color: q.color };
+}
+function escapeCount(fgTail, bgTail, pen) {
+  return (fgTail !== null && fgTail !== pen.fgTail ? 1 : 0) + (bgTail !== pen.bgTail ? 1 : 0);
+}
+function emitCell(cell, pen, quantize, complement) {
+  let char = cell.char;
+  let fg = resolveSlot(cell.fg, pen.fgTail, pen.fgColor, cell.area, quantize);
+  let bg = resolveSlot(cell.bg, pen.bgTail, pen.bgColor, 1 - cell.area, quantize);
+  const swapped = complement.get(cell.char);
+  if (swapped !== void 0 && typeof cell.fg === "object" && cell.fg !== null && typeof cell.bg === "object" && cell.bg !== null) {
+    const altFg = resolveSlot(cell.bg, pen.fgTail, pen.fgColor, 1 - cell.area, quantize);
+    const altBg = resolveSlot(cell.fg, pen.bgTail, pen.bgColor, cell.area, quantize);
+    if (escapeCount(altFg.tail, altBg.tail, pen) < escapeCount(fg.tail, bg.tail, pen)) {
+      char = swapped;
+      fg = altFg;
+      bg = altBg;
     }
-    if (fg !== null) line += FG_RESET;
-    if (bg !== null) line += BG_RESET;
+  }
+  const parts = [];
+  if (fg.tail !== null && fg.tail !== pen.fgTail) {
+    parts.push(`38;${fg.tail}`);
+    pen.fgTail = fg.tail;
+    pen.fgColor = fg.color;
+  }
+  if (bg.tail !== pen.bgTail) {
+    parts.push(bg.tail === null ? "49" : `48;${bg.tail}`);
+    pen.bgTail = bg.tail;
+    pen.bgColor = bg.color;
+  }
+  return parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
+}
+function renderFitted(img, sat, requestedCols, attempt, ctx) {
+  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis);
+  const quantize = quantizer(attempt);
+  const alphaPlane = ctx.samples.planes.get("2x3");
+  const lines = [];
+  let score = 0;
+  for (let cellY = 0; cellY < rows; cellY++) {
+    const pen = { fgTail: null, bgTail: null, fgColor: null, bgColor: null };
+    let line = "";
+    for (let cellX = 0; cellX < cols; cellX++) {
+      sampleCell(sat, ctx.compiled, cellX, cellY, cols, rows, ctx.samples);
+      let cell;
+      switch (classify(ctx.samples.alpha)) {
+        case 1 /* Clear */:
+          cell = { char: " ", fg: KEEP, bg: null, area: 0 };
+          break;
+        case 2 /* Mixed */:
+          cell = transparentCell(ctx.samples.alpha, alphaPlane);
+          break;
+        default:
+          cell = fittedCell(fitCell(ctx.compiled, ctx.samples, ctx.fit, fitMargin()));
+          score += ctx.fit.score;
+      }
+      line += emitCell(cell, pen, quantize, ctx.complement);
+    }
+    if (pen.fgTail !== null) line += FG_RESET;
+    if (pen.bgTail !== null) line += BG_RESET2;
     lines.push(line);
   }
-  return lines.join("\n");
+  return { lines, score };
 }
-function renderHalfBlocks(img, requestedCols, attempt) {
-  const scale = Math.max(1, img.width / requestedCols, img.height / (MAX_ROWS * 2));
+function renderHalfBlocks(img, sat, requestedCols, attempt) {
+  const aspect = cellAspect();
+  const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * MAX_ROWS * 2));
   const targetWidth = Math.max(1, Math.round(img.width / scale));
-  const pxRows = Math.max(1, Math.round(img.height / scale));
-  const tail = attempt.palette ? (sample) => `5;${to256(sample.r, sample.g, sample.b)}` : (sample) => `2;${sample.r & attempt.mask};${sample.g & attempt.mask};${sample.b & attempt.mask}`;
+  const pxRows = Math.max(1, Math.round(img.height * 2 / (scale * aspect)));
+  const quantize = quantizer(attempt);
+  const tail = (sample) => quantize(sample).tail;
   const px = (col, row) => {
-    const sample = imageSample(img, col, row, targetWidth, pxRows);
+    const sample = imageSample(sat, col, row, targetWidth, pxRows);
     return sample.opaque ? tail(sample) : null;
   };
   const lines = [];
@@ -5905,40 +7295,57 @@ function renderHalfBlocks(img, requestedCols, attempt) {
       else put("\u2580", top, bottom);
     }
     if (fg !== null) line += FG_RESET;
-    if (bg !== null) line += BG_RESET;
+    if (bg !== null) line += BG_RESET2;
     lines.push(line);
   }
-  return lines.join("\n");
+  return { lines, score: 0 };
 }
-function imageToAscii(buffer, ext, maxWidth = 80) {
-  let img;
-  const normalizedExt = ext.toLowerCase().replace(/^\./, "");
-  try {
-    if (normalizedExt === "png") img = import_pngjs.PNG.sync.read(buffer);
-    else if (normalizedExt === "jpg" || normalizedExt === "jpeg") img = import_jpeg_js.default.decode(buffer, { useTArray: true });
-    else if (normalizedExt === "webp") img = decodeWebp(buffer);
-    else return null;
-  } catch {
-    return null;
-  }
-  if (!img.width || !img.height) return null;
-  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const forceHalfBlocks = process.env.CLAUDE_HOOKS_IMAGE_MODE === "half" || process.env.TERM === "dumb";
-  let out = "";
-  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / 2), requestedMax);
-  for (let cols = Math.max(1, initialCols); ; ) {
-    for (const attempt of ATTEMPTS) {
-      out = forceHalfBlocks ? renderHalfBlocks(img, cols, attempt) : renderSextants(img, cols, attempt);
-      if (out.length <= BYTE_BUDGET) return out;
+function bestFittingRender(startCols, spec, render) {
+  const WINDOW = 16;
+  let best = null;
+  let bestScore = -Infinity;
+  const consider = (cols) => {
+    const attempt = render(cols);
+    if (costOf(attempt.lines, spec) > spec.total) return false;
+    if (attempt.score > bestScore) {
+      best = attempt;
+      bestScore = attempt.score;
     }
-    if (cols <= MIN_COLS) break;
+    return true;
+  };
+  if (consider(startCols)) return best;
+  for (let cols = startCols - 1; cols >= MIN_COLS && cols > startCols - 1 - WINDOW; cols--) consider(cols);
+  if (best) return best;
+  for (let cols = Math.max(MIN_COLS, startCols - WINDOW); cols >= MIN_COLS; ) {
+    if (consider(cols)) return best;
+    if (cols === MIN_COLS) break;
     cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
   }
-  return out;
+  return best;
+}
+function imageToAscii(buffer, ext, widthOrOptions = 80) {
+  const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
+  const img = decodeImage(buffer, ext);
+  if (!img) return null;
+  const sat = buildSAT(img);
+  const spec = normalizeBudget(options.budget);
+  const maxWidth = options.maxWidth ?? 80;
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  const mode = resolveGlyphMode();
+  const forceHalfBlocks = mode === "half";
+  let out = [];
+  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / 2), requestedMax);
+  const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
+  const render = (cols, attempt) => forceHalfBlocks ? renderHalfBlocks(img, sat, cols, attempt) : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)));
+  for (const attempt of attempts) {
+    const fitted = bestFittingRender(Math.max(1, initialCols), spec, (cols) => render(cols, attempt));
+    if (fitted) return fitted.lines.join("\n");
+    out = render(MIN_COLS, attempt).lines;
+  }
+  return out.join("\n");
 }
 
 // src/render/file-preview.ts
-source_default.level = 3;
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "webp"]);
 function extensionFromPath(filePath) {
   const match = String(filePath ?? "").match(/\.([^./\\\s]+)$/);
@@ -5963,15 +7370,13 @@ function renderFilePreview(filePath, options = {}) {
     }
   }
   const shape = (raw) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
-  if (options.fallbackText != null) {
-    return { content: shape(options.fallbackText), kind: "text" };
+  if (options.readText !== false) {
+    try {
+      return { content: shape(fs2.readFileSync(filePath, "utf8")), kind: "text" };
+    } catch {
+    }
   }
-  if (options.readText === false) return null;
-  try {
-    return { content: shape(fs2.readFileSync(filePath, "utf8")), kind: "text" };
-  } catch {
-    return null;
-  }
+  return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
 }
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
@@ -5997,37 +7402,27 @@ function renderFileResult(rawPath, options = {}) {
   const preview = renderFilePreview(filePath, previewOptions);
   if (!preview) return null;
   const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
-  const parts = [collapsePreview(body)];
-  parts.push(source_default.cyan("\u{F021A} ") + source_default.bold("Path: ") + filePath);
-  const footer = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
-  if (footer) parts.push(source_default.cyan("\u29D6 ") + source_default.bold("Action: ") + footer);
-  return renderBox(parts.join("\n\n"));
+  const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
+  return renderFileCard({
+    path: filePath,
+    content: collapsePreview(body),
+    details: details || null
+  });
 }
 function collapsePreview(content, options = {}) {
   return softCollapse(content, { label: "lines", ...options });
 }
-function prefixPreviewLines(content, prefix) {
-  return content.split("\n").map((line) => prefix + line).join("\n");
-}
 
 // src/tools/read.ts
-source_default.level = 3;
 defineTool({
   matches: "Read",
-  pre(input) {
-    const path5 = input.file_path;
-    return { lines: path5 ? [source_default.gray("  \u25A4 ") + String(path5).trim()] : [] };
-  },
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
     const filePath = input.file_path;
-    const filePreview = filePath ? renderFilePreview(filePath) : null;
-    const fallbackText = filePreview ? null : extractResultText(result);
-    const rendered = filePreview?.content ?? (fallbackText ? renderTextPreview(fallbackText, filePath) : null);
-    if (rendered) {
-      lines.push(collapsePreview(rendered));
-    }
+    const fallbackText = extractResultText(result);
+    const rendered = filePath ? renderFileResult(filePath, { action: "read", fallbackText }) : fallbackText ? renderTextPreview(fallbackText) : null;
+    if (rendered) lines.push(rendered);
     return { lines };
   }
 });
@@ -6035,10 +7430,6 @@ defineTool({
 // src/tools/edit.ts
 source_default.level = 3;
 var CONTEXT_LINES = 3;
-function countLines(s) {
-  if (!s) return 0;
-  return s.replace(/\n$/, "").split("\n").length;
-}
 function editedSpan(result) {
   const hunks = result?.structuredPatch;
   if (!Array.isArray(hunks) || !hunks.length) return null;
@@ -6056,25 +7447,6 @@ function editedSpan(result) {
 }
 defineTool({
   matches: ["Edit", "MultiEdit"],
-  pre(input) {
-    const filePath = input.file_path;
-    const lines = [];
-    const multi = input;
-    const single = input;
-    const edits = multi.edits ?? (single.old_string !== void 0 ? [{ old_string: single.old_string, new_string: single.new_string ?? "" }] : []);
-    let removed = 0;
-    let added = 0;
-    for (const e of edits) {
-      removed += countLines(e.old_string);
-      added += countLines(e.new_string);
-    }
-    if (filePath) lines.push(renderMetaTag("file", filePath));
-    const removedBadge = new Badge({ label: `- ${removed}`, color: "red" }).toString();
-    const addedBadge = new Badge({ label: `+ ${added}`, color: "green" }).toString();
-    lines.push(removedBadge + addedBadge);
-    if (edits.length > 1) lines.push(source_default.gray(`  ${edits.length} edits`));
-    return { lines };
-  },
   post(input, result, durationMs, ctx) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6093,7 +7465,6 @@ defineTool({
 });
 
 // src/parsers/search-replace.ts
-source_default.level = 3;
 function parseSearchReplaceBlocks(content) {
   if (typeof content !== "string") return [];
   const blocks = [];
@@ -6104,49 +7475,12 @@ function parseSearchReplaceBlocks(content) {
   }
   return blocks;
 }
-function renderSearchReplace(blocks, filePath) {
-  if (!blocks.length) return null;
-  const lines = [];
-  if (filePath) lines.push(source_default.bold.cyan("  " + filePath));
-  blocks.forEach((block, i) => {
-    if (blocks.length > 1) lines.push(source_default.gray(`  hunk ${i + 1}/${blocks.length}`));
-    const searchLines = block.search.replace(/\n$/, "").split("\n");
-    const replaceLines = block.replace.replace(/\n$/, "").split("\n");
-    const diffLines = [
-      ...searchLines.map((l) => source_default.red("  - ") + source_default.red(l)),
-      ...replaceLines.map((l) => source_default.green("  + ") + source_default.green(l))
-    ];
-    lines.push(softCollapse(diffLines.join("\n"), { label: "diff lines" }));
-  });
-  return lines.join("\n");
-}
 
 // src/tools/wcgw-file.ts
 source_default.level = 3;
 var FAILURE_RE = /\b(error|failed|failure|denied|not permitted|cannot|no such file)\b/i;
 defineTool({
   matches: ["mcp__wcgw__FileWriteOrEdit", "mcp__wcgw__FileEdit"],
-  pre(input) {
-    const lines = [];
-    const filePath = input.file_path;
-    if (filePath) lines.push(source_default.bold.cyan(filePath));
-    const blocks = parseSearchReplaceBlocks(input.text_or_search_replace_blocks);
-    if (blocks.length) {
-      const rendered = renderSearchReplace(blocks, null);
-      if (rendered) lines.push(rendered);
-      lines.push(source_default.gray(`  ${blocks.length} hunk${blocks.length > 1 ? "s" : ""}`));
-    } else if (input.text_or_search_replace_blocks) {
-      const text2 = String(input.text_or_search_replace_blocks);
-      const parts = text2.split("\n");
-      const snippet = parts.slice(0, 6).join("\n");
-      lines.push(renderCard(OUTPUT_BADGE, snippet + (parts.length > 6 ? "\n\u2026" : "")));
-    }
-    const meta = [];
-    if (input.percentage_to_change != null) meta.push(source_default.gray(`\xB1${input.percentage_to_change}%`));
-    if (input.thread_id != null) meta.push(source_default.gray(`thread:${input.thread_id}`));
-    if (meta.length) lines.push(meta.join("  "));
-    return { lines };
-  },
   // wcgw answers with an MCP text block ("Success"), never the file itself, so
   // re-read the target from disk and render it the way Write's post hook does.
   post(input, result, durationMs) {
@@ -6159,7 +7493,9 @@ defineTool({
     const action = parseSearchReplaceBlocks(input.text_or_search_replace_blocks).length ? "edit" : "write";
     const box = input.file_path ? renderFileResult(input.file_path, { action }) : null;
     if (box) lines.push(box);
-    else if (!status && text2) lines.push(renderCard(OUTPUT_BADGE, text2));
+    else if (!status && text2) {
+      lines.push(renderCard({ badges: OUTPUT_BADGE, content: text2 }));
+    }
     return { lines };
   }
 });
@@ -6179,10 +7515,12 @@ function renderInlineContents(result) {
   if (fileContents && typeof fileContents === "object") {
     for (const [filePath, content] of Object.entries(fileContents)) {
       if (typeof content !== "string") continue;
-      lines.push(source_default.cyan("  \u251C ") + source_default.bold(filePath));
       const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
       const rendered = preview?.content ?? content;
-      lines.push(collapsePreview(prefixPreviewLines(rendered, source_default.gray("  \u2502 "))));
+      lines.push(renderFileCard({
+        path: filePath,
+        content: collapsePreview(rendered)
+      }));
     }
   } else if (typeof fileContents === "string" && fileContents.length) {
     lines.push(collapsePreview(fileContents));
@@ -6191,9 +7529,6 @@ function renderInlineContents(result) {
 }
 defineTool({
   matches: ["mcp__wcgw__ReadFiles", "mcp__wcgw__ReadImage"],
-  pre(input) {
-    return { lines: toPathList(input).map((p) => source_default.gray("  \u25A4 ") + p) };
-  },
   // Same deal as FileWriteOrEdit: the MCP payload is opaque, so each requested
   // path is rendered straight off disk in the Write post-hook's box layout —
   // which also gets images rendered as ascii for free.
@@ -6215,7 +7550,9 @@ defineTool({
       if (inline.length) lines.push(...inline);
       else {
         const text2 = extractResultText(result);
-        if (text2) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text2)));
+        if (text2) {
+          lines.push(renderCard({ badges: OUTPUT_BADGE, content: collapsePreview(text2) }));
+        }
       }
     }
     return { lines };
@@ -6226,13 +7563,6 @@ defineTool({
 source_default.level = 3;
 defineTool({
   matches: "mcp__wcgw__Initialize",
-  pre(input) {
-    const lines = [];
-    if (input.type) lines.push(source_default.gray("type: ") + input.type);
-    if (input.any_workspace_path) lines.push(source_default.gray("workspace: ") + shortenPath(input.any_workspace_path));
-    if (input.mode_name) lines.push(source_default.gray("mode: ") + input.mode_name);
-    return { lines };
-  },
   post(_input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6266,21 +7596,6 @@ function dropInlinedFiles(raw) {
 }
 defineTool({
   matches: "mcp__wcgw__ContextSave",
-  pre(input) {
-    const lines = [];
-    if (input.id) lines.push(source_default.gray("id: ") + input.id);
-    if (input.project_root_path) lines.push(source_default.gray("root: ") + shortenPath(input.project_root_path));
-    if (input.description) {
-      lines.push(source_default.gray("desc: ") + String(input.description).split("\n")[0].slice(0, 120));
-    }
-    if (input.relevant_file_globs) {
-      const globs = Array.isArray(input.relevant_file_globs) ? input.relevant_file_globs : [input.relevant_file_globs];
-      const preview = globs.slice(0, 3).join(", ");
-      const suffix = globs.length > 3 ? source_default.gray(` +${globs.length - 3} more`) : "";
-      lines.push(source_default.gray("globs: ") + preview + suffix);
-    }
-    return { lines };
-  },
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6299,16 +7614,8 @@ defineTool({
 });
 
 // src/tools/agent.ts
-source_default.level = 3;
 defineTool({
   matches: ["Agent", "Task"],
-  pre(input) {
-    const lines = [];
-    if (input.description) {
-      lines.push(input.description);
-    }
-    return { lines };
-  },
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6321,330 +7628,17 @@ defineTool({
       delete metadata.prompt;
       delete metadata.description;
       if (Object.keys(metadata).length > 0) {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
+        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
       }
     }
     return { lines };
   }
 });
 
-// packages/ansi-headings/src/primitives.ts
-source_default.level = 3;
-
-// packages/ansi-headings/src/phrase.ts
-source_default.level = 3;
-
-// packages/ansi-headings/src/glyphs.json
-var glyphs_default = {
-  " ": [
-    "    ",
-    "    ",
-    "    "
-  ],
-  A: [
-    " \u2584\u2580\u2584",
-    " \u2588\u2580\u2588",
-    " \u2580 \u2580"
-  ],
-  B: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  C: [
-    " \u2584\u2580\u2580",
-    " \u2588  ",
-    " \u2580\u2580\u2580"
-  ],
-  D: [
-    " \u2588\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2580 "
-  ],
-  E: [
-    " \u2588\u2580\u2580",
-    " \u2588\u2580 ",
-    " \u2580\u2580\u2580"
-  ],
-  F: [
-    " \u2588\u2580\u2580",
-    " \u2588\u2580 ",
-    " \u2580  "
-  ],
-  G: [
-    " \u2584\u2580\u2580",
-    " \u2588 \u2584",
-    " \u2580\u2580\u2580"
-  ],
-  H: [
-    " \u2588 \u2588",
-    " \u2588\u2580\u2588",
-    " \u2580 \u2580"
-  ],
-  I: [
-    " \u2588",
-    " \u2588",
-    " \u2580"
-  ],
-  J: [
-    "   \u2588",
-    " \u2584 \u2588",
-    " \u2580\u2580 "
-  ],
-  K: [
-    " \u2588 \u2588",
-    " \u2588\u2580\u2584",
-    " \u2580 \u2580"
-  ],
-  L: [
-    " \u2588  ",
-    " \u2588  ",
-    " \u2580\u2580\u2580"
-  ],
-  M: [
-    " \u2588\u2588\u2584\u2588\u2584",
-    " \u2588 \u2588 \u2588",
-    " \u2580 \u2580 \u2580"
-  ],
-  N: [
-    " \u2588\u2584 \u2588",
-    " \u2588 \u2580\u2588",
-    " \u2580  \u2580"
-  ],
-  O: [
-    " \u2588\u2580\u2588",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2580"
-  ],
-  P: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580 ",
-    " \u2580  "
-  ],
-  Q: [
-    " \u2584\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2584"
-  ],
-  R: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580\u2584",
-    " \u2580 \u2580"
-  ],
-  S: [
-    " \u2584\u2580\u2580",
-    "  \u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  T: [
-    " \u2580\u2588\u2580",
-    "  \u2588 ",
-    "  \u2580 "
-  ],
-  U: [
-    " \u2588 \u2588",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2580"
-  ],
-  V: [
-    " \u2588 \u2588",
-    " \u2588 \u2588",
-    "  \u2580 "
-  ],
-  W: [
-    " \u2588 \u2588 \u2588",
-    " \u2588 \u2588 \u2588",
-    "  \u2580 \u2580 "
-  ],
-  X: [
-    " \u2588\u2584\u2588",
-    " \u2584\u2588\u2584",
-    " \u2580 \u2580"
-  ],
-  Y: [
-    " \u2588 \u2588",
-    "  \u2588 ",
-    "  \u2580 "
-  ],
-  Z: [
-    " \u2580\u2580\u2588",
-    " \u2584\u2584 ",
-    " \u2580\u2580\u2580"
-  ],
-  "0": [
-    " \u2584\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2584\u2580"
-  ],
-  "1": [
-    " \u2588 ",
-    " \u2588 ",
-    " \u2580 "
-  ],
-  "2": [
-    " \u2584\u2580\u2584",
-    "  \u2584\u2580",
-    " \u2580\u2580\u2580"
-  ],
-  "3": [
-    " \u2580\u2580\u2584",
-    "  \u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "4": [
-    " \u2588 \u2588",
-    " \u2580\u2580\u2588",
-    "   \u2580"
-  ],
-  "5": [
-    " \u2588\u2580\u2580",
-    " \u2580\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "6": [
-    " \u2584\u2580\u2580",
-    " \u2588\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "7": [
-    " \u2580\u2580\u2588",
-    "  \u2584\u2580",
-    "  \u2588 "
-  ],
-  "8": [
-    " \u2584\u2580\u2584",
-    " \u2584\u2580\u2584",
-    "  \u2580 "
-  ],
-  "9": [
-    " \u2584\u2580\u2584",
-    "  \u2580\u2588",
-    "  \u2580 "
-  ],
-  "!": [
-    " \u2588 ",
-    " \u2580 ",
-    " \u2580 "
-  ],
-  "?": [
-    " \u2580\u2580\u2584",
-    "  \u2584\u2580",
-    "  \u2580 "
-  ],
-  ".": [
-    "   ",
-    "   ",
-    " \u2580 "
-  ],
-  ",": [
-    "    ",
-    "    ",
-    " \u2580\u2588 "
-  ],
-  ":": [
-    " \u2584 ",
-    "   ",
-    " \u2580 "
-  ],
-  ";": [
-    " \u2584\u2584 ",
-    "    ",
-    " \u2580\u2588 "
-  ],
-  "-": [
-    "     ",
-    " \u2584\u2584\u2584 ",
-    "     "
-  ],
-  _: [
-    "     ",
-    "     ",
-    " \u2580\u2580\u2580 "
-  ],
-  "/": [
-    "   \u2588 ",
-    "  \u2588  ",
-    " \u2580   "
-  ]
-};
-
-// packages/ansi-headings/src/headings.ts
-source_default.level = 3;
-var glyphs = glyphs_default;
-function renderGlyphRows(text2, color) {
-  const chars = text2.toUpperCase().split("");
-  const rows = ["  ", "  ", "  "];
-  for (const ch of chars) {
-    const glyph = glyphs[ch] ?? glyphs[" "];
-    rows[0] += glyph[0];
-    rows[1] += glyph[1];
-    rows[2] += glyph[2];
-  }
-  const colorize = source_default[color] ?? source_default.cyan;
-  return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
-}
-function renderHeading({ word, color = "cyan", event, tone, width = 60, caption }) {
-  const glyphRows = renderGlyphRows(word, color);
-  const gutter = 2;
-  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
-  return "\n" + composed;
-}
-var EMPTY_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588   \u2588", " \u2588\u2584\u2584\u2584\u2588"];
-var CHECKED_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588\u2584 \u2588\u2588", " \u2588\u2584\u2588\u2584\u2588"];
-function wrapDescription(description, width) {
-  const lines = [];
-  for (const sourceLine of description.trim().split(/\r?\n/)) {
-    const words = sourceLine.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) {
-      lines.push("");
-      continue;
-    }
-    let line = "";
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (Array.from(next).length <= width || !line) line = next;
-      else {
-        lines.push(line);
-        line = word;
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
-}
-function renderCheckboxHeading(value, legacyColor = "green") {
-  const args = typeof value === "string" ? { caption: value, checked: true, color: legacyColor } : value;
-  const color = args.color ?? "green";
-  const colorize = source_default[color] ?? source_default.green;
-  const rows = (args.checked ? CHECKED_CHECKBOX_ROWS : EMPTY_CHECKBOX_ROWS).map((r) => colorize(r));
-  const gutter = 2;
-  const textIndent = Array.from(EMPTY_CHECKBOX_ROWS[0]).length + gutter;
-  const descriptionWidth = Math.max(20, (args.width ?? 60) - textIndent);
-  const description = args.description?.trim() ? wrapDescription(args.description, descriptionWidth) : [];
-  const slots = [
-    source_default.bold(colorize(args.caption)),
-    description[0] ? source_default.gray(description[0]) : "",
-    description[1] ? source_default.gray(description[1]) : ""
-  ];
-  const composed = rows.map((r, i) => r + " ".repeat(gutter) + slots[i]);
-  for (const line of description.slice(2)) {
-    composed.push(" ".repeat(textIndent) + source_default.gray(line));
-  }
-  return "\n" + composed.join("\n");
-}
-
 // src/tools/exit-plan.ts
-source_default.level = 3;
 defineTool({
   matches: "ExitPlanMode",
-  pre(input) {
-    const lines = [];
-    if (input.plan) {
-      lines.push(input.plan);
-    }
-    return { lines };
-  },
-  post(input, result, durationMs) {
+  post(_input, _result, _durationMs) {
     const heading = renderHeading({
       word: "YEET FAFO",
       color: "cyan",
@@ -6752,12 +7746,8 @@ function renderTask(task, captionOverride) {
 }
 
 // src/tools/task-create.ts
-source_default.level = 3;
 defineTool({
   matches: "TaskCreate",
-  pre() {
-    return { lines: [] };
-  },
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6768,12 +7758,8 @@ defineTool({
 });
 
 // src/tools/task-update.ts
-source_default.level = 3;
 defineTool({
   matches: "TaskUpdate",
-  pre(input) {
-    return { lines: [] };
-  },
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6783,19 +7769,15 @@ defineTool({
     const task = taskFromResult(input, result, normalizedStatus);
     if (task) lines.push(...renderTask({ ...task, status: normalizedStatus }));
     else if (result && typeof result === "object") {
-      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
     }
     return { lines };
   }
 });
 
 // src/tools/task-list.ts
-source_default.level = 3;
 defineTool({
   matches: "TaskList",
-  pre() {
-    return { lines: [] };
-  },
   post(_input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
@@ -6805,43 +7787,15 @@ defineTool({
       lines.push(...renderTask(task));
     }
     if (!tasks.length && result && typeof result === "object") {
-      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
     }
     return { lines, isJson: !tasks.length };
   }
 });
 
 // src/tools/browser.ts
-source_default.level = 3;
-var PRIMARY_KEYS = [
-  "url",
-  "element",
-  "ref",
-  "selector",
-  "text",
-  "key",
-  "code",
-  "function",
-  "filename",
-  "path"
-];
-function formatValue(value) {
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
-}
 defineTool({
   matches: (rawName) => /^mcp__playwright__browser_/i.test(rawName),
-  pre(input, ctx) {
-    const operation = playwrightOperation(ctx.toolName);
-    const lines = [];
-    const primaryKey = PRIMARY_KEYS.find((key) => input[key] != null);
-    if (primaryKey) lines.push(formatValue(input[primaryKey]));
-    for (const [key, value] of Object.entries(input)) {
-      if (key === primaryKey || value == null || value === "") continue;
-      lines.push(source_default.gray(`${key}: `) + formatValue(value));
-    }
-    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
-  },
   post(_input, result, durationMs, ctx) {
     const operation = playwrightOperation(ctx.toolName);
     const lines = [];
@@ -6850,9 +7804,12 @@ defineTool({
     if (text2?.trim()) {
       const language = detectOutputLanguage(text2);
       const formatted = language === "json" ? formatJSON(text2) : text2;
-      lines.push(renderCard(OUTPUT_BADGE, softCollapse(simpleHighlight(formatted, language))));
+      lines.push(renderCard({
+        badges: OUTPUT_BADGE,
+        content: softCollapse(simpleHighlight(formatted, language))
+      }));
     } else if (result && typeof result === "object") {
-      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
     }
     return {
       lines,
@@ -6864,49 +7821,6 @@ defineTool({
 
 // src/tools/generic.ts
 source_default.level = 3;
-var PRIMARY_INPUT_KEYS = {
-  Bash: ["command"],
-  Write: ["file_path", "filePath"],
-  Edit: ["file_path", "filePath"],
-  Read: ["file_path", "filePath", "file_paths"],
-  Glob: ["pattern"],
-  Grep: ["pattern"],
-  WebFetch: ["url"],
-  WebSearch: ["query"],
-  Task: ["description", "prompt"],
-  Agent: ["description", "prompt"],
-  ExitPlanMode: ["plan"],
-  TodoWrite: ["todos"],
-  mcp__wcgw__BashCommand: ["command", "action_json"],
-  mcp__wcgw__FileWriteOrEdit: ["file_path"],
-  mcp__wcgw__ReadFiles: ["file_paths"]
-};
-var GENERIC_PRIMARY_KEYS = [
-  "command",
-  "file_path",
-  "filePath",
-  "file_paths",
-  "url",
-  "query",
-  "pattern",
-  "prompt",
-  "description",
-  "plan"
-];
-function pickPrimaryInput(rawToolName, input) {
-  if (!input || typeof input !== "object") return { key: null, value: null };
-  const { tool } = parseToolName(rawToolName);
-  const candidates = [
-    ...PRIMARY_INPUT_KEYS[rawToolName] ?? [],
-    ...PRIMARY_INPUT_KEYS[tool] ?? [],
-    ...GENERIC_PRIMARY_KEYS
-  ];
-  for (const key of candidates) {
-    const v = input[key];
-    if (v != null && v !== "") return { key, value: v };
-  }
-  return { key: null, value: null };
-}
 var TOOL_PRIMARY_OUTPUT_KEYS = {
   Read: ["content", "output", "text"],
   Edit: ["diff", "result", "output"],
@@ -6992,43 +7906,8 @@ function deconstructToolResult(toolName, result) {
   const metadata = Object.keys(res).length ? res : null;
   return { primary: primary || null, metadata };
 }
-var FIELD_LABELS = {
-  command: "Command",
-  file_path: "File",
-  filePath: "File",
-  file_paths: "Files",
-  pattern: "Pattern",
-  query: "Query",
-  url: "URL",
-  description: "Description",
-  prompt: "Prompt",
-  plan: "Plan"
-};
-function formatValue2(value) {
-  if (Array.isArray(value)) return value.join(", ");
-  if (typeof value === "object" && value !== null) return JSON.stringify(value, null, 2);
-  return String(value);
-}
 defineGenericTool({
-  pre(input, ctx) {
-    const rawTool = ctx.toolName;
-    const { key: primaryKey, value: primaryValue } = pickPrimaryInput(rawTool, input);
-    const lines = [];
-    if (primaryValue != null) {
-      const formatted = formatValue2(primaryValue);
-      const lang = primaryKey === "command" ? "bash" : detectLanguage(formatted, rawTool);
-      lines.push(simpleHighlight(formatted, lang));
-    }
-    for (const [k, label] of Object.entries(FIELD_LABELS)) {
-      if (k === primaryKey) continue;
-      const v = input[k];
-      if (v == null || v === "") continue;
-      lines.push(source_default.gray(`${label}: `) + formatValue2(v));
-    }
-    const operation = playwrightOperation(rawTool);
-    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
-  },
-  post(input, result, durationMs, ctx) {
+  post(_input, result, durationMs, ctx) {
     const rawTool = ctx.toolName;
     const { primary, metadata } = deconstructToolResult(rawTool, result);
     const lines = [];
@@ -7039,12 +7918,12 @@ defineGenericTool({
         if (isJSON(primary)) formatted = simpleHighlight(formatJSON(primary), "json");
         else if (isCode(primary)) formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
       }
-      lines.push(renderCard(OUTPUT_BADGE, softCollapse(formatted)));
+      lines.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(formatted) }));
       if (metadata && Object.keys(metadata).length) {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
+        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
       }
     } else if (result && typeof result === "object") {
-      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
     }
     const operation = playwrightOperation(rawTool);
     return {
@@ -7143,7 +8022,6 @@ function injectToolDiscriminator(toolName, input) {
 
 // src/render/render-tool.ts
 function renderToolSection({
-  phase,
   toolName,
   input,
   result,
@@ -7152,22 +8030,14 @@ function renderToolSection({
 }) {
   const def = getToolDefinition(toolName);
   const ctx = { toolName };
-  let section = { lines: [] };
-  if (phase === "pre" && def.pre) {
-    section = def.pre(input, ctx);
-  } else if (phase === "post" && def.post) {
-    section = def.post(input, result, durationMs, ctx);
-  }
+  const section = def.post(input, result, durationMs, ctx);
   const main = new Badge({ toolName });
   const badges = [main, ...extraTopBadges];
-  if (phase === "post") {
-    badges.push(
-      section.isJson ? new Badge({ label: "JSON", color: "green" }) : new Badge({ label: "OUTPUT", color: "brightGreen" })
-    );
-  }
+  badges.push(
+    section.isJson ? new Badge({ label: "JSON", color: "green" }) : new Badge({ label: "OUTPUT", color: "brightGreen" })
+  );
   for (const b of section.extraBadges ?? []) badges.push(b);
-  const badge = renderBadges(...badges);
-  return renderSection({ badge, lines: section.lines });
+  return renderSection({ badges, lines: section.lines });
 }
 
 // src/hooks/index.ts
@@ -7209,8 +8079,10 @@ defineHook({
   handle(input) {
     const systemPrompt = loadSystemPrompt();
     const asciiArt = loadRandomAsciiArt();
-    const main = new Badge({ label: `Session:${input.source}`, color: "green", icon: "\u23FB" });
-    const badge = input.model ? renderBadges(main, new Badge({ label: input.model, color: "gray" })) : renderBadges(main);
+    const badges = [
+      new Badge({ label: `Session:${input.source}`, color: "green", icon: "\u23FB" }),
+      input.model ? new Badge({ label: input.model, color: "gray" }) : null
+    ];
     const lines = [source_default.green("Session started")];
     if (input.agentType) lines.push(source_default.gray("Agent: ") + input.agentType);
     if (systemPrompt) lines.push(source_default.cyan("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH);
@@ -7227,7 +8099,7 @@ defineHook({
         hookEventName: "SessionStart",
         ...systemPrompt ? { additionalContext: systemPrompt } : {}
       },
-      systemMessage: asciiBlock + heading + renderSection({ badge, lines })
+      systemMessage: asciiBlock + heading + renderSection({ badges, lines })
     };
   }
 });
@@ -7238,8 +8110,8 @@ defineHook({
   },
   handle() {
     const heading = renderHeading({ word: "BYE", color: "red", event: "bye" });
-    const badge = renderBadges(new Badge({ label: "SessionEnd", color: "red", icon: "\u23FC" }));
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badge = new Badge({ label: "SessionEnd", color: "red", icon: "\u23FC" });
+    return { systemMessage: heading + renderSection({ badges: badge }) };
   }
 });
 defineHook({
@@ -7249,8 +8121,8 @@ defineHook({
   },
   handle() {
     const heading = renderHeading({ word: "STOP", color: "red", event: "stop" });
-    const badge = renderBadges(new Badge({ label: "Stop", color: "red", icon: "\u25A0" }));
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badge = new Badge({ label: "Stop", color: "red", icon: "\u25A0" });
+    return { systemMessage: heading + renderSection({ badges: badge }) };
   }
 });
 defineHook({
@@ -7267,8 +8139,7 @@ defineHook({
     const main = new Badge({ label: "SubagentStart", color: "green", icon: "\u2B21" });
     const extras = [];
     if (input.agentType) extras.push(new Badge({ label: input.agentType, color: "gray" }));
-    const badge = renderBadges(main, ...extras);
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    return { systemMessage: heading + renderSection({ badges: [main, ...extras] }) };
   }
 });
 defineHook({
@@ -7279,16 +8150,14 @@ defineHook({
   },
   handle(input) {
     const badges = [
-      new Badge({ label: "SubagentStop", color: "green", icon: "\u231F" })
+      new Badge({ label: "SubagentStop", color: "green", icon: "\u231F" }),
+      new Badge({
+        label: input.agentType ?? "Main Process",
+        color: "gray"
+      })
     ];
-    if (input.agentType) {
-      badges.push(new Badge({ label: input.agentType, color: "gray" }));
-    } else {
-      badges.push(new Badge({ label: "Main Process", color: "gray" }));
-    }
-    const badge = renderBadges(...badges);
     return {
-      systemMessage: renderHeading({ word: "GOIN ASLEEP", color: "green", event: "agent" }) + renderSection({ badge, lines: [] })
+      systemMessage: renderHeading({ word: "GOIN ASLEEP", color: "green", event: "agent" }) + renderSection({ badges })
     };
   }
 });
@@ -7303,10 +8172,12 @@ defineHook({
   },
   handle(input) {
     const heading = renderHeading({ word: "COMPACT", color: "yellow", event: "compact" });
-    const main = new Badge({ label: "PreCompact", color: "yellow", icon: "\u27F3" });
-    const badge = input.trigger ? renderBadges(main, new Badge({ label: input.trigger, color: "gray" })) : renderBadges(main);
+    const badges = [
+      new Badge({ label: "PreCompact", color: "yellow", icon: "\u27F3" }),
+      input.trigger ? new Badge({ label: input.trigger, color: "gray" }) : null
+    ];
     const lines = input.customInstructions ? [source_default.gray(input.customInstructions.slice(0, 200))] : [];
-    return { systemMessage: heading + renderSection({ badge, lines }) };
+    return { systemMessage: heading + renderSection({ badges, lines }) };
   }
 });
 defineHook({
@@ -7317,9 +8188,9 @@ defineHook({
   },
   handle(input) {
     const heading = renderHeading({ word: "COMPACT", color: "yellow", event: "compact" });
-    const badge = renderBadges(new Badge({ label: "PostCompact", color: "yellow", icon: "\u27F3" }));
+    const badge = new Badge({ label: "PostCompact", color: "yellow", icon: "\u27F3" });
     const lines = input.summary ? [source_default.gray(input.summary.slice(0, 200))] : [];
-    return { systemMessage: heading + renderSection({ badge, lines }) };
+    return { systemMessage: heading + renderSection({ badges: badge, lines }) };
   }
 });
 defineHook({
@@ -7333,11 +8204,13 @@ defineHook({
     };
   },
   handle(input) {
-    const main = new Badge({ label: `Instructions:${input.memoryType}`, color: "cyan", icon: "\u2713" });
-    const badge = input.loadReason ? renderBadges(main, new Badge({ label: input.loadReason, color: "gray" })) : renderBadges(main);
+    const badges = [
+      new Badge({ label: `Instructions:${input.memoryType}`, color: "cyan", icon: "\u2713" }),
+      input.loadReason ? new Badge({ label: input.loadReason, color: "gray" }) : null
+    ];
     const lines = [];
     if (input.filePath) lines.push(source_default.gray("File: ") + input.filePath);
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges, lines }) };
   }
 });
 defineHook({
@@ -7347,13 +8220,13 @@ defineHook({
     return { prompt: pickString(o, "prompt", "user_prompt", "userPrompt") ?? "" };
   },
   handle(input) {
-    const badge = renderBadges(new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" }));
+    const badge = new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" });
     const lines = [];
     if (input.prompt) {
       const shown = input.prompt.length > 200 ? input.prompt.slice(0, 200) + "..." : input.prompt;
       lines.push(source_default.gray(shown));
     }
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
 defineHook({
@@ -7368,13 +8241,13 @@ defineHook({
     };
   },
   handle(input) {
-    const badge = renderBadges(new Badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" }));
+    const badge = new Badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" });
     const lines = [];
     if (input.expandedPrompt) {
       const shown = input.expandedPrompt.length > 300 ? input.expandedPrompt.slice(0, 300) + "..." : input.expandedPrompt;
       lines.push(source_default.gray(shown));
     }
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
 defineHook({
@@ -7403,8 +8276,10 @@ defineHook({
     };
   },
   handle(input) {
-    const main = new Badge({ toolName: input.toolName, color: "red", icon: "\u2A02" });
-    const badge = input.isInterrupt ? renderBadges(main, new Badge({ label: "INTERRUPT", color: "yellow" })) : renderBadges(main);
+    const badges = [
+      new Badge({ toolName: input.toolName, color: "red", icon: "\u2A02" }),
+      input.isInterrupt ? new Badge({ label: "INTERRUPT", color: "yellow" }) : null
+    ];
     const lines = [source_default.red("\u2A02 ") + source_default.bold.red("Tool failed:")];
     const err = input.error;
     if (typeof err === "string") lines.push(err);
@@ -7416,29 +8291,8 @@ defineHook({
         hookEventName: "PostToolUseFailure",
         additionalContext: typeof err === "string" ? err : JSON.stringify(err)
       },
-      systemMessage: renderSection({ badge, lines, dividerColor: "red" })
+      systemMessage: renderSection({ badges, lines })
     };
-  }
-});
-defineHook({
-  event: "PreToolUse",
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName = pickString(o, "tool_name", "toolName") ?? "Unknown";
-    const rawInput = pickAny(o, "tool_input", "toolInput") ?? {};
-    return {
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput),
-      sessionId: pickString(o, "session_id", "sessionId")
-    };
-  },
-  handle(input) {
-    const systemMessage = renderToolSection({
-      phase: "pre",
-      toolName: input.toolName,
-      input: input.toolInput
-    });
-    return { systemMessage };
   }
 });
 defineHook({
@@ -7458,7 +8312,6 @@ defineHook({
   },
   handle(input) {
     const systemMessage = renderToolSection({
-      phase: "post",
       toolName: input.toolName,
       input: input.toolInput,
       result: input.toolResponse,
@@ -7467,6 +8320,86 @@ defineHook({
     return { systemMessage };
   }
 });
+
+// src/runtime/output-transport.ts
+var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
+var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
+function serialize(data) {
+  return JSON.stringify(data, null, 2);
+}
+function responseWithMessage(data, systemMessage) {
+  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
+}
+function fitsResponse(data, systemMessage) {
+  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
+}
+function findLargestCandidate(maximum, render, fits) {
+  let low = 0;
+  let high = maximum;
+  let best = { text: render(0), retained: 0 };
+  while (low <= high) {
+    const retained = Math.floor((low + high) / 2);
+    const text2 = render(retained);
+    if (fits(text2)) {
+      best = { text: text2, retained };
+      low = retained + 1;
+    } else {
+      high = retained - 1;
+    }
+  }
+  return best;
+}
+function splitRetained(total) {
+  const head = Math.ceil(total * 0.6);
+  return { head, tail: total - head };
+}
+function limitByLines(data, systemMessage) {
+  const lines = systemMessage.split("\n");
+  return findLargestCandidate(
+    Math.max(0, lines.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        ...lines.slice(0, head),
+        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
+        ...tail > 0 ? lines.slice(-tail) : []
+      ].join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  );
+}
+function limitByCharacters(data, systemMessage) {
+  const characters = Array.from(stripAnsi(systemMessage));
+  return findLargestCandidate(
+    Math.max(0, characters.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        characters.slice(0, head).join(""),
+        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
+        tail > 0 ? characters.slice(-tail).join("") : ""
+      ].filter(Boolean).join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  ).text;
+}
+function limitSystemMessage(data, systemMessage) {
+  const lineCandidate = limitByLines(data, systemMessage);
+  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
+}
+function serializeHookResponse(data) {
+  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
+  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
+  let json = serialize(output);
+  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
+    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
+    json = serialize(output);
+  }
+  return {
+    json,
+    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
+  };
+}
 
 // src/runtime/io.ts
 function readInput() {
@@ -7489,33 +8422,18 @@ function readInput() {
     });
   });
 }
-var MAX_SYSTEM_MESSAGE_CHARS = 9980;
-var TRIM_MARKER = "\x1B[0m\n\x1B[90m\x1B[3m  \u2026 trimmed to fit the 10KB hook display limit\x1B[0m";
-function fitSystemMessage(message) {
-  if (message.length <= MAX_SYSTEM_MESSAGE_CHARS) return message;
-  const budget = MAX_SYSTEM_MESSAGE_CHARS - TRIM_MARKER.length;
-  const kept = [];
-  let used = 0;
-  for (const line of message.split("\n")) {
-    if (used + line.length + 1 > budget) break;
-    kept.push(line);
-    used += line.length + 1;
-  }
-  return kept.join("\n") + TRIM_MARKER;
-}
-var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
 function writeOutput(data, { mirrorSystemMessageToStderr = true } = {}) {
-  if (typeof data.systemMessage === "string" && data.systemMessage.length > 0) {
-    data.systemMessage = CLEAR_LINE_PREFIX + fitSystemMessage(data.systemMessage);
-    if (mirrorSystemMessageToStderr) process.stderr.write(data.systemMessage + "\n");
+  const response = serializeHookResponse(data);
+  if (mirrorSystemMessageToStderr && response.systemMessage) {
+    process.stderr.write(response.systemMessage + "\n");
   }
-  process.stdout.write(JSON.stringify(data, null, 2));
+  process.stdout.write(response.json);
   process.exit(0);
 }
 
 // src/runtime/run-hook.ts
 async function runHook(name, handler) {
-  const mirrorSystemMessageToStderr = name !== "PreToolUse" && name !== "PostToolUse";
+  const mirrorSystemMessageToStderr = name !== "PostToolUse";
   try {
     const data = await readInput();
     const out = await handler(data ?? {}) ?? {};
@@ -7530,7 +8448,6 @@ async function runHook(name, handler) {
 
 // src/types/hook-events.ts
 var HOOK_EVENT_NAMES = [
-  "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
   "PostToolBatch",

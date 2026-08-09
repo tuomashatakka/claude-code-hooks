@@ -1,10 +1,14 @@
 import chalk from 'chalk';
-import { OUTPUT_BADGE } from '../render/badge.ts';
 import { defineTool } from '../registry/tool-registry.ts';
-import { extractResultText, pushDurationLine, renderCard } from '../render/primitives.ts';
+import { extractResultText } from '../render/primitives.ts';
+import {
+  OUTPUT_BADGE,
+  pushDurationLine,
+  renderCard,
+  renderFileCard,
+} from '../tui/index.ts';
 import {
   collapsePreview,
-  prefixPreviewLines,
   renderFilePreview,
   renderFileResult,
   stripLineRange,
@@ -35,10 +39,12 @@ function renderInlineContents(result: RawToolResult): string[] {
   if (fileContents && typeof fileContents === 'object') {
     for (const [filePath, content] of Object.entries(fileContents as Record<string, unknown>)) {
       if (typeof content !== 'string') continue;
-      lines.push(chalk.cyan('  ├ ') + chalk.bold(filePath));
-      const preview  = renderFilePreview(filePath, { fallbackText: content, readText: false });
+      const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
       const rendered = preview?.content ?? content;
-      lines.push(collapsePreview(prefixPreviewLines(rendered, chalk.gray('  │ '))));
+      lines.push(renderFileCard({
+        path: filePath,
+        content: collapsePreview(rendered),
+      }));
     }
   } else if (typeof fileContents === 'string' && fileContents.length) {
     lines.push(collapsePreview(fileContents));
@@ -48,10 +54,6 @@ function renderInlineContents(result: RawToolResult): string[] {
 
 defineTool<WcgwReadFilesInput, RawToolResult>({
   matches: ['mcp__wcgw__ReadFiles', 'mcp__wcgw__ReadImage'],
-  pre(input) {
-    return { lines: toPathList(input).map(p => chalk.gray('  ▤ ') + p) };
-  },
-
   // Same deal as FileWriteOrEdit: the MCP payload is opaque, so each requested
   // path is rendered straight off disk in the Write post-hook's box layout —
   // which also gets images rendered as ascii for free.
@@ -76,7 +78,9 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
       if (inline.length) lines.push(...inline);
       else {
         const text = extractResultText(result);
-        if (text) lines.push(renderCard(OUTPUT_BADGE, collapsePreview(text)));
+        if (text) {
+          lines.push(renderCard({ badges: OUTPUT_BADGE, content: collapsePreview(text) }));
+        }
       }
     }
 

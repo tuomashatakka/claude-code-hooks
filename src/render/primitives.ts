@@ -1,4 +1,4 @@
-import chalk, { type ColorName } from 'chalk';
+import chalk from 'chalk';
 import { readFileSync } from 'node:fs';
 
 chalk.level = 3;
@@ -18,34 +18,6 @@ export function expandPersistedOutput(text: string): string {
       return match;
     }
   });
-}
-
-export const DIVIDER_WIDTH = 60;
-
-// Turns plain-text ruler lines into styled dividers. Lines made only of ruler
-// chars (`---`, `====`) become a full-width rule; lines carrying a label
-// (`--- info`, `===== info =====`) center the label inside the rule. `=`
-// rulers render with the double-line glyph so the source's visual weight
-// survives the transform. Returns null when the line isn't a ruler.
-export function renderRuler(line: string): string | null {
-  const plain = stripAnsi(line).trim();
-  const m = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
-  if (!m) return null;
-  const ch = m[1]![0] === '=' || m[1]![0] === '═' ? '═' : '─';
-  const text = m[2]!.replace(/[-=─═]{3,}\s*$/, '').trim();
-  if (!text) return chalk.gray(ch.repeat(DIVIDER_WIDTH));
-  const label = ` ${text} `;
-  const remaining = Math.max(6, DIVIDER_WIDTH - label.length);
-  const left = Math.floor(remaining / 2);
-  return chalk.gray(ch.repeat(left)) + chalk.bold(label) + chalk.gray(ch.repeat(remaining - left));
-}
-
-// Metadata tag: bgDarkGrey black label, darkGrey corner, value, terminator.
-// Render as inline tag — caller decides whether to append a newline.
-export function renderMetaTag(label: string, value: string): string {
-  const labelChip = chalk.bgHex('#3a3a3a').black(` ${label} `);
-  const corner    = chalk.hex('#3a3a3a')('◤');
-  return labelChip + corner + ` ${value} ` + chalk.hex('#3a3a3a')('❚');
 }
 
 export function stripAnsi(str: unknown): string {
@@ -85,28 +57,6 @@ export function truncateAnsi(text: string, maxVisibleLen: number, ellipsis = '�
 
 // Fallback content width when we can't see the real terminal (hooks are almost
 // always spawned with piped, non-TTY stdio) - wide enough for normal code/output
-// lines, narrow enough that a stray huge line can't blow the box past a typical
-// terminal once the harness's own tree indentation is added on top.
-const FALLBACK_CONTENT_WIDTH = 96;
-const OUTER_INDENT_MARGIN = 6;
-const H_PADDING = 2;
-const MIN_CARD_HAIRLINE = 4;
-
-export function getMaxContentWidth(): number {
-  const cols = process.stdout.columns || Number(process.env.COLUMNS) || 0;
-  const usable = (cols > 0 ? cols : FALLBACK_CONTENT_WIDTH) - OUTER_INDENT_MARGIN - H_PADDING * 2;
-  return Math.max(20, usable);
-}
-
-export function renderDuration(durationMs: number | null | undefined): string | null {
-  return durationMs == null ? null : chalk.gray(`Δ ${durationMs}ms`);
-}
-
-export function pushDurationLine(lines: string[], durationMs: number | null | undefined): void {
-  const line = renderDuration(durationMs);
-  if (line) lines.push(line);
-}
-
 export function firstLine(value: unknown, maxLength?: number): string {
   const line = String(value ?? '').split('\n')[0] ?? '';
   return maxLength == null ? line : line.slice(0, maxLength);
@@ -126,69 +76,6 @@ export function pickResultText(
   return null;
 }
 
-/**
- * A card: content on a raised background.
- *
- * Box model, uniform across every card in the output — horizontal padding 2,
- * vertical padding 1 (the blank filled rows top and bottom), and a vertical
- * margin of 1 so cards never butt against the line above or the next card
- * below. The margin is part of the box rather than the caller's job, because
- * ten call sites across src/tools would otherwise each have to remember it.
- */
-interface PreparedBox {
-  lines: string[];
-  width: number;
-}
-
-function prepareBox(content: string, minimumWidth = 0): PreparedBox {
-  const maxWidth = getMaxContentWidth();
-  const lines = String(content)
-    // Blank leading/trailing rows would stack on top of the card's own vertical
-    // padding and read as a ragged gap inside the fill.
-    .replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, '')
-    .split('\n')
-    .map(l => (visibleWidth(l) > maxWidth ? truncateAnsi(l, maxWidth - 1) : l));
-  const maxLen = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
-  const width = Math.max(maxLen + H_PADDING * 2, minimumWidth);
-  const bg = chalk.bgHex('#252525');
-  const pad = bg(' '.repeat(width));
-  const body = lines.map(l =>
-    bg(' '.repeat(H_PADDING) + l + ' '.repeat(Math.max(0, width - H_PADDING - visibleWidth(l))))
-  );
-  return { lines: [pad, ...body, pad], width };
-}
-
-export function renderBox(content: string): string {
-  const box = prepareBox(content);
-  return ['', ...box.lines, ''].join('\n');
-}
-
-/** A card with a badge naming what it holds, e.g. ` ⏎  Running ` over a command. */
-export function renderCard(badge: string, content: string): string {
-  const badgeWidth = visibleWidth(badge);
-  // Keep a visible rule even when the title is wider than the body. Without a
-  // minimum tail, small Output cards looked like a floating badge over a box
-  // instead of a tab attached to its top edge.
-  const box = prepareBox(content, badgeWidth + MIN_CARD_HAIRLINE);
-  const hairline = chalk.hex('#4a4a4a')('─'.repeat(Math.max(0, box.width - badgeWidth)));
-  return ['', badge + hairline, ...box.lines, ''].join('\n');
-}
-
-export interface RenderSectionOptions {
-  badge: string;
-  lines?: Array<string | false | null | undefined>;
-  divider?: string;
-  dividerColor?: ColorName;
-}
-
-export function renderSection({ badge, lines = [] }: RenderSectionOptions): string {
-  let out = badge;
-  const body = lines.filter((l): l is string => Boolean(l));
-  if (body.length) {
-    out += '\n\n' + body.join('\n');
-  }
-  return out;
-}
 
 export interface SoftCollapseOptions {
   maxLines?: number;

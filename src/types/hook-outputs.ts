@@ -7,13 +7,6 @@ export interface BaseHookOutput {
   stopReason?: string;
 }
 
-export interface PreToolUseHookSpecific {
-  hookEventName: 'PreToolUse';
-  permissionDecision?: 'allow' | 'deny' | 'ask';
-  permissionDecisionReason?: string;
-  updatedInput?: Record<string, unknown>;
-}
-
 export interface PostToolUseHookSpecific {
   hookEventName: 'PostToolUse';
   additionalContext?: string;
@@ -39,7 +32,6 @@ export interface GenericHookSpecific {
 }
 
 export type HookSpecificOutput<E extends HookEventName> =
-  E extends 'PreToolUse'         ? PreToolUseHookSpecific :
   E extends 'PostToolUse'        ? PostToolUseHookSpecific :
   E extends 'PostToolUseFailure' ? PostToolUseFailureHookSpecific :
   E extends 'SessionStart'       ? SessionStartHookSpecific :

@@ -19,11 +19,6 @@ export interface Case {
 
 export const CASES: Case[] = [
   {
-    label: 'PreToolUse — Bash',
-    event: 'PreToolUse',
-    payload: { tool_name: 'Bash', tool_input: { command: 'echo "hello"', description: 'demo' } },
-  },
-  {
     label: 'PostToolUse — Bash',
     event: 'PostToolUse',
     payload: {
@@ -41,21 +36,6 @@ export const CASES: Case[] = [
       tool_input: { command: 'git diff' },
       tool_response: 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1,2 +1,2 @@\n-const x = 1\n+const x = 2\n',
       duration_ms: 8,
-    },
-  },
-  {
-    label: 'PreToolUse — wcgw FileWriteOrEdit (multi-hunk)',
-    event: 'PreToolUse',
-    payload: {
-      tool_name: 'mcp__wcgw__FileWriteOrEdit',
-      tool_input: {
-        file_path: '/tmp/example.ts',
-        percentage_to_change: 25,
-        thread_id: 'i6314',
-        text_or_search_replace_blocks:
-          '<<<<<<< SEARCH\nconst x = 1\n=======\nconst x = 2\n>>>>>>> REPLACE\n' +
-          '<<<<<<< SEARCH\nconst y = 1\n=======\nconst y = 2\n>>>>>>> REPLACE',
-      },
     },
   },
   {
@@ -85,16 +65,6 @@ export const CASES: Case[] = [
     },
   },
   {
-    label: 'PreToolUse — agent-browser operations',
-    event: 'PreToolUse',
-    payload: {
-      tool_name: 'Bash',
-      tool_input: {
-        command: 'agent-browser --session demo press Enter && agent-browser --session demo snapshot',
-      },
-    },
-  },
-  {
     label: 'PostToolUse — Playwright navigate',
     event: 'PostToolUse',
     payload: {
@@ -118,17 +88,6 @@ export const CASES: Case[] = [
     label: 'UserPromptSubmit',
     event: 'UserPromptSubmit',
     payload: { prompt: 'hello world' },
-  },
-  {
-    label: 'PreToolUse — Agent',
-    event: 'PreToolUse',
-    payload: {
-      tool_name: 'Agent',
-      tool_input: {
-        description: 'Explore package export structure',
-        prompt: 'Explore the repo at /Users/mia/Documents/Projects/ai/skills/threejs-scenes (search breadth: medium). This is an npm package.\n\nHere are some details:\n- list exports\n- compile',
-      },
-    },
   },
   {
     label: 'PostToolUse — Agent',
@@ -226,7 +185,7 @@ export const CASES: Case[] = [
           {
             id: 2,
             subject: 'Verify the hook bundle',
-            description: 'Replay the compiled pre and post tool wire format.',
+            description: 'Replay the compiled post-tool wire format.',
             status: 'pending',
           },
         ],
@@ -244,22 +203,6 @@ export const CASES: Case[] = [
       duration_ms: 5,
     },
     expectAsciiImage: true,
-  },
-  {
-    label: 'PreToolUse — ExitPlanMode',
-    event: 'PreToolUse',
-    payload: {
-      tool_name: 'ExitPlanMode',
-      tool_input: { plan: 'Final plan summary' },
-    },
-  },
-  {
-    label: 'PreToolUse — TaskUpdate',
-    event: 'PreToolUse',
-    payload: {
-      tool_name: 'TaskUpdate',
-      tool_input: { id: 1, status: 'completed' },
-    },
   },
   {
     label: 'PostToolUse — Read (JPEG Image)',
@@ -323,7 +266,7 @@ if (import.meta.main) {
       // Reported below with the raw stdout payload.
     }
     const rendered = renderedHookOutput(stdout, stderr);
-    const isToolHook = c.event === 'PreToolUse' || c.event === 'PostToolUse';
+    const isToolHook = c.event === 'PostToolUse';
     const imageAssertion = c.expectAsciiImage && (
       rendered.includes('[Image Data]')
       || !/[\u2580\u2584\u2588\u{1FB00}-\u{1FB3B}\u{1CE51}-\u{1CE8F}]/u.test(rendered)

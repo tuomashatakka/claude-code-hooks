@@ -1,7 +1,14 @@
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderCard, softCollapse, extractResultText, renderRuler, pushDurationLine } from '../render/primitives.ts';
-import { RUNNING_BADGE, OUTPUT_BADGE } from '../render/badge.ts';
+import { softCollapse, extractResultText } from '../render/primitives.ts';
+import {
+  OUTPUT_BADGE,
+  RUNNING_BADGE,
+  pushDurationLine,
+  renderCard,
+  renderColumns,
+  renderRuler,
+} from '../tui/index.ts';
 import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import { agentBrowserOperations, operationBadges } from './browser-operations.ts';
@@ -112,35 +119,17 @@ function renderCommand(cmd: string): string {
 
 defineTool<AnyBashInput, RawToolResult>({
   matches: ['Bash', 'mcp__wcgw__BashCommand'],
-  pre(input): import('../registry/tool-registry.ts').RenderedSection {
-    const lines: string[] = [];
-    const cmd = commandOf(input);
-    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
-
-    const meta: string[] = [];
-    const w = (input as WcgwBashCommandInput).wait_for_seconds;
-    const t = (input as Partial<{ timeout: number }>).timeout;
-    const c = (input as WcgwBashCommandInput).chats_id;
-    if (w != null) meta.push(chalk.gray(`wait: ${w}s`));
-    if (t != null) meta.push(chalk.gray(`timeout: ${t}s`));
-    if (c != null) meta.push(chalk.gray(`chat: ${c}`));
-    if (meta.length) lines.push(meta.join('  '));
-
-    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map(row => row.text)) : [];
-    return { lines, extraBadges: operationBadges(operations) };
-  },
-
   post(_input, result, durationMs): import('../registry/tool-registry.ts').RenderedSection {
     const raw = extractResultText(result) ?? '';
     const lines: string[] = [];
 
     pushDurationLine(lines, durationMs);
 
-    // Input and output get their own labelled cards: what was run and what came
-    // back are different things, and running them together made a long command
-    // and a long result read as one undifferentiated block.
+    // Input and output get their own labelled cards, composed as columns when
+    // their rendered widths fit comfortably and stacked otherwise.
+    const cards: string[] = [];
     const cmd = commandOf(_input);
-    if (cmd) lines.push(renderCard(RUNNING_BADGE, renderCommand(cmd)));
+    if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
 
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
 
@@ -154,8 +143,10 @@ defineTool<AnyBashInput, RawToolResult>({
         ? highlighted
         : highlighted.split('\n').map(line => renderRuler(line) ?? line).join('\n');
 
-      lines.push(renderCard(OUTPUT_BADGE, softCollapse(processedStdout)));
+      cards.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(processedStdout) }));
     }
+
+    if (cards.length) lines.push(renderColumns({ items: cards }));
 
     const trailerParts: string[] = [];
     if (status !== null) {

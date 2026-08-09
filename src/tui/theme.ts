@@ -99,7 +99,7 @@ export function getToolColor(rawName: string): BadgeColor {
   return TOOL_COLORS.default!;
 }
 
-const COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
+const BACKGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
   blue: chalk.bgBlue,
   green: chalk.bgGreen,
   yellow: chalk.bgYellow,
@@ -119,6 +119,30 @@ const COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
   brightWhite: chalk.bgWhiteBright,
 };
 
+const FOREGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
+  blue: chalk.blue,
+  green: chalk.green,
+  yellow: chalk.yellow,
+  red: chalk.red,
+  magenta: chalk.magenta,
+  cyan: chalk.cyan,
+  gray: chalk.gray,
+  white: chalk.white,
+  black: chalk.black,
+  brightBlue: chalk.blueBright,
+  brightGreen: chalk.greenBright,
+  brightYellow: chalk.yellowBright,
+  brightRed: chalk.redBright,
+  brightMagenta: chalk.magentaBright,
+  brightCyan: chalk.cyanBright,
+  brightGray: chalk.gray,
+  brightWhite: chalk.whiteBright,
+};
+
 export function getBadgeColor(name: BadgeColor): ChalkInstance {
-  return COLOR_MAP[name] ?? chalk.bgBlue;
+  return BACKGROUND_COLOR_MAP[name] ?? chalk.bgBlue;
+}
+
+export function getBadgeTextColor(name: BadgeColor): ChalkInstance {
+  return FOREGROUND_COLOR_MAP[name] ?? chalk.blue;
 }

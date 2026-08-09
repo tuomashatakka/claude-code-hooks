@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { parseToolName } from './theme.ts';
+import { parseToolName } from '../tui/theme.ts';
 import { stripAnsi } from './primitives.ts';
 
 chalk.level = 3;

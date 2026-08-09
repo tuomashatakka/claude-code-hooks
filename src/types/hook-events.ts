@@ -2,7 +2,6 @@ import type { ToolName } from './claude-code.ts';
 import type { RawToolInput, RawToolResult, ToolInputUnion } from './tool-io.ts';
 
 export type HookEventName =
-  | 'PreToolUse'
   | 'PostToolUse'
   | 'PostToolUseFailure'
   | 'PostToolBatch'
@@ -18,12 +17,6 @@ export type HookEventName =
   | 'Stop';
 
 // ── Per-event canonical (parsed) input shapes ────────────────────────────────────
-
-export interface PreToolUseInput {
-  toolName: ToolName;
-  toolInput: ToolInputUnion;
-  sessionId?: string;
-}
 
 export interface PostToolUseInput {
   toolName: ToolName;
@@ -94,7 +87,6 @@ export interface StopInput {
 }
 
 export type HookInput<E extends HookEventName> =
-  E extends 'PreToolUse'           ? PreToolUseInput :
   E extends 'PostToolUse'          ? PostToolUseInput :
   E extends 'PostToolUseFailure'   ? PostToolUseFailureInput :
   E extends 'PostToolBatch'        ? PostToolBatchInput :
@@ -111,7 +103,6 @@ export type HookInput<E extends HookEventName> =
   never;
 
 export const HOOK_EVENT_NAMES: readonly HookEventName[] = [
-  'PreToolUse',
   'PostToolUse',
   'PostToolUseFailure',
   'PostToolBatch',

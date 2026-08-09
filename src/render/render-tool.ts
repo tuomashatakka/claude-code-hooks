@@ -1,11 +1,9 @@
-import { Badge, renderBadges } from './badge.ts';
-import { renderSection } from './primitives.ts';
-import { getToolDefinition, type RenderedSection, type ToolContext } from '../registry/tool-registry.ts';
+import { Badge, renderSection, type BadgeLike } from '../tui/index.ts';
+import { getToolDefinition, type ToolContext } from '../registry/tool-registry.ts';
 import type { ToolName } from '../types/claude-code.ts';
 import type { ToolInputUnion, RawToolResult } from '../types/tool-io.ts';
 
 interface RenderToolArgs {
-  phase: 'pre' | 'post';
   toolName: ToolName;
   input: ToolInputUnion;
   result?: RawToolResult;
@@ -14,7 +12,6 @@ interface RenderToolArgs {
 }
 
 export function renderToolSection({
-  phase,
   toolName,
   input,
   result,
@@ -24,25 +21,17 @@ export function renderToolSection({
   const def = getToolDefinition(toolName);
   const ctx: ToolContext = { toolName };
 
-  let section: RenderedSection = { lines: [] };
-  if (phase === 'pre' && def.pre) {
-    section = def.pre(input as never, ctx);
-  } else if (phase === 'post' && def.post) {
-    section = def.post(input as never, result as never, durationMs, ctx);
-  }
+  const section = def.post(input as never, result as never, durationMs, ctx);
 
   const main = new Badge({ toolName });
-  const badges: Array<Badge | string | null | undefined> = [main, ...extraTopBadges];
-  if (phase === 'post') {
-    badges.push(
-      section.isJson
-        ? new Badge({ label: 'JSON', color: 'green' })
-        : new Badge({ label: 'OUTPUT', color: 'brightGreen' })
-    );
-  }
+  const badges: BadgeLike[] = [main, ...extraTopBadges];
+  badges.push(
+    section.isJson
+      ? new Badge({ label: 'JSON', color: 'green' })
+      : new Badge({ label: 'OUTPUT', color: 'brightGreen' })
+  );
   for (const b of section.extraBadges ?? []) badges.push(b);
 
-  const badge = renderBadges(...badges);
   // The clear-line prefix is applied once for every event in runtime/io.ts.
-  return renderSection({ badge, lines: section.lines });
+  return renderSection({ badges, lines: section.lines });
 }

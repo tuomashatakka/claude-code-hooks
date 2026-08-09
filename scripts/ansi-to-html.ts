@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Converts the SGR sequences chalk emits at chalk.level = 3 (set throughout
-// src/render, src/tools, src/hooks) into inline-styled HTML spans. Handles
+// src/tui, src/render, src/tools, src/hooks) into inline-styled HTML spans. Handles
 // what this codebase's chalk usage actually produces: bold/italic/underline/
 // inverse, 38;2/48;2 truecolor (from .hex()/.rgb() calls), and the standard
 // 16-color codes (from named methods like chalk.cyan/chalk.bgGreen — chalk

@@ -2,9 +2,12 @@ import chalk from 'chalk';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineHook } from '../registry/hook-registry.ts';
-import { Badge, renderBadges } from '../render/badge.ts';
-import { renderSection, pushDurationLine } from '../render/primitives.ts';
-import { renderHeading, renderCheckboxHeading } from '@tuomashatakka/ansi-headings';
+import {
+  Badge,
+  pushDurationLine,
+  renderHeading,
+  renderSection,
+} from '../tui/index.ts';
 import { debugLog } from '../runtime/debug.ts';
 import {
   asObject,
@@ -59,10 +62,10 @@ defineHook({
     const systemPrompt = loadSystemPrompt();
     const asciiArt = loadRandomAsciiArt();
 
-    const main = new Badge({ label: `Session:${input.source}`, color: 'green', icon: '⏻' });
-    const badge = input.model
-      ? renderBadges(main, new Badge({ label: input.model, color: 'gray' }))
-      : renderBadges(main);
+    const badges = [
+      new Badge({ label: `Session:${input.source}`, color: 'green', icon: '⏻' }),
+      input.model ? new Badge({ label: input.model, color: 'gray' }) : null,
+    ];
 
     const lines: string[] = [chalk.green('Session started')];
     if (input.agentType) lines.push(chalk.gray('Agent: ') + input.agentType);
@@ -82,7 +85,7 @@ defineHook({
         hookEventName: 'SessionStart',
         ...(systemPrompt ? { additionalContext: systemPrompt } : {}),
       },
-      systemMessage: asciiBlock + heading + renderSection({ badge, lines }),
+      systemMessage: asciiBlock + heading + renderSection({ badges, lines }),
     };
   },
 });
@@ -93,8 +96,8 @@ defineHook({
   parse() { return {}; },
   handle() {
     const heading = renderHeading({ word: 'BYE', color: 'red', event: 'bye' });
-    const badge = renderBadges(new Badge({ label: 'SessionEnd', color: 'red', icon: '⏼' }));
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badge = new Badge({ label: 'SessionEnd', color: 'red', icon: '⏼' });
+    return { systemMessage: heading + renderSection({ badges: badge }) };
   },
 });
 
@@ -104,8 +107,8 @@ defineHook({
   parse() { return {}; },
   handle() {
     const heading = renderHeading({ word: 'STOP', color: 'red', event: 'stop' });
-    const badge = renderBadges(new Badge({ label: 'Stop', color: 'red', icon: '■' }));
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    const badge = new Badge({ label: 'Stop', color: 'red', icon: '■' });
+    return { systemMessage: heading + renderSection({ badges: badge }) };
   },
 });
 
@@ -125,8 +128,7 @@ defineHook({
     const main = new Badge({ label: 'SubagentStart', color: 'green', icon: '⬡' });
     const extras: Badge[] = [];
     if (input.agentType) extras.push(new Badge({ label: input.agentType, color: 'gray' }));
-    const badge = renderBadges(main, ...extras);
-    return { systemMessage: heading + renderSection({ badge, lines: [] }) };
+    return { systemMessage: heading + renderSection({ badges: [main, ...extras] }) };
   },
 });
 
@@ -140,24 +142,16 @@ defineHook({
   handle(input) {
     const badges = [
       new Badge({ label: 'SubagentStop', color: 'green', icon: '⌟' }),
-    ]
-
-    // Subagent
-    if (input.agentType) {
-      badges.push(new Badge({ label: input.agentType, color: 'gray' }))
-    }
-
-
-    // Main proc
-    else {
-      badges.push(new Badge({ label: 'Main Process', color: 'gray' }))
-    }
-
-    const badge = renderBadges(...badges)
-    return { systemMessage:
-      renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' }) +
-      renderSection({ badge, lines: [] })
-    }
+      new Badge({
+        label: input.agentType ?? 'Main Process',
+        color: 'gray',
+      }),
+    ];
+    return {
+      systemMessage:
+        renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' })
+        + renderSection({ badges }),
+    };
   },
 });
 
@@ -173,14 +167,14 @@ defineHook({
   },
   handle(input) {
     const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' });
-    const main = new Badge({ label: 'PreCompact', color: 'yellow', icon: '⟳' });
-    const badge = input.trigger
-      ? renderBadges(main, new Badge({ label: input.trigger, color: 'gray' }))
-      : renderBadges(main);
+    const badges = [
+      new Badge({ label: 'PreCompact', color: 'yellow', icon: '⟳' }),
+      input.trigger ? new Badge({ label: input.trigger, color: 'gray' }) : null,
+    ];
     const lines = input.customInstructions
       ? [chalk.gray(input.customInstructions.slice(0, 200))]
       : [];
-    return { systemMessage: heading + renderSection({ badge, lines }) };
+    return { systemMessage: heading + renderSection({ badges, lines }) };
   },
 });
 
@@ -193,9 +187,9 @@ defineHook({
   },
   handle(input) {
     const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' });
-    const badge = renderBadges(new Badge({ label: 'PostCompact', color: 'yellow', icon: '⟳' }));
+    const badge = new Badge({ label: 'PostCompact', color: 'yellow', icon: '⟳' });
     const lines = input.summary ? [chalk.gray(input.summary.slice(0, 200))] : [];
-    return { systemMessage: heading + renderSection({ badge, lines }) };
+    return { systemMessage: heading + renderSection({ badges: badge, lines }) };
   },
 });
 
@@ -211,14 +205,14 @@ defineHook({
     };
   },
   handle(input) {
-    const main = new Badge({ label: `Instructions:${input.memoryType}`, color: 'cyan', icon: '✓' });
-    const badge = input.loadReason
-      ? renderBadges(main, new Badge({ label: input.loadReason, color: 'gray' }))
-      : renderBadges(main);
+    const badges = [
+      new Badge({ label: `Instructions:${input.memoryType}`, color: 'cyan', icon: '✓' }),
+      input.loadReason ? new Badge({ label: input.loadReason, color: 'gray' }) : null,
+    ];
 
     const lines: string[] = [];
     if (input.filePath) lines.push(chalk.gray('File: ') + input.filePath);
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges, lines }) };
   },
 });
 
@@ -230,13 +224,13 @@ defineHook({
     return { prompt: pickString(o, 'prompt', 'user_prompt', 'userPrompt') ?? '' };
   },
   handle(input) {
-    const badge = renderBadges(new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' }));
+    const badge = new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' });
     const lines: string[] = [];
     if (input.prompt) {
       const shown = input.prompt.length > 200 ? input.prompt.slice(0, 200) + '...' : input.prompt;
       lines.push(chalk.gray(shown));
     }
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges: badge, lines }) };
   },
 });
 
@@ -253,7 +247,7 @@ defineHook({
     };
   },
   handle(input) {
-    const badge = renderBadges(new Badge({ label: 'UserPromptExpansion', color: 'magenta', icon: '✱' }));
+    const badge = new Badge({ label: 'UserPromptExpansion', color: 'magenta', icon: '✱' });
     const lines: string[] = [];
     if (input.expandedPrompt) {
       const shown = input.expandedPrompt.length > 300
@@ -261,7 +255,7 @@ defineHook({
         : input.expandedPrompt;
       lines.push(chalk.gray(shown));
     }
-    return { systemMessage: renderSection({ badge, lines }) };
+    return { systemMessage: renderSection({ badges: badge, lines }) };
   },
 });
 
@@ -296,10 +290,10 @@ defineHook({
     };
   },
   handle(input) {
-    const main = new Badge({ toolName: input.toolName, color: 'red', icon: '⨂' });
-    const badge = input.isInterrupt
-      ? renderBadges(main, new Badge({ label: 'INTERRUPT', color: 'yellow' }))
-      : renderBadges(main);
+    const badges = [
+      new Badge({ toolName: input.toolName, color: 'red', icon: '⨂' }),
+      input.isInterrupt ? new Badge({ label: 'INTERRUPT', color: 'yellow' }) : null,
+    ];
 
     const lines: string[] = [chalk.red('⨂ ') + chalk.bold.red('Tool failed:')];
     const err = input.error;
@@ -313,35 +307,12 @@ defineHook({
         hookEventName: 'PostToolUseFailure',
         additionalContext: typeof err === 'string' ? err : JSON.stringify(err),
       },
-      systemMessage: renderSection({ badge, lines, dividerColor: 'red' }),
+      systemMessage: renderSection({ badges, lines }),
     };
   },
 });
 
-// 13. PreToolUse
-defineHook({
-  event: 'PreToolUse',
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown';
-    const rawInput = pickAny(o, 'tool_input', 'toolInput') ?? {};
-    return {
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput),
-      sessionId: pickString(o, 'session_id', 'sessionId'),
-    };
-  },
-  handle(input) {
-    const systemMessage = renderToolSection({
-      phase: 'pre',
-      toolName: input.toolName,
-      input: input.toolInput,
-    });
-    return { systemMessage };
-  },
-});
-
-// 14. PostToolUse
+// 13. PostToolUse
 defineHook({
   event: 'PostToolUse',
   parse(raw) {
@@ -359,7 +330,6 @@ defineHook({
   },
   handle(input) {
     const systemMessage = renderToolSection({
-      phase:      'post',
       toolName:   input.toolName,
       input:      input.toolInput,
       result:     input.toolResponse,

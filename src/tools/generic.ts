@@ -1,8 +1,13 @@
 import chalk from 'chalk';
-import { META_BADGE, OUTPUT_BADGE } from '../render/badge.ts';
-import { defineGenericTool, type RenderedSection, type ToolContext } from '../registry/tool-registry.ts';
-import { renderCard, softCollapse, pushDurationLine } from '../render/primitives.ts';
-import { parseToolName } from '../render/theme.ts';
+import { defineGenericTool, type RenderedSection } from '../registry/tool-registry.ts';
+import { softCollapse } from '../render/primitives.ts';
+import {
+  META_BADGE,
+  OUTPUT_BADGE,
+  pushDurationLine,
+  renderCard,
+} from '../tui/index.ts';
+import { parseToolName } from '../tui/index.ts';
 import {
   isJSON,
   formatJSON,
@@ -15,49 +20,6 @@ import { operationBadges, playwrightOperation } from './browser-operations.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
-
-const PRIMARY_INPUT_KEYS: Record<string, string[]> = {
-  Bash:                        ['command'],
-  Write:                       ['file_path', 'filePath'],
-  Edit:                        ['file_path', 'filePath'],
-  Read:                        ['file_path', 'filePath', 'file_paths'],
-  Glob:                        ['pattern'],
-  Grep:                        ['pattern'],
-  WebFetch:                    ['url'],
-  WebSearch:                   ['query'],
-  Task:                        ['description', 'prompt'],
-  Agent:                       ['description', 'prompt'],
-  ExitPlanMode:                ['plan'],
-  TodoWrite:                   ['todos'],
-  mcp__wcgw__BashCommand:      ['command', 'action_json'],
-  mcp__wcgw__FileWriteOrEdit:  ['file_path'],
-  mcp__wcgw__ReadFiles:        ['file_paths'],
-};
-
-const GENERIC_PRIMARY_KEYS = [
-  'command', 'file_path', 'filePath', 'file_paths',
-  'url', 'query', 'pattern', 'prompt', 'description', 'plan',
-];
-
-interface PrimaryPick {
-  key: string | null;
-  value: unknown;
-}
-
-function pickPrimaryInput(rawToolName: string, input: RawToolInput): PrimaryPick {
-  if (!input || typeof input !== 'object') return { key: null, value: null };
-  const { tool } = parseToolName(rawToolName);
-  const candidates = [
-    ...(PRIMARY_INPUT_KEYS[rawToolName] ?? []),
-    ...(PRIMARY_INPUT_KEYS[tool] ?? []),
-    ...GENERIC_PRIMARY_KEYS,
-  ];
-  for (const key of candidates) {
-    const v = input[key];
-    if (v != null && v !== '') return { key, value: v };
-  }
-  return { key: null, value: null };
-}
 
 const TOOL_PRIMARY_OUTPUT_KEYS: Record<string, string[]> = {
   Read:        ['content', 'output', 'text'],
@@ -148,42 +110,9 @@ function deconstructToolResult(toolName: string, result: RawToolResult): Deconst
   return { primary: primary || null, metadata };
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  command: 'Command', file_path: 'File', filePath: 'File',
-  file_paths: 'Files', pattern: 'Pattern', query: 'Query',
-  url: 'URL', description: 'Description', prompt: 'Prompt', plan: 'Plan',
-};
-
-function formatValue(value: unknown): string {
-  if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'object' && value !== null) return JSON.stringify(value, null, 2);
-  return String(value);
-}
 
 defineGenericTool<RawToolInput, RawToolResult>({
-  pre(input, ctx: ToolContext): RenderedSection {
-    const rawTool = ctx.toolName;
-    const { key: primaryKey, value: primaryValue } = pickPrimaryInput(rawTool, input);
-    const lines: string[] = [];
-
-    if (primaryValue != null) {
-      const formatted = formatValue(primaryValue);
-      const lang = primaryKey === 'command' ? 'bash' : detectLanguage(formatted, rawTool);
-      lines.push(simpleHighlight(formatted, lang));
-    }
-
-    for (const [k, label] of Object.entries(FIELD_LABELS)) {
-      if (k === primaryKey) continue;
-      const v = input[k];
-      if (v == null || v === '') continue;
-      lines.push(chalk.gray(`${label}: `) + formatValue(v));
-    }
-
-    const operation = playwrightOperation(rawTool);
-    return { lines, extraBadges: operationBadges(operation ? [operation] : []) };
-  },
-
-  post(input, result, durationMs, ctx): RenderedSection {
+  post(_input, result, durationMs, ctx): RenderedSection {
     const rawTool = ctx.toolName;
     const { primary, metadata } = deconstructToolResult(rawTool, result);
     const lines: string[] = [];
@@ -196,12 +125,12 @@ defineGenericTool<RawToolInput, RawToolResult>({
         if (isJSON(primary)) formatted = simpleHighlight(formatJSON(primary), 'json');
         else if (isCode(primary)) formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
       }
-      lines.push(renderCard(OUTPUT_BADGE, softCollapse(formatted)));
+      lines.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(formatted) }));
       if (metadata && Object.keys(metadata).length) {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
+        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
       }
     } else if (result && typeof result === 'object') {
-      lines.push(renderCard(META_BADGE, formatMetadataCustom(result)));
+      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
     }
 
     const operation = playwrightOperation(rawTool);

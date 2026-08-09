@@ -1,8 +1,8 @@
 import path from 'node:path';
 import chalk from 'chalk';
 import { defineTool } from '../registry/tool-registry.ts';
-import { shortenPath } from '../parsers/wcgw-trailer.ts';
-import { extractResultText, firstLine, pushDurationLine } from '../render/primitives.ts';
+import { extractResultText, firstLine } from '../render/primitives.ts';
+import { pushDurationLine } from '../tui/index.ts';
 import { renderFileResult } from '../render/file-preview.ts';
 import type { WcgwContextSaveInput, RawToolResult } from '../types/tool-io.ts';
 
@@ -37,24 +37,6 @@ function dropInlinedFiles(raw: string): string {
 
 defineTool<WcgwContextSaveInput, RawToolResult>({
   matches: 'mcp__wcgw__ContextSave',
-  pre(input) {
-    const lines: string[] = [];
-    if (input.id)                lines.push(chalk.gray('id: ') + input.id);
-    if (input.project_root_path) lines.push(chalk.gray('root: ') + shortenPath(input.project_root_path));
-    if (input.description) {
-      lines.push(chalk.gray('desc: ') + String(input.description).split('\n')[0]!.slice(0, 120));
-    }
-    if (input.relevant_file_globs) {
-      const globs = Array.isArray(input.relevant_file_globs)
-        ? input.relevant_file_globs
-        : [input.relevant_file_globs];
-      const preview = globs.slice(0, 3).join(', ');
-      const suffix  = globs.length > 3 ? chalk.gray(` +${globs.length - 3} more`) : '';
-      lines.push(chalk.gray('globs: ') + preview + suffix);
-    }
-    return { lines };
-  },
-
   post(input, result, durationMs) {
     const lines: string[] = [];
     pushDurationLine(lines, durationMs);

@@ -3,6 +3,7 @@ export {
   renderCheckboxHeading,
   renderAnsiShadowText,
   randomFiller,
+  type CheckboxHeadingArgs,
   type HeadingArgs,
 } from './headings.ts';
 

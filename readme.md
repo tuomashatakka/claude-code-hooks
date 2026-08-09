@@ -1,9 +1,9 @@
 # claude-code-hooks
 
-Enhanced hooks for Claude Code — beautified terminal output for every event.
+Enhanced hooks for Claude Code — beautified terminal output for post-tool results and lifecycle events.
 
 Block-letter headings, colored badges, syntax-highlighted diffs, sextant image
-previews and playful kaomoji phrases, across **14 hook events**.
+previews and playful kaomoji phrases, across **13 active hook events**.
 
 **[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)**
 
@@ -34,7 +34,6 @@ claude --plugin-dir /path/to/claude-code-hooks
 | --- | --- |
 | `SessionStart` | ASCII art, `BEGIN AGAIN` block heading, source + model badges, system-prompt confirmation |
 | `SessionEnd` / `Stop` | `BYE` / `STOP` block heading with a generated kaomoji phrase |
-| `PreToolUse` | Tool badge, the command or arguments, syntax-highlighted search/replace blocks, browser-operation badges |
 | `PostToolUse` | Tool badge, duration, tab-titled output cards, diffs, JSON cards, file previews, task state headings |
 | `PostToolUseFailure` | Failure badge plus the error body |
 | `PostToolBatch` | One summary line per tool in a resolved parallel batch |
@@ -43,8 +42,12 @@ claude --plugin-dir /path/to/claude-code-hooks
 | `UserPromptSubmit` / `UserPromptExpansion` | The prompt, and what a command expanded into |
 | `SubagentStart` / `SubagentStop` | Agent id, type, and lifecycle badges |
 
-Cards attach their title badge to a hairline across the top edge, so `Running`,
-`Output`, and metadata labels read like tabs instead of floating chips.
+Cards attach their title badge to a lower `▁` rule in the same color, so
+`Running`, `Output`, and metadata labels read like tabs instead of floating
+chips. Paired command and output cards sit side-by-side when their ANSI-aware
+combined width fits comfortably, then fall back to a vertical stack on narrow
+terminals. File-content cards always lead with the relative or absolute source path
+as a badge; read/edit/write renderers cannot omit it.
 Playwright and `agent-browser` calls add a compact operation badge such as
 `navigate`, `click`, or `snapshot`. `TaskCreate`, `TaskUpdate`, and `TaskList`
 share the same large block-weight checkbox: newly queued or active tasks stay
@@ -54,14 +57,19 @@ the task-state caption.
 Images read through `Read` are rendered as ANSI 2x3 sextant previews. Each cell
 chooses an exact two-colour clustering of six image samples, using Unicode block
 sextants and separated sextants through U+1CE86 for sharper edges. The renderer
-still degrades from 24-bit color through channel quantization to xterm-256 so the
-whole preview fits inside Claude Code's 10KB hook display limit. Set
-`CLAUDE_HOOKS_IMAGE_MODE=half` (or use `TERM=dumb`) for the legacy half-block
-fallback when a terminal font does not cover the sextant glyphs.
+can degrade from 24-bit color through channel quantization to xterm-256 when a
+smaller representation scores better. Set `CLAUDE_HOOKS_IMAGE_MODE=half` (or
+use `TERM=dumb`) for the legacy half-block fallback when a terminal font does
+not cover the sextant glyphs.
 
-For Codex, tool-hook output is emitted once as stdout JSON. `PreToolUse` and
-`PostToolUse` deliberately do not mirror the same `systemMessage` to stderr,
-preventing doubled cards while preserving the strict hook wire envelope.
+For Codex, `PostToolUse` output is emitted once as stdout JSON and does not
+mirror the same `systemMessage` to stderr, preventing doubled cards while
+preserving the strict hook wire envelope. When a composed render exceeds Claude
+Code's 10KB hook transport budget, the final transport layer retains as many
+leading and trailing lines as fit and inserts a compact omitted-line count.
+Single oversized lines use the same strategy at character granularity.
+`PreToolUse` is intentionally not registered, so this plugin never intercepts
+or delays a tool before it runs.
 
 ## Development
 
@@ -84,16 +92,24 @@ same commit**.
 ### Layout
 
 ```
-hooks/hooks.json     event -> command wiring (all 14 events)
+hooks/hooks.json     event -> command wiring (13 active events)
 hooks/bin/bind.ts    entrypoint; dispatches one event and exits
 src/hooks/           per-event handlers
 src/tools/           per-tool renderers, registered into a lookup
-src/render/          badges, headings, diffs, file previews, theme
+src/tui/             shared components, layout tokens and tool theme
+src/render/          content parsing, highlighting and file previews
 dist/hooks.mjs       committed bundle — the shipped artifact
 packages/            @tuomashatakka/ansi-headings, @tuomashatakka/image-to-ascii
 public/              the showcase page (GitHub Pages)
 scripts/             smoke test, demo capture, ANSI->HTML converter
 ```
+
+The TUI has one public component surface at `src/tui/index.ts`. Tool and event
+renderers compose typed `Badge`, `Box`/`Card`, `FileCard`, output limiter,
+`Heading`, `Section`, duration, and ruler components from there. Layout
+constants live in `src/tui/tokens.ts`; content parsing and syntax highlighting
+stay under
+`src/render/`.
 
 The showcase page never contains hand-written terminal output: every block on it
 is captured from the real hook pipeline at deploy time by

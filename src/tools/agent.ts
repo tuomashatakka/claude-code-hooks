@@ -1,22 +1,10 @@
-import chalk from 'chalk';
-import { META_BADGE } from '../render/badge.ts';
 import { defineTool } from '../registry/tool-registry.ts';
-import { renderCard, pushDurationLine } from '../render/primitives.ts';
+import { META_BADGE, pushDurationLine, renderCard } from '../tui/index.ts';
 import { simpleHighlight, formatMetadataCustom } from '../render/highlight.ts';
 import type { TaskInput, RawToolResult } from '../types/tool-io.ts';
 
-chalk.level = 3;
-
 defineTool<TaskInput, RawToolResult>({
   matches: ['Agent', 'Task'],
-  pre(input) {
-    const lines: string[] = [];
-    if (input.description) {
-      lines.push(input.description);
-    }
-    return { lines };
-  },
-
   post(input, result, durationMs) {
     const lines: string[] = [];
 
@@ -35,7 +23,7 @@ defineTool<TaskInput, RawToolResult>({
       delete metadata.description;
 
       if (Object.keys(metadata).length > 0) {
-        lines.push(renderCard(META_BADGE, formatMetadataCustom(metadata)));
+        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
       }
     }
 

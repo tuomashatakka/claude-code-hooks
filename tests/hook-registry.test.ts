@@ -7,6 +7,7 @@ import '../src/hooks/index.ts';
 import { dispatchHook, listHooks } from '../src/registry/hook-registry.ts';
 import { stripAnsi } from '../src/render/primitives.ts';
 import { HOOK_EVENT_NAMES } from '../src/types/hook-events.ts';
+import { serializeHookResponse } from '../src/runtime/output-transport.ts';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const BIND = path.join(ROOT, 'hooks', 'bin', 'bind.ts');
@@ -15,7 +16,7 @@ function sorted(values: readonly string[]): string[] {
   return [...values].sort((a, b) => a.localeCompare(b));
 }
 
-function runWireHook(event: 'PreToolUse' | 'PostToolUse', payload: unknown): {
+function runWireHook(event: 'PostToolUse', payload: unknown): {
   stdout: string;
   stderr: string;
   output: Record<string, unknown>;
@@ -54,14 +55,6 @@ describe('codex-compatible tool hook output', () => {
     tool_input: { command: 'git status --short' },
   };
 
-  test('allows PreToolUse implicitly without an unsupported allow decision', () => {
-    const output = dispatchHook('PreToolUse', input);
-
-    expect(output.systemMessage).toBeString();
-    expect(output.continue).toBeUndefined();
-    expect(output.hookSpecificOutput).toBeUndefined();
-  });
-
   test('renders PostToolUse without unsupported hook-specific fields', () => {
     const output = dispatchHook('PostToolUse', {
       ...input,
@@ -72,18 +65,43 @@ describe('codex-compatible tool hook output', () => {
     expect(output.hookSpecificOutput).toBeUndefined();
   });
 
-  test('emits tool output once on stdout and never mirrors it to stderr', () => {
-    for (const event of ['PreToolUse', 'PostToolUse'] as const) {
-      const result = runWireHook(event, {
-        ...input,
-        ...(event === 'PostToolUse' ? { tool_response: { stdout: 'clean' } } : {}),
-      });
+  test('emits PostToolUse output once on stdout and never mirrors it to stderr', () => {
+    const result = runWireHook('PostToolUse', {
+      ...input,
+      tool_response: { stdout: 'clean' },
+    });
 
-      expect(result.stderr).toBe('');
-      expect(result.output.systemMessage).toBeString();
-      expect(result.output.continue).toBeUndefined();
-      expect(result.output.hookSpecificOutput).toBeUndefined();
-    }
+    expect(result.stderr).toBe('');
+    expect(result.output.systemMessage).toBeString();
+    expect(result.output.continue).toBeUndefined();
+    expect(result.output.hookSpecificOutput).toBeUndefined();
+  });
+
+  test('limits oversized output without breaking the hook JSON envelope', () => {
+    const toolResponse = Array.from(
+      { length: 240 },
+      (_, index) => `${String(index).padStart(3, '0')} ${'x'.repeat(56)}`,
+    ).join('\n');
+    const result = runWireHook('PostToolUse', {
+      ...input,
+      tool_response: { stdout: toolResponse },
+    });
+    const systemMessage = stripAnsi(result.output.systemMessage);
+
+    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThan(10_000);
+    expect(systemMessage).toContain('000 ');
+    expect(systemMessage).toContain('239 ');
+    expect(systemMessage).toContain('lines omitted');
+    expect(systemMessage).not.toContain('system-message.ansi');
+    expect(systemMessage).not.toContain('Claude Code limits hook output transport');
+  });
+
+  test('limits one oversized line without emitting invalid JSON', () => {
+    const result = serializeHookResponse({ systemMessage: 'x'.repeat(20_000) });
+    const output = JSON.parse(result.json) as { systemMessage: string };
+
+    expect(Buffer.byteLength(result.json, 'utf8')).toBeLessThan(10_000);
+    expect(stripAnsi(output.systemMessage)).toContain('characters omitted');
   });
 
   test('restores nested wcgw stdout while leaving the trailer as metadata', () => {
@@ -144,15 +162,17 @@ describe('codex-compatible tool hook output', () => {
   });
 
   test('echoes playwright and agent-browser operations as badges', () => {
-    const playwright = stripAnsi(dispatchHook('PreToolUse', {
+    const playwright = stripAnsi(dispatchHook('PostToolUse', {
       tool_name: 'mcp__playwright__browser_navigate',
       tool_input: { url: 'https://example.com' },
+      tool_response: { content: [{ type: 'text', text: 'page loaded' }] },
     }).systemMessage);
-    const agentBrowser = stripAnsi(dispatchHook('PreToolUse', {
+    const agentBrowser = stripAnsi(dispatchHook('PostToolUse', {
       tool_name: 'Bash',
       tool_input: {
         command: 'agent-browser --session demo press Enter && agent-browser --session demo snapshot',
       },
+      tool_response: { stdout: 'done' },
     }).systemMessage);
 
     expect(playwright).toContain('ƒ navigate');

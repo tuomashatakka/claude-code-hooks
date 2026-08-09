@@ -1,10 +1,8 @@
 import fs from 'node:fs';
-import chalk from 'chalk';
 import { imageToAscii } from '@tuomashatakka/image-to-ascii';
 import { formatJSON, isJSON, simpleHighlight, langFromPath, detectContentLanguage } from './highlight.ts';
-import { getMaxContentWidth, renderBox, softCollapse, type SoftCollapseOptions } from './primitives.ts';
-
-chalk.level = 3;
+import { softCollapse, type SoftCollapseOptions } from './primitives.ts';
+import { getMaxContentWidth, renderFileCard } from '../tui/index.ts';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 
@@ -55,17 +53,15 @@ export function renderFilePreview(filePath: string, options: FilePreviewOptions 
 
   const shape = (raw: string) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
 
-  if (options.fallbackText != null) {
-    return { content: shape(options.fallbackText), kind: 'text' };
+  if (options.readText !== false) {
+    try {
+      return { content: shape(fs.readFileSync(filePath, 'utf8')), kind: 'text' };
+    } catch {}
   }
 
-  if (options.readText === false) return null;
-
-  try {
-    return { content: shape(fs.readFileSync(filePath, 'utf8')), kind: 'text' };
-  } catch {
-    return null;
-  }
+  return options.fallbackText == null
+    ? null
+    : { content: shape(options.fallbackText), kind: 'text' };
 }
 
 // wcgw addresses files as `/path/to/file.ts:10-40`. Split the range off so the
@@ -96,15 +92,14 @@ function sliceToRange(content: string, { start, end }: LineRange): string {
 }
 
 export interface FileResultOptions extends FilePreviewOptions {
-  /** Footer verb — mirrors the `type` field Write's tool response carries. */
+  /** Detail badge verb — mirrors the `type` field Write's tool response carries. */
   action?: string | null;
   /** Window to show. Overrides any `:10-40` suffix carried by the path. */
   range?: LineRange | null;
 }
 
-// The Write PostToolUse block, reusable: file content (highlighted, or ascii for
-// images) with a Path/Action footer, all inside one box. MCP file tools return
-// an opaque `[{type:"text"}]` payload, so they rebuild this from disk instead.
+// File output is always composed through renderFileCard, which makes the source
+// path a title badge instead of relying on each caller to remember it.
 export function renderFileResult(rawPath: string, options: FileResultOptions = {}): string | null {
   const { action, range: rangeOverride, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
@@ -117,21 +112,14 @@ export function renderFileResult(rawPath: string, options: FileResultOptions = {
     ? sliceToRange(preview.content, range)
     : preview.content;
 
-  const parts = [collapsePreview(body)];
-  parts.push(chalk.cyan('󰈚 ') + chalk.bold('Path: ') + filePath);
-
-  // Footer, not the Path line: a long path gets truncated to the box width and
-  // would take the range annotation down with it.
-  const footer = [action, range ? formatRange(range) : null].filter(Boolean).join('  ');
-  if (footer) parts.push(chalk.cyan('⧖ ') + chalk.bold('Action: ') + footer);
-
-  return renderBox(parts.join('\n\n'));
+  const details = [action, range ? formatRange(range) : null].filter(Boolean).join('  ');
+  return renderFileCard({
+    path: filePath,
+    content: collapsePreview(body),
+    details: details || null,
+  });
 }
 
 export function collapsePreview(content: string, options: SoftCollapseOptions = {}): string {
   return softCollapse(content, { label: 'lines', ...options });
-}
-
-export function prefixPreviewLines(content: string, prefix: string): string {
-  return content.split('\n').map(line => prefix + line).join('\n');
 }

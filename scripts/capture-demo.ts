@@ -79,14 +79,6 @@ const SCRIPT: Beat[] = [
     note: 'Every prompt you submit is echoed back through the hook.',
   }),
 
-  hook('PreToolUse:Bash says:', 'PreToolUse', {
-    tool_name: 'Bash',
-    tool_input: { command: "rg -n 'renderBadges' src/hooks/index.ts", description: 'find badge call sites' },
-  }, {
-    header: "Bash(rg -n 'renderBadges' src/hooks/index.ts)",
-    note: 'Before a command runs: the input, in its own card.',
-  }),
-
   hook('PostToolUse:Bash says:', 'PostToolUse', {
     tool_name: 'Bash',
     tool_input: { command: "rg -n 'renderBadges' src/hooks/index.ts" },
@@ -114,27 +106,6 @@ const SCRIPT: Beat[] = [
     note: 'A chained command: each separator ends its own row, and heredoc bodies pass through untouched.',
   }),
 
-  hook('PreToolUse:Edit says:', 'PreToolUse', {
-    tool_name: 'mcp__wcgw__FileWriteOrEdit',
-    tool_input: {
-      file_path: 'src/hooks/index.ts',
-      percentage_to_change: 8,
-      thread_id: 'i6314',
-      text_or_search_replace_blocks:
-        '<<<<<<< SEARCH\n' +
-        "    const badge = renderBadges(new Badge({ label: 'Stop', color: 'red', icon: '■' }));\n" +
-        '=======\n' +
-        '    const badge = renderBadges(\n' +
-        "      new Badge({ label: 'Stop', color: 'red', icon: '■' }),\n" +
-        "      new Badge({ label: 'turn complete', color: 'gray' }),\n" +
-        '    );\n' +
-        '>>>>>>> REPLACE',
-    },
-  }, {
-    header: 'wcgw ▸ FileWriteOrEdit(src/hooks/index.ts)',
-    note: 'Search/replace blocks render as a syntax-highlighted diff before anything is written.',
-  }),
-
   hook('PostToolUse:Bash says:', 'PostToolUse', {
     tool_name: 'Bash',
     tool_input: { command: 'git diff --stat && bun test' },
@@ -157,13 +128,13 @@ const SCRIPT: Beat[] = [
   hook('PostToolUse:TaskCreate says:', 'PostToolUse', {
     tool_name: 'TaskCreate',
     tool_input: {
-      subject: 'Badge parity across all 14 hook events',
-      description: 'Every event should render a badge row; Stop was the last one missing a secondary badge.',
+      subject: 'Badge parity across all 13 active hook events',
+      description: 'Every active event should render a badge row; Stop was the last one missing a secondary badge.',
     },
-    tool_response: { success: true, task: { id: 7, subject: 'Badge parity across all 14 hook events' } },
+    tool_response: { success: true, task: { id: 7, subject: 'Badge parity across all 13 active hook events' } },
     duration_ms: 34,
   }, {
-    header: 'TaskCreate(Badge parity across all 14 hook events)',
+    header: 'TaskCreate(Badge parity across all 13 active hook events)',
     note: 'Tasks get a giant checkbox so a created task is unmissable in the scrollback.',
   }),
 
@@ -203,7 +174,7 @@ const SCRIPT: Beat[] = [
       taskId: 7,
       updatedFields: ['status'],
       statusChange: { from: 'in_progress', to: 'completed' },
-      task: { id: 7, subject: 'Badge parity across all 14 hook events' },
+      task: { id: 7, subject: 'Badge parity across all 13 active hook events' },
     },
     duration_ms: 12,
   }, {

@@ -1,6 +1,5 @@
 import chalk from 'chalk';
-import { renderCheckboxHeading } from '@tuomashatakka/ansi-headings';
-import { Badge, renderBadges } from '../render/badge.ts';
+import { Badge, renderBadges, renderCheckboxHeading } from '../tui/index.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;

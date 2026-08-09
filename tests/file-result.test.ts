@@ -18,12 +18,21 @@ describe('stripLineRange', () => {
 });
 
 describe('renderFileResult', () => {
-  test('renders content with the Write-style Path/Action footer', () => {
-    const out = stripAnsi(renderFileResult(target, { action: 'write' })!);
+  test('renders the file path and action as badges above the content box', () => {
+    const rendered = renderFileResult(target, { action: 'write' })!;
+    const out = stripAnsi(rendered);
+    const title = stripAnsi(rendered.split('\n')[1]);
+
     expect(out).toContain('const a = 1;');
     expect(out).toContain('const d = 4;');
-    expect(out).toContain(`Path: ${target}`);
-    expect(out).toContain('Action: write');
+    expect(title).toContain(target);
+    expect(title).toContain('write');
+  });
+
+  test('prefers the file on disk over fallback response text', () => {
+    const out = stripAnsi(renderFileResult(target, { fallbackText: 'fallback only' })!);
+    expect(out).toContain('const a = 1;');
+    expect(out).not.toContain('fallback only');
   });
 
   test('slices to the requested line range', () => {

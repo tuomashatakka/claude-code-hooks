@@ -1,4 +1,4 @@
-import { Badge } from '../render/badge.ts';
+import { Badge } from '../tui/index.ts';
 
 const VALUE_OPTIONS = new Set([
   '--session', '--session-name', '--profile', '--state', '--headers',

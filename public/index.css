@@ -5,7 +5,7 @@
    The palette below is load-bearing: scripts/ansi-to-html.ts writes
    `var(--red)`, `var(--cyan)`, `var(--fg-dim)` &c. straight into the
    captured markup, so these custom property names must keep existing
-   with these values. They mirror the chalk output of src/render/theme.ts.
+   with these values. They mirror the chalk output of src/tui/theme.ts.
    ============================================================ */
 
 :root {
@@ -276,7 +276,11 @@ a:hover { text-decoration: underline; }
   min-width: 0;
 }
 .hint.on { opacity: 1; animation: hintpulse 2.4s ease-in-out infinite; }
-@keyframes hintpulse { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+@keyframes hintpulse {
+  from { opacity: .55; }
+  50% { opacity: 1; }
+  to { opacity: .55; }
+}
 
 .stepper { display: flex; align-items: center; gap: 6px; flex: none; }
 .counter { color: var(--fg-dim); min-width: 6ch; text-align: center; }
@@ -320,6 +324,5 @@ a:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   .hint.on { animation: none; opacity: 1; }
-}
-  .beat  { animation: none; }
+  .beat { animation: none; }
 }

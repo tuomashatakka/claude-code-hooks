@@ -1,9 +1,10 @@
 import type { BadgeColor, ToolName } from '../types/claude-code.ts';
 import type { RawToolInput, RawToolResult, ToolInputUnion } from '../types/tool-io.ts';
+import type { Badge } from '../tui/index.ts';
 
 export interface RenderedSection {
   lines: string[];
-  extraBadges?: import('../render/badge.ts').Badge[];
+  extraBadges?: Badge[];
   isJson?: boolean;
 }
 
@@ -18,8 +19,7 @@ export type ToolMatcher =
 
 export interface ToolDefinition<TInput = ToolInputUnion, TResult = RawToolResult> {
   matches: ToolMatcher;
-  pre?: (input: TInput, ctx: ToolContext) => RenderedSection;
-  post?: (input: TInput, result: TResult, durationMs: number | null, ctx: ToolContext) => RenderedSection;
+  post: (input: TInput, result: TResult, durationMs: number | null, ctx: ToolContext) => RenderedSection;
   icon?: string;
   color?: BadgeColor;
 }
