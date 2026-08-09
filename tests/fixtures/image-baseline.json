@@ -1,0 +1,32 @@
+{
+  "ui-screenshot": {
+    "psnr": 29.5,
+    "chars": 7119,
+    "cols": 86,
+    "rows": 29
+  },
+  "dark-terminal": {
+    "psnr": 27.14,
+    "chars": 3683,
+    "cols": 86,
+    "rows": 27
+  },
+  "chart": {
+    "psnr": 27.03,
+    "chars": 7879,
+    "cols": 86,
+    "rows": 29
+  },
+  "photo": {
+    "psnr": 32.25,
+    "chars": 7591,
+    "cols": 50,
+    "rows": 17
+  },
+  "alpha-logo": {
+    "psnr": 26.8,
+    "chars": 7476,
+    "cols": 86,
+    "rows": 43
+  }
+}
