@@ -7,9 +7,11 @@ import {
   type CellSamples, type CompiledTable, type FitResult,
 } from './fit.ts';
 import { regularSextant, separatedSextant } from './glyphs/sextants.ts';
+import { BRAILLE_COLS, brailleChars, renderBraille, type BrailleOptions } from './braille.ts';
 import { BASES, type CoverageBasis, type GlyphFamily, type GlyphTable } from './glyphs/types.ts';
 
 export { regularSextant, separatedSextant } from './glyphs/sextants.ts';
+export { renderBraille, brailleChars, type BrailleOptions } from './braille.ts';
 export { costOf, normalizeBudget, DEFAULT_BUDGET, type BudgetSpec } from './budget.ts';
 export type { RGBAImage } from './decode.ts';
 
@@ -130,7 +132,7 @@ const PALETTE_256: readonly RGB[] = (() => {
  * WezTerm synthesise every one of these glyphs from the cell metrics and are
  * immune to font coverage entirely. Everywhere else, sextants.
  */
-export type GlyphMode = 'sextant' | 'octant' | 'half';
+export type GlyphMode = 'sextant' | 'octant' | 'half' | 'braille';
 
 function drawsItsOwnGlyphs(): boolean {
   const program = (process.env.TERM_PROGRAM ?? '').toLowerCase();
@@ -140,7 +142,7 @@ function drawsItsOwnGlyphs(): boolean {
 
 export function resolveGlyphMode(): GlyphMode {
   const env = process.env.CLAUDE_HOOKS_IMAGE_MODE;
-  if (env === 'sextant' || env === 'octant' || env === 'half') return env;
+  if (env === 'sextant' || env === 'octant' || env === 'half' || env === 'braille') return env;
   if (process.env.TERM === 'dumb') return 'half';
   // Below a 1.75 cell aspect a 2x3 grid is the squarer of the two, so the
   // octants' extra row would be buying detail in the wrong direction.
@@ -197,11 +199,12 @@ function contextFor(mode: GlyphMode, palette: boolean): RenderContext {
 /** The candidate set a mode searches — exposed so tests can rasterise a render
  *  back to pixels without re-deriving each character's shape. */
 export function glyphTable(mode: GlyphMode = resolveGlyphMode(), palette = false): GlyphTable {
-  return contextFor(mode === 'half' ? 'sextant' : mode, palette).table;
+  return contextFor(mode === 'octant' ? 'octant' : 'sextant', palette).table;
 }
 
 /** Every character this package can emit in the current mode. */
 export function glyphChars(mode: GlyphMode = resolveGlyphMode()): ReadonlySet<string> {
+  if (mode === 'braille') return brailleChars();
   if (mode === 'half') return new Set([' ', '\u2580', '\u2584', '\u2588']);
   const chars = new Set(contextFor(mode, false).chars);
   for (const char of contextFor(mode, true).chars) chars.add(char);
@@ -610,6 +613,48 @@ export interface RenderOptions {
   colorMode?: ColorMode;
   /** Quality rungs to try at each width, richest first. */
   tiers?: readonly Tier[];
+  /**
+   * Sub-cell grid to render on, overriding what the terminal suggests. A caller
+   * that knows what it is drawing — line art, say — can pick better than the
+   * environment can.
+   */
+  mode?: GlyphMode;
+  /** Options for `mode: 'braille'`. */
+  braille?: BrailleOptions;
+}
+
+/**
+ * Widest braille render that fits.
+ *
+ * Braille costs three bytes per non-empty cell and nothing else — no escapes,
+ * so no run-length luck — which makes its cost monotone in the width and the
+ * search a bisection rather than the fitted path's scan over a window of widths.
+ */
+function widestBrailleRender(
+  img: RGBAImage,
+  sat: ImageSAT,
+  startCols: number,
+  spec: BudgetSpec,
+  options: BrailleOptions | undefined,
+): string[] {
+  const at = (cols: number): string[] => {
+    const geometry = fitGeometry(img.width, img.height, cols, BASES['2x4']);
+    return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
+  };
+  let low = 1;
+  let high = Math.max(1, startCols);
+  let best = at(low);
+  while (low <= high) {
+    const cols = (low + high) >> 1;
+    const lines = at(cols);
+    if (costOf(lines, spec) <= spec.total) {
+      best = lines;
+      low = cols + 1;
+    } else {
+      high = cols - 1;
+    }
+  }
+  return best;
 }
 
 export function imageToAscii(buffer: Buffer, ext: string, maxWidth?: number): string | null;
@@ -629,12 +674,17 @@ export function imageToAscii(
   const spec = normalizeBudget(options.budget);
   const maxWidth = options.maxWidth ?? 80;
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const mode = resolveGlyphMode();
+  const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === 'half';
   let out: string[] = [];
   const initialCols = forceHalfBlocks
     ? Math.min(img.width, requestedMax)
-    : Math.min(Math.ceil(img.width / 2), requestedMax);
+    : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
+
+  if (mode === 'braille') {
+    return widestBrailleRender(img, sat, initialCols, spec, options.braille).join('\n');
+  }
+
   const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
   const render = (cols: number, attempt: (typeof ATTEMPTS)[number]): Render =>
     forceHalfBlocks

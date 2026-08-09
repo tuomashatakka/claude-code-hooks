@@ -9,6 +9,7 @@ import {
   renderSection,
 } from '../tui/index.ts';
 import { debugLog } from '../runtime/debug.ts';
+import { systemMessageHeadroom } from '../runtime/output-transport.ts';
 import {
   asObject,
   pickString,
@@ -18,6 +19,7 @@ import {
   injectToolDiscriminator
 } from './_normalize.ts';
 import { renderToolSection } from '../render/render-tool.ts';
+import { renderWelcome } from '../render/welcome.ts';
 import type { ToolName } from '../types/claude-code.ts';
 import type { RawToolResult } from '../types/tool-io.ts';
 
@@ -25,23 +27,11 @@ chalk.level = 3;
 
 const HOME = process.env.HOME ?? process.env.USERPROFILE ?? '';
 const SYSTEM_PROMPT_PATH = path.join(HOME, 'system-prompt.md');
-const ASCII_DIR = path.join(HOME, 'Documents', 'Prompts', 'anime-ascii');
 
 function loadSystemPrompt(): string | null {
   try {
     if (fs.existsSync(SYSTEM_PROMPT_PATH)) return fs.readFileSync(SYSTEM_PROMPT_PATH, 'utf8');
   } catch (e) { debugLog('SessionStart', 'load-system-prompt', (e as Error).message); }
-  return null;
-}
-
-function loadRandomAsciiArt(): string | null {
-  try {
-    if (!fs.existsSync(ASCII_DIR)) return null;
-    const files = fs.readdirSync(ASCII_DIR).filter(f => f.endsWith('.txt'));
-    if (!files.length) return null;
-    const pick = files[Math.floor(Math.random() * files.length)]!;
-    return fs.readFileSync(path.join(ASCII_DIR, pick), 'utf8');
-  } catch (e) { debugLog('SessionStart', 'load-ascii', (e as Error).message); }
   return null;
 }
 
@@ -60,7 +50,6 @@ defineHook({
   },
   handle(input) {
     const systemPrompt = loadSystemPrompt();
-    const asciiArt = loadRandomAsciiArt();
 
     const badges = [
       new Badge({ label: `Session:${input.source}`, color: 'green', icon: '⏻' }),
@@ -72,20 +61,25 @@ defineHook({
     if (systemPrompt)    lines.push(chalk.cyan('✓ ') + 'System prompt loaded from: ' + SYSTEM_PROMPT_PATH);
 
     const isWake = input.source === 'compact';
-    const headingWord = isWake ? 'WAKE UP' : 'BEGIN AGAIN';
-    const asciiBlock = asciiArt ? '\n' + asciiArt + '\n' : '';
     const heading = renderHeading({
-      word: headingWord,
+      word: isWake ? 'WAKE UP' : 'BEGIN AGAIN',
       color: 'cyan',
       event: isWake ? 'wakeup' : 'start',
     });
-
-    return {
+    // The art is sized against what the rest of the response leaves of the
+    // transport's byte budget, so it has to be rendered last — and measured
+    // against the response it will ship inside, not against a guess.
+    const response = {
       hookSpecificOutput: {
-        hookEventName: 'SessionStart',
+        hookEventName: 'SessionStart' as const,
         ...(systemPrompt ? { additionalContext: systemPrompt } : {}),
       },
-      systemMessage: asciiBlock + heading + renderSection({ badges, lines }),
+      systemMessage: heading + renderSection({ badges, lines }),
+    };
+
+    return {
+      ...response,
+      systemMessage: renderWelcome(systemMessageHeadroom(response)) + response.systemMessage,
     };
   },
 });

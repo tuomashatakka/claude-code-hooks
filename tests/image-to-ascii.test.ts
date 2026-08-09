@@ -131,3 +131,47 @@ describe('imageToAscii', () => {
     expect(out!.length).toBeLessThanOrEqual(9200);
   });
 });
+
+describe('braille mode', () => {
+  // One cell, one pixel per dot: what comes back names the dot numbering
+  // directly, which is the part of braille that is easy to get subtly wrong.
+  function cell(dark: ReadonlyArray<readonly [x: number, y: number]>): string {
+    const png = new PNG({ width: 2, height: 4 });
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 2; x++) {
+        const at = (2 * y + x) << 2;
+        const ink = dark.some(([dx, dy]) => dx === x && dy === y) ? 0 : 255;
+        png.data[at] = ink; png.data[at + 1] = ink; png.data[at + 2] = ink; png.data[at + 3] = 255;
+      }
+    }
+    return imageToAscii(PNG.sync.write(png), '.png', { maxWidth: 1, mode: 'braille' })!;
+  }
+
+  test('numbers dots down the columns, then the eighth-dot row', () => {
+    expect(cell([[0, 0]])).toBe('⠁');            // dot 1
+    expect(cell([[0, 2]])).toBe('⠄');            // dot 3
+    expect(cell([[1, 0]])).toBe('⠈');            // dot 4
+    expect(cell([[0, 3]])).toBe('⡀');            // dot 7
+    expect(cell([[1, 3]])).toBe('⢀');            // dot 8
+  });
+
+  test('a blank cell is a space, and a full one is every dot', () => {
+    expect(cell([])).toBe('');
+    expect(cell([[0, 0], [0, 1], [0, 2], [0, 3], [1, 0], [1, 1], [1, 2], [1, 3]])).toBe('⣿');
+  });
+
+  test('spends no escape sequences at all', () => {
+    const art = imageToAscii(pngBuffer(120, 80), '.png', { maxWidth: 40, mode: 'braille' })!;
+    expect(art).not.toMatch(ANSI_RE);
+    expect(art).toMatch(/[⠀-⣿]/u);
+  });
+
+  test('honours a byte budget the colour modes could not', () => {
+    const art = imageToAscii(pngBuffer(400, 300), '.png', {
+      maxWidth: 90,
+      mode: 'braille',
+      budget: { total: 600, bytes: true },
+    })!;
+    expect(Buffer.byteLength(art, 'utf8')).toBeLessThanOrEqual(600);
+  });
+});

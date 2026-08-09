@@ -217,9 +217,10 @@ export const CASES: Case[] = [
   },
 ];
 
-// SessionStart reads $HOME/system-prompt.md and $HOME/Documents/Prompts/anime-ascii/*
-// if present - point HOME at a directory that won't exist so output is the
-// same generic content regardless of whose machine (or CI runner) this runs on.
+// SessionStart reads $HOME/system-prompt.md, and falls back to a random
+// $HOME/Documents/Prompts/anime-ascii/*.txt when the bundled welcome image
+// cannot be rendered - point HOME at a directory that won't exist so output is
+// the same generic content regardless of whose machine (or CI runner) this runs on.
 const SANDBOX_HOME = path.join(ROOT, '.smoke-home');
 
 // capture-demo.ts passes a populated fixture home instead, so the showcase

@@ -24,12 +24,27 @@ export interface BudgetSpec {
    * is rewritten to the card's (much longer) background-open sequence.
    */
   bgResetSurcharge?: number;
+  /**
+   * Measure UTF-8 bytes rather than UTF-16 code units. The two disagree by a
+   * factor of four on the very glyphs this renderer leans on — a sextant is
+   * three bytes and an octant, being astral, is four — so a caller whose limit
+   * is a byte limit has to say so or it will overrun by a third.
+   */
+  bytes?: boolean;
+  /**
+   * Extra cost per ESC in the content. A caller that JSON-encodes the render
+   * pays six characters (`\u001b`) where the renderer counted one, and since
+   * four fifths of the output is escape sequences that surcharge is the single
+   * largest term in the whole budget.
+   */
+  escapeSurcharge?: number;
 }
 
 /** Standalone default: the renderer's own output is all there is to pay for. */
 export const DEFAULT_BUDGET: BudgetSpec = { total: 9200 };
 
 export const BG_RESET = '\x1b[49m';
+const ESC = '\x1b';
 
 export function normalizeBudget(budget: number | BudgetSpec | undefined): BudgetSpec {
   if (budget === undefined) return DEFAULT_BUDGET;
@@ -49,13 +64,15 @@ function countOccurrences(haystack: string, needle: string): number {
 /** What `lines` will actually cost once the caller's wrapper is applied. */
 export function costOf(lines: readonly string[], spec: BudgetSpec): number {
   const perRow = spec.perRow ?? 0;
-  const surcharge = spec.bgResetSurcharge ?? 0;
+  const bgSurcharge = spec.bgResetSurcharge ?? 0;
+  const escSurcharge = spec.escapeSurcharge ?? 0;
   let total = spec.overhead ?? 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    total += line.length + perRow;
+    total += (spec.bytes ? Buffer.byteLength(line, 'utf8') : line.length) + perRow;
     if (i > 0) total += 1; // the newline joining it to the previous line
-    if (surcharge) total += countOccurrences(line, BG_RESET) * surcharge;
+    if (bgSurcharge) total += countOccurrences(line, BG_RESET) * bgSurcharge;
+    if (escSurcharge) total += countOccurrences(line, ESC) * escSurcharge;
   }
   return total;
 }

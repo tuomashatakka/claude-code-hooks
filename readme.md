@@ -32,7 +32,7 @@ claude --plugin-dir /path/to/claude-code-hooks
 
 | Event | Output |
 | --- | --- |
-| `SessionStart` | ASCII art, `BEGIN AGAIN` block heading, source + model badges, system-prompt confirmation |
+| `SessionStart` | Braille welcome art, `BEGIN AGAIN` block heading, source + model badges, system-prompt confirmation |
 | `SessionEnd` / `Stop` | `BYE` / `STOP` block heading with a generated kaomoji phrase |
 | `PostToolUse` | Tool badge, duration, tab-titled output cards, diffs, JSON cards, file previews, task state headings |
 | `PostToolUseFailure` | Failure badge plus the error body |
@@ -53,6 +53,21 @@ Playwright and `agent-browser` calls add a compact operation badge such as
 share the same large block-weight checkbox: newly queued or active tasks stay
 empty, completed tasks show a checkmark, and descriptions sit directly beneath
 the task-state caption.
+
+`SessionStart` prints `assets/welcome.png` as braille. The banner is sized
+against what is actually left of the hook transport's byte budget once the
+heading, the badges and the system prompt handed back as `additionalContext`
+have taken their share, so it arrives whole rather than with its middle omitted.
+Point `CLAUDE_HOOKS_WELCOME_IMAGE` at another file to change the face; if no
+image can be rendered, a random `.txt` from `$HOME/Documents/Prompts/anime-ascii`
+is used instead, skipping any that would not fit.
+
+Braille is a mode of its own (`CLAUDE_HOOKS_IMAGE_MODE=braille`, or
+`mode: 'braille'`): 2x4 dots per cell in the terminal's own foreground, with no
+colour and therefore no SGR sequences. For line art that is the better trade by
+a wide margin — the same budget that fits a 26-column colour render fits a
+full-width braille one — and Floyd-Steinberg dithering is available for sources
+where it is tonal rather than linear.
 
 Images read through `Read` are rendered as ANSI 2x3 sextant previews. Each cell
 chooses an exact two-colour clustering of six image samples, using Unicode block

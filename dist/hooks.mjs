@@ -3707,9 +3707,9 @@ var require_decoder = __commonJS({
         return a < 0 ? 0 : a > 255 ? 255 : a;
       }
       constructor.prototype = {
-        load: function load(path5) {
+        load: function load(path6) {
           var xhr = new XMLHttpRequest();
-          xhr.open("GET", path5, true);
+          xhr.open("GET", path6, true);
           xhr.responseType = "arraybuffer";
           xhr.onload = (function() {
             var data = new Uint8Array(xhr.response || xhr.mozResponseArrayBuffer);
@@ -4798,9 +4798,9 @@ source_default.level = 3;
 var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
 function expandPersistedOutput(text2) {
   if (typeof text2 !== "string" || !text2.includes("<persisted-output>")) return text2;
-  return text2.replace(PERSISTED_RE, (match, path5) => {
+  return text2.replace(PERSISTED_RE, (match, path6) => {
     try {
-      return readFileSync(path5, "utf8");
+      return readFileSync(path6, "utf8");
     } catch {
       return match;
     }
@@ -5151,14 +5151,14 @@ function pushDurationLine(lines, durationMs) {
 
 // src/tui/file-card.ts
 function renderFileCard({
-  path: path5,
+  path: path6,
   content,
   details = null,
   badges = []
 }) {
   return renderCard({
     badges: [
-      new Badge({ label: path5, color: "cyan", icon: "\u25A4" }),
+      new Badge({ label: path6, color: "cyan", icon: "\u25A4" }),
       details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : null,
       ...badges
     ],
@@ -6235,6 +6235,7 @@ function subCellRect(sat, gridX, gridY, gridCols, gridRows) {
 // packages/image-to-ascii/src/budget.ts
 var DEFAULT_BUDGET = { total: 9200 };
 var BG_RESET = "\x1B[49m";
+var ESC = "\x1B";
 function normalizeBudget(budget) {
   if (budget === void 0) return DEFAULT_BUDGET;
   return typeof budget === "number" ? { total: budget } : budget;
@@ -6250,13 +6251,15 @@ function countOccurrences(haystack, needle) {
 }
 function costOf(lines, spec) {
   const perRow = spec.perRow ?? 0;
-  const surcharge = spec.bgResetSurcharge ?? 0;
+  const bgSurcharge = spec.bgResetSurcharge ?? 0;
+  const escSurcharge = spec.escapeSurcharge ?? 0;
   let total = spec.overhead ?? 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    total += line.length + perRow;
+    total += (spec.bytes ? Buffer.byteLength(line, "utf8") : line.length) + perRow;
     if (i > 0) total += 1;
-    if (surcharge) total += countOccurrences(line, BG_RESET) * surcharge;
+    if (bgSurcharge) total += countOccurrences(line, BG_RESET) * bgSurcharge;
+    if (escSurcharge) total += countOccurrences(line, ESC) * escSurcharge;
   }
   return total;
 }
@@ -7002,6 +7005,70 @@ function makeFitResult() {
   return { glyph: null, fg: new Float64Array(3), bg: new Float64Array(3), score: 0 };
 }
 
+// packages/image-to-ascii/src/braille.ts
+var DOT_BITS = [
+  [1, 8],
+  [2, 16],
+  [4, 32],
+  [64, 128]
+];
+var BRAILLE_BASE = 10240;
+var BRAILLE_COLS = 2;
+var BRAILLE_ROWS = 4;
+var THRESHOLD = 0.5;
+var scratch = { r: 0, g: 0, b: 0, a: 0 };
+function inkAt(sat, x, y, cols, rows) {
+  const [x0, y0, x1, y1] = subCellRect(sat, x, y, cols, rows);
+  rectMean(sat, x0, y0, x1, y1, scratch);
+  const luma = (0.299 * scratch.r + 0.587 * scratch.g + 0.114 * scratch.b) / 255;
+  return scratch.a / 255 * (1 - Math.min(1, Math.max(0, luma)));
+}
+function renderBraille(sat, cols, rows, options = {}) {
+  const threshold = options.threshold ?? THRESHOLD;
+  const dotCols = cols * BRAILLE_COLS;
+  const dotRows = rows * BRAILLE_ROWS;
+  const ink = new Float64Array(dotCols * dotRows);
+  for (let y = 0; y < dotRows; y++) {
+    for (let x = 0; x < dotCols; x++) ink[y * dotCols + x] = inkAt(sat, x, y, dotCols, dotRows);
+  }
+  const on = new Uint8Array(dotCols * dotRows);
+  for (let y = 0; y < dotRows; y++) {
+    for (let x = 0; x < dotCols; x++) {
+      const at = y * dotCols + x;
+      const value = ink[at];
+      const lit = value >= threshold ? 1 : 0;
+      on[at] = lit;
+      if (options.dither === false) continue;
+      const error = value - lit;
+      const spread = (index, weight) => {
+        ink[index] = ink[index] + error * weight;
+      };
+      if (x + 1 < dotCols) spread(at + 1, 7 / 16);
+      if (y + 1 < dotRows) {
+        if (x > 0) spread(at + dotCols - 1, 3 / 16);
+        spread(at + dotCols, 5 / 16);
+        if (x + 1 < dotCols) spread(at + dotCols + 1, 1 / 16);
+      }
+    }
+  }
+  const lines = [];
+  for (let cellY = 0; cellY < rows; cellY++) {
+    let line = "";
+    for (let cellX = 0; cellX < cols; cellX++) {
+      let mask = 0;
+      for (let dy = 0; dy < BRAILLE_ROWS; dy++) {
+        const row = (cellY * BRAILLE_ROWS + dy) * dotCols;
+        for (let dx = 0; dx < BRAILLE_COLS; dx++) {
+          if (on[row + cellX * BRAILLE_COLS + dx]) mask |= DOT_BITS[dy][dx];
+        }
+      }
+      line += mask === 0 ? " " : String.fromCharCode(BRAILLE_BASE + mask);
+    }
+    lines.push(line.replace(/ +$/, ""));
+  }
+  return lines;
+}
+
 // packages/image-to-ascii/src/index.ts
 var MAX_ROWS = 120;
 var ALPHA_OPAQUE = 128;
@@ -7068,7 +7135,7 @@ function drawsItsOwnGlyphs() {
 }
 function resolveGlyphMode() {
   const env2 = process.env.CLAUDE_HOOKS_IMAGE_MODE;
-  if (env2 === "sextant" || env2 === "octant" || env2 === "half") return env2;
+  if (env2 === "sextant" || env2 === "octant" || env2 === "half" || env2 === "braille") return env2;
   if (process.env.TERM === "dumb") return "half";
   if (drawsItsOwnGlyphs() && cellAspect() >= 1.75) return "octant";
   return "sextant";
@@ -7161,15 +7228,15 @@ function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect
   }
   return { cols, rows };
 }
-var scratch = { r: 0, g: 0, b: 0, a: 0 };
+var scratch2 = { r: 0, g: 0, b: 0, a: 0 };
 function imageSample(sat, sampleX, sampleY, sampleCols, sampleRows) {
   const [x0, y0, x1, y1] = subCellRect(sat, sampleX, sampleY, sampleCols, sampleRows);
-  rectMean(sat, x0, y0, x1, y1, scratch);
+  rectMean(sat, x0, y0, x1, y1, scratch2);
   return {
-    r: Math.round(scratch.r),
-    g: Math.round(scratch.g),
-    b: Math.round(scratch.b),
-    opaque: scratch.a >= ALPHA_OPAQUE
+    r: Math.round(scratch2.r),
+    g: Math.round(scratch2.g),
+    b: Math.round(scratch2.b),
+    opaque: scratch2.a >= ALPHA_OPAQUE
   };
 }
 function quantizer(attempt) {
@@ -7323,6 +7390,26 @@ function bestFittingRender(startCols, spec, render) {
   }
   return best;
 }
+function widestBrailleRender(img, sat, startCols, spec, options) {
+  const at = (cols) => {
+    const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"]);
+    return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
+  };
+  let low = 1;
+  let high = Math.max(1, startCols);
+  let best = at(low);
+  while (low <= high) {
+    const cols = low + high >> 1;
+    const lines = at(cols);
+    if (costOf(lines, spec) <= spec.total) {
+      best = lines;
+      low = cols + 1;
+    } else {
+      high = cols - 1;
+    }
+  }
+  return best;
+}
 function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
   const img = decodeImage(buffer, ext);
@@ -7331,10 +7418,13 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const spec = normalizeBudget(options.budget);
   const maxWidth = options.maxWidth ?? 80;
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const mode = resolveGlyphMode();
+  const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === "half";
   let out = [];
-  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / 2), requestedMax);
+  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
+  if (mode === "braille") {
+    return widestBrailleRender(img, sat, initialCols, spec, options.braille).join("\n");
+  }
   const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
   const render = (cols, attempt) => forceHalfBlocks ? renderHalfBlocks(img, sat, cols, attempt) : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)));
   for (const attempt of attempts) {
@@ -7935,8 +8025,8 @@ defineGenericTool({
 });
 
 // src/hooks/index.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 
 // src/runtime/debug.ts
 import fs3 from "node:fs";
@@ -7981,6 +8071,91 @@ function dispatchHook(event, raw) {
     debugLog("dispatchHook", "handler-error", event, detail);
     return {};
   }
+}
+
+// src/runtime/output-transport.ts
+var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
+var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
+function serialize(data) {
+  return JSON.stringify(data, null, 2);
+}
+function responseWithMessage(data, systemMessage) {
+  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
+}
+function fitsResponse(data, systemMessage) {
+  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
+}
+function systemMessageHeadroom(data) {
+  const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
+  const spent = Buffer.byteLength(serialize(responseWithMessage(data, current)), "utf8");
+  return Math.max(0, HOOK_RESPONSE_BYTE_BUDGET - spent);
+}
+function findLargestCandidate(maximum, render, fits2) {
+  let low = 0;
+  let high = maximum;
+  let best = { text: render(0), retained: 0 };
+  while (low <= high) {
+    const retained = Math.floor((low + high) / 2);
+    const text2 = render(retained);
+    if (fits2(text2)) {
+      best = { text: text2, retained };
+      low = retained + 1;
+    } else {
+      high = retained - 1;
+    }
+  }
+  return best;
+}
+function splitRetained(total) {
+  const head = Math.ceil(total * 0.6);
+  return { head, tail: total - head };
+}
+function limitByLines(data, systemMessage) {
+  const lines = systemMessage.split("\n");
+  return findLargestCandidate(
+    Math.max(0, lines.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        ...lines.slice(0, head),
+        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
+        ...tail > 0 ? lines.slice(-tail) : []
+      ].join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  );
+}
+function limitByCharacters(data, systemMessage) {
+  const characters = Array.from(stripAnsi(systemMessage));
+  return findLargestCandidate(
+    Math.max(0, characters.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        characters.slice(0, head).join(""),
+        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
+        tail > 0 ? characters.slice(-tail).join("") : ""
+      ].filter(Boolean).join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  ).text;
+}
+function limitSystemMessage(data, systemMessage) {
+  const lineCandidate = limitByLines(data, systemMessage);
+  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
+}
+function serializeHookResponse(data) {
+  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
+  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
+  let json = serialize(output);
+  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
+    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
+    json = serialize(output);
+  }
+  return {
+    json,
+    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
+  };
 }
 
 // src/hooks/_normalize.ts
@@ -8040,28 +8215,105 @@ function renderToolSection({
   return renderSection({ badges, lines: section.lines });
 }
 
-// src/hooks/index.ts
-source_default.level = 3;
+// src/render/welcome.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
+import { fileURLToPath } from "node:url";
+var JSON_ESCAPE_SURCHARGE = 5;
+var JSON_NEWLINE_SURCHARGE = 1;
+var RESERVE = 8;
 var HOME2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var SYSTEM_PROMPT_PATH = path4.join(HOME2, "system-prompt.md");
+var WELCOME_ASSET = path4.join("assets", "welcome.png");
 var ASCII_DIR = path4.join(HOME2, "Documents", "Prompts", "anime-ascii");
-function loadSystemPrompt() {
+function findAsset() {
+  const candidates = [];
+  const declared = process.env.CLAUDE_PLUGIN_ROOT;
+  if (declared) candidates.push(path4.join(declared, WELCOME_ASSET));
+  let dir;
   try {
-    if (fs4.existsSync(SYSTEM_PROMPT_PATH)) return fs4.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
-  } catch (e) {
-    debugLog("SessionStart", "load-system-prompt", e.message);
+    dir = path4.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    dir = process.cwd();
+  }
+  for (let i = 0; i < 6; i++) {
+    candidates.push(path4.join(dir, WELCOME_ASSET));
+    const parent = path4.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  for (const candidate of candidates) {
+    try {
+      if (fs4.statSync(candidate).isFile()) return candidate;
+    } catch {
+    }
   }
   return null;
 }
-function loadRandomAsciiArt() {
+function welcomeImagePath() {
+  const override = process.env.CLAUDE_HOOKS_WELCOME_IMAGE;
+  if (override) return fs4.existsSync(override) ? override : null;
+  return findAsset();
+}
+function jsonBudget(total) {
+  return {
+    total,
+    bytes: true,
+    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    perRow: JSON_NEWLINE_SURCHARGE
+  };
+}
+function fits(art, spec) {
+  return costOf(art.split("\n"), spec) <= spec.total;
+}
+var BANNER = { dither: false, threshold: 0.35 };
+var MAX_COLS = 100;
+function renderWelcomeImage(spec) {
+  const file = welcomeImagePath();
+  if (!file) return null;
+  try {
+    const art = imageToAscii(fs4.readFileSync(file), path4.extname(file), {
+      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
+      mode: "braille",
+      braille: BANNER,
+      budget: spec
+    });
+    return art && fits(art, spec) ? art : null;
+  } catch (e) {
+    debugLog("SessionStart", "render-welcome-image", e.message);
+    return null;
+  }
+}
+function loadAsciiArt(spec) {
   try {
     if (!fs4.existsSync(ASCII_DIR)) return null;
     const files = fs4.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
-    if (!files.length) return null;
-    const pick = files[Math.floor(Math.random() * files.length)];
-    return fs4.readFileSync(path4.join(ASCII_DIR, pick), "utf8");
+    for (const pick of files.sort(() => Math.random() - 0.5)) {
+      const art = fs4.readFileSync(path4.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
+      if (fits(art, spec)) return art;
+    }
   } catch (e) {
     debugLog("SessionStart", "load-ascii", e.message);
+  }
+  return null;
+}
+function renderWelcome(headroom) {
+  if (headroom <= RESERVE) return "";
+  const spec = jsonBudget(headroom - RESERVE);
+  const art = renderWelcomeImage(spec) ?? loadAsciiArt(spec);
+  return art ? `
+${art}
+` : "";
+}
+
+// src/hooks/index.ts
+source_default.level = 3;
+var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
+var SYSTEM_PROMPT_PATH = path5.join(HOME3, "system-prompt.md");
+function loadSystemPrompt() {
+  try {
+    if (fs5.existsSync(SYSTEM_PROMPT_PATH)) return fs5.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
+  } catch (e) {
+    debugLog("SessionStart", "load-system-prompt", e.message);
   }
   return null;
 }
@@ -8078,7 +8330,6 @@ defineHook({
   },
   handle(input) {
     const systemPrompt = loadSystemPrompt();
-    const asciiArt = loadRandomAsciiArt();
     const badges = [
       new Badge({ label: `Session:${input.source}`, color: "green", icon: "\u23FB" }),
       input.model ? new Badge({ label: input.model, color: "gray" }) : null
@@ -8087,19 +8338,21 @@ defineHook({
     if (input.agentType) lines.push(source_default.gray("Agent: ") + input.agentType);
     if (systemPrompt) lines.push(source_default.cyan("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH);
     const isWake = input.source === "compact";
-    const headingWord = isWake ? "WAKE UP" : "BEGIN AGAIN";
-    const asciiBlock = asciiArt ? "\n" + asciiArt + "\n" : "";
     const heading = renderHeading({
-      word: headingWord,
+      word: isWake ? "WAKE UP" : "BEGIN AGAIN",
       color: "cyan",
       event: isWake ? "wakeup" : "start"
     });
-    return {
+    const response = {
       hookSpecificOutput: {
         hookEventName: "SessionStart",
         ...systemPrompt ? { additionalContext: systemPrompt } : {}
       },
-      systemMessage: asciiBlock + heading + renderSection({ badges, lines })
+      systemMessage: heading + renderSection({ badges, lines })
+    };
+    return {
+      ...response,
+      systemMessage: renderWelcome(systemMessageHeadroom(response)) + response.systemMessage
     };
   }
 });
@@ -8320,86 +8573,6 @@ defineHook({
     return { systemMessage };
   }
 });
-
-// src/runtime/output-transport.ts
-var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
-var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
-function serialize(data) {
-  return JSON.stringify(data, null, 2);
-}
-function responseWithMessage(data, systemMessage) {
-  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
-}
-function fitsResponse(data, systemMessage) {
-  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
-}
-function findLargestCandidate(maximum, render, fits) {
-  let low = 0;
-  let high = maximum;
-  let best = { text: render(0), retained: 0 };
-  while (low <= high) {
-    const retained = Math.floor((low + high) / 2);
-    const text2 = render(retained);
-    if (fits(text2)) {
-      best = { text: text2, retained };
-      low = retained + 1;
-    } else {
-      high = retained - 1;
-    }
-  }
-  return best;
-}
-function splitRetained(total) {
-  const head = Math.ceil(total * 0.6);
-  return { head, tail: total - head };
-}
-function limitByLines(data, systemMessage) {
-  const lines = systemMessage.split("\n");
-  return findLargestCandidate(
-    Math.max(0, lines.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        ...lines.slice(0, head),
-        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
-        ...tail > 0 ? lines.slice(-tail) : []
-      ].join("\n");
-    },
-    (candidate) => fitsResponse(data, candidate)
-  );
-}
-function limitByCharacters(data, systemMessage) {
-  const characters = Array.from(stripAnsi(systemMessage));
-  return findLargestCandidate(
-    Math.max(0, characters.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        characters.slice(0, head).join(""),
-        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
-        tail > 0 ? characters.slice(-tail).join("") : ""
-      ].filter(Boolean).join("\n");
-    },
-    (candidate) => fitsResponse(data, candidate)
-  ).text;
-}
-function limitSystemMessage(data, systemMessage) {
-  const lineCandidate = limitByLines(data, systemMessage);
-  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
-}
-function serializeHookResponse(data) {
-  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
-  let json = serialize(output);
-  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
-    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
-    json = serialize(output);
-  }
-  return {
-    json,
-    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
-  };
-}
 
 // src/runtime/io.ts
 function readInput() {

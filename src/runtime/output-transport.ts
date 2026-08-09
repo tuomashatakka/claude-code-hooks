@@ -38,6 +38,22 @@ function fitsResponse(data: HookResponse, systemMessage: string): boolean {
     <= HOOK_RESPONSE_BYTE_BUDGET;
 }
 
+/**
+ * Bytes a response may still add to its `systemMessage` before
+ * `serializeHookResponse` starts omitting lines from it.
+ *
+ * A hook that renders something elastic — art sized to whatever is left — needs
+ * this *before* it renders, and it has to be measured on the serialized form:
+ * JSON spends six bytes on every escape the renderer counted as one, and the
+ * rest of the response (`additionalContext` above all) is competing for the
+ * same budget. Pass the response with everything else already filled in.
+ */
+export function systemMessageHeadroom(data: HookResponse): number {
+  const current = typeof data.systemMessage === 'string' ? data.systemMessage : '';
+  const spent = Buffer.byteLength(serialize(responseWithMessage(data, current)), 'utf8');
+  return Math.max(0, HOOK_RESPONSE_BYTE_BUDGET - spent);
+}
+
 function findLargestCandidate(
   maximum: number,
   render: (retained: number) => string,
