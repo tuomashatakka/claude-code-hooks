@@ -48,7 +48,7 @@ jobs:
         run: bun test
 
       - name: Build bundle
-        run: bun run scripts/build-package.ts image-to-ascii
+        run: bun run scripts/build-package.ts image-to-ascii --for-publish
 
       - name: Publish
         uses: ./.github/actions/release-package

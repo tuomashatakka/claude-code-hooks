@@ -19,18 +19,35 @@ const ROOT = path.resolve(import.meta.dir, '..');
 
 const name = process.argv[2];
 if (!name) {
-  console.error('usage: bun run scripts/build-package.ts <package-dir-name>');
+  console.error('usage: bun run scripts/build-package.ts <package-dir-name> [--for-publish]');
   process.exit(1);
 }
+
+/**
+ * Rewrite the manifest's entry points to the built bundle.
+ *
+ * Only for a publishing run: in the workspace these packages must keep
+ * resolving to `src/index.ts`, or the repo cannot run its own tests without
+ * building first. pnpm does this substitution itself via `publishConfig`, npm
+ * does not — it honours only `registry`, `access` and `tag` there — so a
+ * package that relies on it publishes with `main` still naming TypeScript
+ * source, and consumers get a file node cannot execute.
+ */
+const forPublish = process.argv.includes('--for-publish');
 
 const packageDir = path.join(ROOT, 'packages', name);
 const distDir = path.join(packageDir, 'dist');
 const entry = path.join(packageDir, 'src', 'index.ts');
 
-const manifest = JSON.parse(readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+const manifestPath = path.join(packageDir, 'package.json');
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
   name: string;
   dependencies?: Record<string, string>;
+  publishConfig?: Record<string, unknown>;
 };
+
+/** The `publishConfig` keys npm itself understands; the rest are ours to apply. */
+const NPM_OWNED = new Set(['registry', 'access', 'tag', 'provenance']);
 
 const externals = Object.keys(manifest.dependencies ?? {});
 
@@ -101,8 +118,19 @@ const loaded = await import(path.join(distDir, 'index.js'));
 const exported = Object.keys(loaded).length;
 if (!exported) throw new Error('bundle loaded but exported nothing');
 
+let applied: string[] = [];
+if (forPublish) {
+  const overrides = Object.entries(manifest.publishConfig ?? {})
+    .filter(([key]) => !NPM_OWNED.has(key));
+  const published = { ...manifest } as Record<string, unknown>;
+  for (const [key, value] of overrides) published[key] = value;
+  writeFileSync(manifestPath, JSON.stringify(published, null, 2) + '\n');
+  applied = overrides.map(([key]) => key);
+}
+
 console.log(
   `${manifest.name}: bundled ${exported} exports, `
   + `${externals.length ? `external ${externals.join(', ')}` : 'no externals'}, `
   + `${rewritten} declaration file(s) rewritten`
+  + (forPublish ? `, publish overrides applied: ${applied.join(', ') || 'none'}` : '')
 );
