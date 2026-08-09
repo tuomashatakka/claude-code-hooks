@@ -18,7 +18,7 @@
 // system-prompt.md and an ASCII art file, exercising the branches
 // scripts/smoke.ts deliberately leaves empty.
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { renderedHookOutput, runCase, type Case } from './smoke.ts';
@@ -34,6 +34,13 @@ const OUT = path.join(ROOT, 'public', 'demo-data.js');
 const DEMO_HOME = path.join(ROOT, 'scripts', 'fixtures', 'demo-home');
 const DEMO_PNG = demoImagePath(DEMO_HOME);
 const DEMO_CONTEXT = demoContextPath(DEMO_HOME);
+
+// The banner's version came from a hand-edited string and was two releases
+// stale by the time anyone noticed. It is read from the manifest now, so it is
+// correct for as long as the capture runs — which is every deploy.
+const PLUGIN_VERSION = (
+  JSON.parse(readFileSync(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8')) as { version: string }
+).version;
 
 const MARKETPLACE_ADD = '/plugin marketplace add tuomashatakka/claude-code-hooks';
 const PLUGIN_INSTALL = '/plugin install hooks@claude-code-hooks';
@@ -587,7 +594,13 @@ const chapters = CHAPTERS.map(({ id, label }) => {
   return { id, label, start, count: end - start + 1 };
 });
 
-const session = { install: MARKETPLACE_ADD, installPlugin: PLUGIN_INSTALL, chapters, examples };
+const session = {
+  version: PLUGIN_VERSION,
+  install: MARKETPLACE_ADD,
+  installPlugin: PLUGIN_INSTALL,
+  chapters,
+  examples,
+};
 writeFileSync(OUT, 'window.__SESSION__ = ' + JSON.stringify(session) + ';\n');
 console.log(
   'wrote ' + OUT + ' — ' + examples.length + ' examples in ' + chapters.length

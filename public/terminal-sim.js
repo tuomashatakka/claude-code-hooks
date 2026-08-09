@@ -47,6 +47,11 @@
   const boot = document.querySelector('.boot');
   const installBar = document.getElementById('installbar');
 
+  // Stamped from .claude-plugin/plugin.json at capture time; the markup carries
+  // the last captured value so the banner is still right without JS.
+  const bootLegend = document.getElementById('bootlegend');
+  if (bootLegend && session.version) bootLegend.textContent = 'claude-code-hooks v' + session.version;
+
   let index = 0;
   let run = 0;             // bumped to cancel an in-flight reveal
   let revealing = false;
