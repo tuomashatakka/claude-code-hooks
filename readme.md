@@ -3,9 +3,15 @@
 Enhanced hooks for Claude Code — beautified terminal output for post-tool results and lifecycle events.
 
 Block-letter headings, colored badges, syntax-highlighted diffs, sextant image
-previews and playful kaomoji phrases, across **13 active hook events**.
+previews and playful kaomoji phrases, across **13 active hook events** and
+**15 tool renderers**.
 
-**[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)**
+**[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)** — 33
+examples, every one captured from the live pipeline at build time. Each links
+directly: [an image](https://tuomashatakka.github.io/claude-code-hooks/#read-image),
+[a file card](https://tuomashatakka.github.io/claude-code-hooks/#read-source),
+[a shell chain](https://tuomashatakka.github.io/claude-code-hooks/#bash-chain),
+[browser automation](https://tuomashatakka.github.io/claude-code-hooks/#agent-browser).
 
 ## Install
 
@@ -41,13 +47,40 @@ claude --plugin-dir /path/to/claude-code-hooks
 | `InstructionsLoaded` | Which CLAUDE.md / rules files entered context |
 | `UserPromptSubmit` / `UserPromptExpansion` | The prompt, and what a command expanded into |
 | `SubagentStart` / `SubagentStop` | Agent id, type, and lifecycle badges |
+| `PostToolBatch` | Registered but silent — a resolved batch is already summarised by its members |
 
-Cards attach their title badge to a lower `▁` rule in the same color, so
-`Running`, `Output`, and metadata labels read like tabs instead of floating
-chips. Paired command and output cards sit side-by-side when their ANSI-aware
-combined width fits comfortably, then fall back to a vertical stack on narrow
-terminals. File-content cards always lead with the relative or absolute source path
-as a badge; read/edit/write renderers cannot omit it.
+Every row above has a live example on the showcase page; the capture fails the
+build if one does not, so this table cannot drift from what ships.
+
+### Tool renderers
+
+`PostToolUse` dispatches to a strategy per tool, or to a generic fallback that
+splits any unknown response into its answer and its metadata.
+
+| Tool | What it draws | Live |
+| --- | --- | --- |
+| `Bash`, `wcgw BashCommand` | Command and output as paired cards, chains split a row per separator, heredocs verbatim, rulers turned into dividers, wcgw's trailer parsed into an exit/cwd row | [#bash-grep](https://tuomashatakka.github.io/claude-code-hooks/#bash-grep) |
+| `Read` | Syntax-highlighted file card, or an ANSI sextant preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
+| `Edit`, `MultiEdit` | The file re-read and cropped to the changed span plus three lines of context | [#edit](https://tuomashatakka.github.io/claude-code-hooks/#edit) |
+| `wcgw FileWriteOrEdit` | Search/replace blocks parsed to tell an edit from a write, result read back off disk | [#wcgw-write](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-write) |
+| `wcgw ReadFiles`, `ReadImage` | One card per path, sharing a single response budget | [#wcgw-read](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-read) |
+| `wcgw Initialize`, `ContextSave` | Workspace handshake as three lines; saved context with its inlined files accounted for rather than printed | [#wcgw-ctx](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-ctx) |
+| Playwright `browser_*` | Output or JSON card plus a `ƒ` badge naming the operation | [#pw-navigate](https://tuomashatakka.github.io/claude-code-hooks/#pw-navigate) |
+| `agent-browser` (via `Bash`) | One `ƒ` badge per subcommand in the chain | [#agent-browser](https://tuomashatakka.github.io/claude-code-hooks/#agent-browser) |
+| `Agent`, `Task` | Launch metadata as a card instead of raw JSON | [#agent-launch](https://tuomashatakka.github.io/claude-code-hooks/#agent-launch) |
+| `TaskCreate`, `TaskUpdate`, `TaskList` | Block-weight checkbox per task, state transitions spelled out | [#task-create](https://tuomashatakka.github.io/claude-code-hooks/#task-create) |
+| `ExitPlanMode` | A block-letter sign-off | [#exit-plan](https://tuomashatakka.github.io/claude-code-hooks/#exit-plan) |
+| everything else | Generic fallback: answer card plus metadata card | [#generic-fallback](https://tuomashatakka.github.io/claude-code-hooks/#generic-fallback) |
+
+Cards are framed with the half-line glyphs — `▁` under the title badge, `▔`
+under the last row, `▏` and `▕` down the sides — because each sits against a
+different edge of its own cell and so closes flush around the fill. File cards
+additionally cast a `░` shadow, the one place the extra column earns its bytes.
+The title badge carries the path, shortened to whichever of project-relative or
+`~`-relative is shorter; detail about the content — the action, the line range —
+sits in the bottom-right corner of the frame instead of trailing the path.
+Paired command and output cards sit side-by-side when their ANSI-aware combined
+width fits comfortably, then fall back to a vertical stack on narrow terminals.
 Playwright and `agent-browser` calls add a compact operation badge such as
 `navigate`, `click`, or `snapshot`. `TaskCreate`, `TaskUpdate`, and `TaskList`
 share the same large block-weight checkbox: newly queued or active tasks stay
@@ -82,7 +115,12 @@ mirror the same `systemMessage` to stderr, preventing doubled cards while
 preserving the strict hook wire envelope. When a composed render exceeds Claude
 Code's 10KB hook transport budget, the final transport layer retains as many
 leading and trailing lines as fit and inserts a compact omitted-line count.
-Single oversized lines use the same strategy at character granularity.
+Single oversized lines use the same strategy at character granularity. That is a
+backstop, not a plan: previews size themselves first, weighing the finished card
+in JSON bytes and re-rendering — fewer lines for text, a narrower image for
+pictures — until it fits, because a picture with its middle cut out is worse
+than a smaller one. The showcase capture fails the build if any example reaches
+the backstop.
 `PreToolUse` is intentionally not registered, so this plugin never intercepts
 or delays a tool before it runs.
 

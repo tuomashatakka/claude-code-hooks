@@ -3,6 +3,9 @@
 High-fidelity ANSI image previews for PNG, JPEG, and WebP buffers, extracted from
 [claude-code-hooks](https://github.com/tuomashatakka/claude-code-hooks).
 
+**[Live example →](https://tuomashatakka.github.io/claude-code-hooks/#read-image)** — a
+PNG rendered through this package by the real hook pipeline, captured at build time.
+
 ```ts
 import { imageToAscii } from '@tuomashatakka/image-to-ascii';
 

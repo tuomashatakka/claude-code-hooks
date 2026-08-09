@@ -3,6 +3,7 @@ import { imageToAscii } from '@tuomashatakka/image-to-ascii';
 import { formatJSON, isJSON, simpleHighlight, langFromPath, detectContentLanguage } from './highlight.ts';
 import { softCollapse, type SoftCollapseOptions } from './primitives.ts';
 import { getMaxContentWidth, renderFileCard } from '../tui/index.ts';
+import { HOOK_RESPONSE_BYTE_BUDGET } from '../runtime/output-transport.ts';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 
@@ -64,6 +65,38 @@ export function renderFilePreview(filePath: string, options: FilePreviewOptions 
     : { content: shape(options.fallbackText), kind: 'text' };
 }
 
+/* ------------------------------------------------------------------ budget --
+ *
+ * What a preview may cost, and how that cost is decided: not modelled, but
+ * measured. Predicting the size of a rendered card means predicting how chalk
+ * rewrites nested styles inside a background fill, and every estimate of that
+ * came out low by a factor of three.
+ *
+ * Being wrong is expensive. The transport's answer to an oversized message is
+ * to cut its middle out, so a mis-sized picture arrives with a hole in it. So
+ * the card is rendered, weighed on the scale that actually decides — JSON bytes
+ * of the finished card — and rendered again smaller until it fits.
+ */
+
+/** Badges, duration line and the rest of the response around the card. */
+const SECTION_RESERVE = 1_400;
+
+/** Bytes one card may spend, unless the caller is drawing several. */
+export function previewBudgetBytes(): number {
+  return Math.max(1_200, HOOK_RESPONSE_BYTE_BUDGET - SECTION_RESERVE);
+}
+
+function jsonBytes(text: string): number {
+  return Buffer.byteLength(JSON.stringify(text), 'utf8');
+}
+
+/** Widths to try for a picture, largest first. */
+function widthLadder(maxWidth: number): number[] {
+  const rungs: number[] = [];
+  for (let width = maxWidth; width >= 16; width = Math.floor(width * 0.75)) rungs.push(width);
+  return rungs;
+}
+
 // wcgw addresses files as `/path/to/file.ts:10-40`. Split the range off so the
 // path still resolves on disk, and keep it around to show alongside the box.
 const LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
@@ -96,12 +129,59 @@ export interface FileResultOptions extends FilePreviewOptions {
   action?: string | null;
   /** Window to show. Overrides any `:10-40` suffix carried by the path. */
   range?: LineRange | null;
+  /** Share of the response this card may spend. Split it when drawing several. */
+  budgetBytes?: number;
+}
+
+/**
+ * The tallest card that fits: text loses lines off the bottom, pictures are
+ * re-rendered narrower so the whole of the image survives.
+ */
+export function renderFittedFileCard(
+  path: string,
+  content: string,
+  kind: FilePreviewKind,
+  details: string | null,
+  budget: number,
+  reRender?: (width: number) => string | null,
+): string {
+  const card = (body: string) => renderFileCard({ path, content: body, details });
+
+  if (kind === 'image' && reRender) {
+    let smallest = card(content);
+    for (const width of widthLadder(getMaxContentWidth())) {
+      const art = reRender(width);
+      if (!art) continue;
+      smallest = card(art);
+      if (jsonBytes(smallest) <= budget) return smallest;
+    }
+    return smallest;
+  }
+
+  const full = card(collapsePreview(content));
+  if (jsonBytes(full) <= budget) return full;
+
+  const total = content.split('\n').length;
+  let low = 0;
+  let high = total;
+  let best = card(collapsePreview(content, { maxLines: 0 }));
+  while (low <= high) {
+    const retained = Math.floor((low + high) / 2);
+    const candidate = card(collapsePreview(content, { maxLines: retained }));
+    if (jsonBytes(candidate) <= budget) {
+      best = candidate;
+      low = retained + 1;
+    } else {
+      high = retained - 1;
+    }
+  }
+  return best;
 }
 
 // File output is always composed through renderFileCard, which makes the source
 // path a title badge instead of relying on each caller to remember it.
 export function renderFileResult(rawPath: string, options: FileResultOptions = {}): string | null {
-  const { action, range: rangeOverride, ...previewOptions } = options;
+  const { action, range: rangeOverride, budgetBytes, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
 
@@ -113,11 +193,17 @@ export function renderFileResult(rawPath: string, options: FileResultOptions = {
     : preview.content;
 
   const details = [action, range ? formatRange(range) : null].filter(Boolean).join('  ');
-  return renderFileCard({
-    path: filePath,
-    content: collapsePreview(body),
-    details: details || null,
-  });
+
+  return renderFittedFileCard(
+    filePath,
+    body,
+    preview.kind,
+    details || null,
+    budgetBytes ?? previewBudgetBytes(),
+    preview.kind === 'image'
+      ? width => renderFilePreview(filePath, { ...previewOptions, maxWidth: width })?.content ?? null
+      : undefined,
+  );
 }
 
 export function collapsePreview(content: string, options: SoftCollapseOptions = {}): string {

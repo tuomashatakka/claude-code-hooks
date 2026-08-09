@@ -23,14 +23,11 @@ export function renderToolSection({
 
   const section = def.post(input as never, result as never, durationMs, ctx);
 
+  // No OUTPUT badge: every tool call has output, so a badge saying so on every
+  // single one carried no information and crowded out the ones that do — the
+  // tool, and whatever operation badges the strategy contributed.
   const main = new Badge({ toolName });
-  const badges: BadgeLike[] = [main, ...extraTopBadges];
-  badges.push(
-    section.isJson
-      ? new Badge({ label: 'JSON', color: 'green' })
-      : new Badge({ label: 'OUTPUT', color: 'brightGreen' })
-  );
-  for (const b of section.extraBadges ?? []) badges.push(b);
+  const badges: BadgeLike[] = [main, ...extraTopBadges, ...(section.extraBadges ?? [])];
 
   // The clear-line prefix is applied once for every event in runtime/io.ts.
   return renderSection({ badges, lines: section.lines });

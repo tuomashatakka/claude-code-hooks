@@ -7,16 +7,32 @@ chalk.level = 3;
 
 interface PreparedBox {
   lines: string[];
+  /** Outer width including the side glyphs, excluding the shadow column. */
   width: number;
 }
 
 export interface BoxProps {
   content: string;
   minimumWidth?: number;
+  /** Pre-rendered badges to seat in the bottom edge, flush right. */
+  footerText?: string;
+  /**
+   * Hang a `░` drop shadow off the right and bottom edges. Off by default:
+   * every glyph costs bytes against the transport's ~10KB systemMessage cap,
+   * so it is reserved for the one card that benefits — the file preview.
+   */
+  shadow?: boolean;
 }
 
 export interface CardProps extends BoxProps {
   badges: BadgeLike | readonly BadgeLike[];
+  /**
+   * Right-aligned on the box's bottom edge. For detail about the content —
+   * the action, the line range — as opposed to the title badges, which say
+   * what the box *is*. Keeping the two apart stops a long path and its
+   * modifiers from competing for the same corner.
+   */
+  footer?: BadgeLike | readonly BadgeLike[];
 }
 
 export function getMaxLayoutWidth(): number {
@@ -26,10 +42,37 @@ export function getMaxLayoutWidth(): number {
 }
 
 export function getMaxContentWidth(): number {
-  return Math.max(20, getMaxLayoutWidth() - TUI_TOKENS.card.horizontalPadding * 2);
+  const { horizontalPadding, chromeColumns } = TUI_TOKENS.card;
+  return Math.max(20, getMaxLayoutWidth() - horizontalPadding * 2 - chromeColumns);
 }
 
-function prepareBox({ content, minimumWidth = 0 }: BoxProps): PreparedBox {
+/**
+ * Boxes are drawn with half-line glyphs rather than `┌─┐`, because each one sits
+ * against a different side of its own cell: `▁` rides the bottom of the badge
+ * row, `▔` the top of the row under the box, and `▏`/`▕` hug the inner edges of
+ * the side columns. The frame closes up flush around the fill instead of
+ * floating a rule a whole cell away from it.
+ */
+const EDGE_LEFT = '▏';
+const EDGE_RIGHT = '▕';
+const EDGE_BOTTOM = '▔';
+const EDGE_TOP = '▁';
+const SHADOW = '░';
+
+function borderInk(text: string): string {
+  return chalk.hex(TUI_TOKENS.card.border)(text);
+}
+
+function shadowInk(text: string): string {
+  return chalk.hex(TUI_TOKENS.card.shadow)(text);
+}
+
+/** The `▁` run a bare box uses where a card would put its badge. */
+export function renderBoxTopEdge(width: number): string {
+  return borderInk(EDGE_TOP.repeat(Math.max(0, width)));
+}
+
+function prepareBox({ content, minimumWidth = 0, shadow = false, footerText = '' }: BoxProps): PreparedBox {
   const maxWidth = getMaxContentWidth();
   const { background, horizontalPadding } = TUI_TOKENS.card;
   const lines = String(content)
@@ -37,33 +80,63 @@ function prepareBox({ content, minimumWidth = 0 }: BoxProps): PreparedBox {
     .split('\n')
     .map(line => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
   const contentWidth = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
-  const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
+  // minimumWidth is stated in outer columns — it exists so a badge's rule keeps
+  // a hairline — so the side glyphs come off it before the fill is sized.
+  const innerWidth = Math.max(contentWidth + horizontalPadding * 2, minimumWidth - 2);
+  const width = innerWidth + 2;
+
   const fill = chalk.bgHex(background);
-  const padding = fill(' '.repeat(width));
+  const left = borderInk(EDGE_LEFT);
+  const right = borderInk(EDGE_RIGHT);
+  const shade = shadow ? shadowInk(SHADOW) : '';
+  const frame = (row: string) => left + fill(row) + right + shade;
+
+  const padding = frame(' '.repeat(innerWidth));
   const body = lines.map(line =>
-    fill(
+    frame(
       ' '.repeat(horizontalPadding)
       + line
-      + ' '.repeat(Math.max(0, width - horizontalPadding - visibleWidth(line)))
+      + ' '.repeat(Math.max(0, innerWidth - horizontalPadding - visibleWidth(line)))
     )
   );
-  return { lines: [padding, ...body, padding], width };
+  // The footer sits *in* the bottom edge, flush right, so the rule runs into it
+  // and the badge closes the corner off.
+  const footerWidth = visibleWidth(footerText);
+  const bottom = footerWidth > 0 && footerWidth < width
+    ? borderInk(EDGE_BOTTOM.repeat(width - footerWidth)) + footerText + shade
+    : borderInk(EDGE_BOTTOM.repeat(width)) + shade;
+  // Offset one column right so the cast reads as a shadow, not another border.
+  const cast = shadow ? ' ' + shadowInk(SHADOW.repeat(width)) : null;
+
+  return {
+    lines: [padding, ...body, padding, bottom, ...(cast ? [cast] : [])],
+    width,
+  };
 }
 
 export function renderBox(props: BoxProps): string {
   const box = prepareBox(props);
-  return ['', ...box.lines, ''].join('\n');
+  return ['', renderBoxTopEdge(box.width), ...box.lines, ''].join('\n');
 }
 
-export function renderCard({ badges, content, minimumWidth = 0 }: CardProps): string {
+export function renderCard({ badges, content, minimumWidth = 0, shadow = false, footer }: CardProps): string {
   const badgeList = Array.isArray(badges) ? badges : [badges];
+  const footerList = footer === undefined ? [] : (Array.isArray(footer) ? footer : [footer]);
+  const footerText = renderBadges(...footerList);
   const title = renderBadges(...badgeList);
-  if (!title) return renderBox({ content, minimumWidth });
+  if (!title) return renderBox({ content, minimumWidth, shadow, footerText });
 
   const badgeWidth = visibleWidth(title);
+  const { minimumHairline } = TUI_TOKENS.card;
   const box = prepareBox({
     content,
-    minimumWidth: Math.max(minimumWidth, badgeWidth + TUI_TOKENS.card.minimumHairline),
+    shadow,
+    footerText,
+    minimumWidth: Math.max(
+      minimumWidth,
+      badgeWidth + minimumHairline,
+      visibleWidth(footerText) + minimumHairline,
+    ),
   });
   const ruleLength = Math.max(0, box.width - badgeWidth);
   const ruleBadge = badgeList.find((badge): badge is Badge => badge instanceof Badge);

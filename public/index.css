@@ -9,23 +9,27 @@
    ============================================================ */
 
 :root {
-  --bg:          #0c0c0e;
-  --term-bg:     #16161a;
-  --term-bar:    #202026;
-  --fg:          #e6e6e6;
-  --fg-dim:      #9a9a9a;   /* gray metadata */
-  --line:        #2a2a30;
+  /* Straight out of ~/.hyper.js — the terminal this page is pretending to be.
+     Only --fg-dim departs from it: Hyper's lightBlack (#616166) lands at 2.3:1
+     on this ground, and it carries every duration, path and metadata line. */
+  --bg:          #1b1a1c;   /* desk behind the window */
+  --term-bg:     #29282a;   /* backgroundColor */
+  --term-bar:    #29282a;   /* unibody: the titlebar shares that ground */
+  --fg:          #d2d2da;   /* foregroundColor */
+  --fg-bright:   #fafaff;   /* lightWhite */
+  --fg-dim:      #8f8f98;   /* lightBlack, lifted to 4.6:1 (AA) */
+  --line:        #3a393c;
 
-  /* badge / accent colors (chalk) */
-  --magenta:     #c264d6;
-  --green:       #66c266;
-  --brightgreen: #9ece6a;
-  --yellow:      #e0c451;
-  --red:         #e0564f;
-  --cyan:        #4bc4c4;
-  --blue:        #7aa2f7;
+  /* badge / accent colors (chalk 16-color names → Hyper's palette) */
+  --magenta:     #ce3cff;   --magenta-br:  #fa77fa;
+  --green:       #4ee4c4;   --brightgreen: #76f797;   /* limeGreen */
+  --yellow:      #f9df79;   --yellow-br:   #efec84;
+  --red:         #ff3c80;   --red-br:      #ff7caa;
+  --cyan:        #32dee1;   --cyan-br:     #80c8c4;
+  --blue:        #8260ff;   --blue-br:     #6a76fb;
 
-  --clay:        #d97757;   /* the session banner's border + headings */
+  --clay:        #ff9f57;   /* orange — banner border, branch label, headings */
+  --cursor:      #76f79780; /* cursorColor: limeGreen at 50% */
 
   --mono: "Lilex Nerd Font", "Hack Nerd Font", ui-monospace, "Cascadia Mono", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace, "HooksGlyphFallback";
 
@@ -53,11 +57,12 @@ body {
   height: 100dvh;
   overflow: hidden;
   background:
-    radial-gradient(1200px 700px at 50% -15%, #1a1626 0%, transparent 62%),
+    radial-gradient(1200px 700px at 50% -15%, #241f2b 0%, transparent 62%),
     var(--bg);
   color: var(--fg);
   font-family: var(--mono);
   font-weight: var(--fw);
+  letter-spacing: -0.01em;   /* Hyper's global css block */
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
   -webkit-font-smoothing: antialiased;
@@ -88,21 +93,22 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   background: var(--term-bg);
-  border: 1px solid #2e2e36;
-  border-radius: 12px;
-  box-shadow: 0 30px 80px -20px #000c, 0 0 0 1px #ffffff08 inset;
+  border: 1px solid #00000060;
+  border-radius: 14px;
+  box-shadow: 0 40px 90px -25px #000e, 0 0 0 1px #ffffff0d inset;
   overflow: hidden;
 }
 
+/* Unibody, like Hyper: no bar of its own, just tab text floating on the same
+   ground as the terminal. */
 .titlebar {
   flex: none;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
+  gap: 18px;
+  padding: 10px 14px 6px;
   background: var(--term-bar);
-  border-bottom: 1px solid #00000040;
 }
 
 .lights { display: flex; gap: 7px; }
@@ -111,7 +117,10 @@ a:hover { text-decoration: underline; }
 .l-y { background: #febc2e; }
 .l-g { background: #28c840; }
 
-.titletext { font-size: calc(var(--fs) * 1.02); color: var(--fg-dim); white-space: nowrap; }
+.tab-branch { color: var(--clay); white-space: nowrap; }
+.tab-title  { color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; justify-self: center; }
+.tab-title::before { content: "· "; }
+.tab-cwd    { color: var(--fg-dim); white-space: nowrap; justify-self: end; }
 
 .tb-actions { justify-self: end; display: flex; gap: 4px; }
 
@@ -145,12 +154,12 @@ a:hover { text-decoration: underline; }
   min-height: 0;
   overflow-y: auto;
   overflow-x: auto;
-  padding: clamp(12px, 1.6vw, 22px) clamp(10px, 1.6vw, 22px) 8px;
+  padding: clamp(12px, 1.6vw, 16px) clamp(10px, 1.8vw, 22px) 8px;   /* Hyper: 16px 22px */
   scrollbar-width: thin;
-  scrollbar-color: #3a3a44 transparent;
+  scrollbar-color: #45444a transparent;
 }
 .scrollback::-webkit-scrollbar { width: 9px; height: 9px; }
-.scrollback::-webkit-scrollbar-thumb { background: #3a3a44; border-radius: 5px; }
+.scrollback::-webkit-scrollbar-thumb { background: #45444a; border-radius: 5px; }
 .scrollback::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- session banner ---------- */
@@ -255,6 +264,14 @@ a:hover { text-decoration: underline; }
    "says:" row, so hook output starts at column 0 like the terminal shows it. */
 .hookblock { margin-top: .2em; }
 
+/* The spinner row Claude Code prints while it is still working. */
+.forging {
+  margin: 1.4em 0 .2em;
+  color: var(--clay);
+  white-space: pre-wrap;
+}
+.forging[hidden] { display: none; }
+
 /* ---------- composer + status ---------- */
 
 .composer {
@@ -262,11 +279,47 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 10px clamp(10px, 1.6vw, 22px);
+  padding: 10px clamp(10px, 1.8vw, 22px);
   border-top: 1px solid var(--line);
   min-height: 2.6em;
 }
 .composer .chev { color: var(--fg-dim); flex: none; }
+
+/* cursorShape: 'LINE', cursorBlink: true */
+.caret {
+  flex: none;
+  width: 2px;
+  height: 1.15em;
+  align-self: center;
+  background: var(--cursor);
+  animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- chapters ---------- */
+
+.chapters {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 7px clamp(10px, 1.8vw, 22px);
+  border-top: 1px solid var(--line);
+}
+
+.chapters a {
+  color: var(--fg-dim);
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chapters a::before { content: "["; opacity: .5; margin-right: 2px; }
+.chapters a::after  { content: "]"; opacity: .5; margin-left: 2px; }
+.chapters a:hover { color: var(--fg); text-decoration: none; }
+.chapters a.on { color: var(--clay); border-color: var(--clay); }
+.chapters a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
 
 .hint {
   color: var(--fg-dim);
@@ -300,11 +353,11 @@ a:hover { text-decoration: underline; }
 .meters { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .meter { display: flex; align-items: center; gap: 10px; }
 .bar { display: block; width: clamp(70px, 18vw, 210px); height: 2px; flex: none; border-radius: 2px; }
-.bar-cyan    { background: var(--cyan); }
+.bar-cyan    { background: var(--yellow); }   /* rate limit, as the real one reads */
 .bar-magenta { background: var(--magenta); }
 
 .statusmeta { display: flex; align-items: center; gap: 8px; color: var(--fg-dim); }
-.statusmeta .model  { color: var(--magenta); }
+.statusmeta .model  { color: var(--blue-br); }
 .statusmeta .plugin { color: var(--fg-dim); text-decoration: underline; }
 
 /* ---------- narrow ---------- */
@@ -315,7 +368,10 @@ a:hover { text-decoration: underline; }
   .boot   { min-width: 0; }
   .boot-cols { grid-template-columns: minmax(0, 1fr); }
   .boot-right { border-left: 0; border-top: 1px solid var(--clay); margin-top: 10px; padding-top: 12px; }
-  .titletext { font-size: calc(var(--fs) * 0.95); }
+  /* Only the branch and the window buttons survive; the tab text and the cwd
+     are the first things Hyper itself drops when a window narrows. */
+  .titlebar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
+  .tab-title, .tab-cwd { display: none; }
 }
 
 @media (max-width: 1240px) {
@@ -325,4 +381,5 @@ a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .hint.on { animation: none; opacity: 1; }
   .beat { animation: none; }
+  .caret { animation: none; }
 }

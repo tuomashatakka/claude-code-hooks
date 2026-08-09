@@ -4,6 +4,11 @@ ANSI block-letter headings and matching block-weight checkbox headings,
 extracted from
 [claude-code-hooks](https://github.com/tuomashatakka/claude-code-hooks).
 
+**Live examples →** the [session banner](https://tuomashatakka.github.io/claude-code-hooks/#session-start),
+the [sign-off](https://tuomashatakka.github.io/claude-code-hooks/#stop) and
+[leaving plan mode](https://tuomashatakka.github.io/claude-code-hooks/#exit-plan),
+all rendered by this package.
+
 ```ts
 import { renderCheckboxHeading, renderHeading } from '@tuomashatakka/ansi-headings';
 

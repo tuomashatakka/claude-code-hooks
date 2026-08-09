@@ -227,12 +227,21 @@ const SANDBOX_HOME = path.join(ROOT, '.smoke-home');
 // capture exercises the branches this sandbox deliberately leaves empty.
 export async function runCase(
   c: Case,
-  homeDir: string = SANDBOX_HOME
+  homeDir: string = SANDBOX_HOME,
+  // Neither the smoke run nor the Pages build has a TTY, so the renderer falls
+  // back to TUI_TOKENS.width.fallbackContent unless a width is stated. The
+  // showcase states one, to fill the window it is drawn into.
+  columns?: number
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
   return new Promise((resolve, reject) => {
     const child = spawn('bun', ['run', BIND, c.event], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+      env: {
+        ...process.env,
+        HOME: homeDir,
+        USERPROFILE: homeDir,
+        ...(columns ? { COLUMNS: String(columns) } : {}),
+      },
     });
     let out = '';
     let err = '';

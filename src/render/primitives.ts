@@ -95,6 +95,35 @@ export function softCollapse(content: unknown, { maxLines = SAFETY_MAX_LINES, la
   return head + '\n' + chalk.gray.italic(`  … +${lines.length - maxLines} more ${label}`);
 }
 
+/**
+ * Word-wraps plain prose to a column width, preserving existing newlines.
+ *
+ * For the hooks that echo a prompt or a compaction summary: a terminal soft-wraps
+ * a 200-character line for free, but anything that replays the output verbatim —
+ * the showcase page, a log viewer — gets one line running off the right edge.
+ * Words longer than the width (urls, paths) are left whole rather than chopped.
+ */
+export function wrapText(text: string, width: number): string {
+  if (width <= 0) return text;
+  return String(text)
+    .split('\n')
+    .map(line => {
+      const out: string[] = [];
+      let current = '';
+      for (const word of line.split(/ +/)) {
+        if (!current) current = word;
+        else if (current.length + 1 + word.length <= width) current += ' ' + word;
+        else {
+          out.push(current);
+          current = word;
+        }
+      }
+      out.push(current);
+      return out.join('\n');
+    })
+    .join('\n');
+}
+
 // Extract plain text from any tool response shape (string, array of content blocks, object).
 export function extractResultText(toolResponse: unknown): string | null {
   const raw = extractResultTextRaw(toolResponse);

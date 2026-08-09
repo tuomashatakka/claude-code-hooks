@@ -18,15 +18,21 @@ describe('stripLineRange', () => {
 });
 
 describe('renderFileResult', () => {
-  test('renders the file path and action as badges above the content box', () => {
+  test('titles the box with the path and seats the action in its bottom edge', () => {
     const rendered = renderFileResult(target, { action: 'write' })!;
+    const lines = rendered.split('\n');
     const out = stripAnsi(rendered);
-    const title = stripAnsi(rendered.split('\n')[1]);
+    const title = stripAnsi(lines[1]!);
+    // Last line is the trailing blank renderCard always emits; the bottom edge
+    // is the one before it (or before the shadow the file card casts).
+    const bottom = stripAnsi(lines.filter(l => stripAnsi(l).includes('▔')).at(-1)!);
 
     expect(out).toContain('const a = 1;');
     expect(out).toContain('const d = 4;');
     expect(title).toContain(target);
-    expect(title).toContain('write');
+    expect(title).not.toContain('write');
+    expect(bottom).toContain('write');
+    expect(bottom.trimEnd()).toMatch(/write\s*░?$/);
   });
 
   test('prefers the file on disk over fallback response text', () => {

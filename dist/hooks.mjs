@@ -4853,6 +4853,23 @@ function softCollapse(content, { maxLines = SAFETY_MAX_LINES, label = "lines" } 
   const head = lines.slice(0, maxLines).join("\n");
   return head + "\n" + source_default.gray.italic(`  \u2026 +${lines.length - maxLines} more ${label}`);
 }
+function wrapText(text2, width) {
+  if (width <= 0) return text2;
+  return String(text2).split("\n").map((line) => {
+    const out = [];
+    let current = "";
+    for (const word of line.split(/ +/)) {
+      if (!current) current = word;
+      else if (current.length + 1 + word.length <= width) current += " " + word;
+      else {
+        out.push(current);
+        current = word;
+      }
+    }
+    out.push(current);
+    return out.join("\n");
+  }).join("\n");
+}
 function extractResultText(toolResponse) {
   const raw = extractResultTextRaw(toolResponse);
   return raw === null ? null : expandPersistedOutput(raw);
@@ -5055,10 +5072,18 @@ var TUI_TOKENS = {
     divider: 60
   },
   card: {
-    background: "#252525",
+    background: "#302f32",
     ruleFallback: "#4a4a4a",
+    border: "#5a595c",
+    shadow: "#1b1a1c",
     horizontalPadding: 2,
-    minimumHairline: 4
+    minimumHairline: 4,
+    /**
+     * Columns a card spends on chrome rather than content: `▏` + `▕`, plus the
+     * one `░` column a shadowed card hangs off its right edge. Reserved for
+     * every card so a shadow can be switched on without reflowing the layout.
+     */
+    chromeColumns: 3
   },
   columns: {
     gap: 3,
@@ -5074,35 +5099,70 @@ function getMaxLayoutWidth() {
   return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin);
 }
 function getMaxContentWidth() {
-  return Math.max(20, getMaxLayoutWidth() - TUI_TOKENS.card.horizontalPadding * 2);
+  const { horizontalPadding, chromeColumns } = TUI_TOKENS.card;
+  return Math.max(20, getMaxLayoutWidth() - horizontalPadding * 2 - chromeColumns);
 }
-function prepareBox({ content, minimumWidth = 0 }) {
+var EDGE_LEFT = "\u258F";
+var EDGE_RIGHT = "\u2595";
+var EDGE_BOTTOM = "\u2594";
+var EDGE_TOP = "\u2581";
+var SHADOW = "\u2591";
+function borderInk(text2) {
+  return source_default.hex(TUI_TOKENS.card.border)(text2);
+}
+function shadowInk(text2) {
+  return source_default.hex(TUI_TOKENS.card.shadow)(text2);
+}
+function renderBoxTopEdge(width) {
+  return borderInk(EDGE_TOP.repeat(Math.max(0, width)));
+}
+function prepareBox({ content, minimumWidth = 0, shadow = false, footerText = "" }) {
   const maxWidth = getMaxContentWidth();
   const { background, horizontalPadding } = TUI_TOKENS.card;
   const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
   const contentWidth = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
-  const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
+  const innerWidth = Math.max(contentWidth + horizontalPadding * 2, minimumWidth - 2);
+  const width = innerWidth + 2;
   const fill = source_default.bgHex(background);
-  const padding = fill(" ".repeat(width));
+  const left = borderInk(EDGE_LEFT);
+  const right = borderInk(EDGE_RIGHT);
+  const shade = shadow ? shadowInk(SHADOW) : "";
+  const frame = (row) => left + fill(row) + right + shade;
+  const padding = frame(" ".repeat(innerWidth));
   const body = lines.map(
-    (line) => fill(
-      " ".repeat(horizontalPadding) + line + " ".repeat(Math.max(0, width - horizontalPadding - visibleWidth(line)))
+    (line) => frame(
+      " ".repeat(horizontalPadding) + line + " ".repeat(Math.max(0, innerWidth - horizontalPadding - visibleWidth(line)))
     )
   );
-  return { lines: [padding, ...body, padding], width };
+  const footerWidth = visibleWidth(footerText);
+  const bottom = footerWidth > 0 && footerWidth < width ? borderInk(EDGE_BOTTOM.repeat(width - footerWidth)) + footerText + shade : borderInk(EDGE_BOTTOM.repeat(width)) + shade;
+  const cast = shadow ? " " + shadowInk(SHADOW.repeat(width)) : null;
+  return {
+    lines: [padding, ...body, padding, bottom, ...cast ? [cast] : []],
+    width
+  };
 }
 function renderBox(props) {
   const box = prepareBox(props);
-  return ["", ...box.lines, ""].join("\n");
+  return ["", renderBoxTopEdge(box.width), ...box.lines, ""].join("\n");
 }
-function renderCard({ badges, content, minimumWidth = 0 }) {
+function renderCard({ badges, content, minimumWidth = 0, shadow = false, footer }) {
   const badgeList = Array.isArray(badges) ? badges : [badges];
+  const footerList = footer === void 0 ? [] : Array.isArray(footer) ? footer : [footer];
+  const footerText = renderBadges(...footerList);
   const title = renderBadges(...badgeList);
-  if (!title) return renderBox({ content, minimumWidth });
+  if (!title) return renderBox({ content, minimumWidth, shadow, footerText });
   const badgeWidth = visibleWidth(title);
+  const { minimumHairline } = TUI_TOKENS.card;
   const box = prepareBox({
     content,
-    minimumWidth: Math.max(minimumWidth, badgeWidth + TUI_TOKENS.card.minimumHairline)
+    shadow,
+    footerText,
+    minimumWidth: Math.max(
+      minimumWidth,
+      badgeWidth + minimumHairline,
+      visibleWidth(footerText) + minimumHairline
+    )
   });
   const ruleLength = Math.max(0, box.width - badgeWidth);
   const ruleBadge = badgeList.find((badge) => badge instanceof Badge);
@@ -5150,6 +5210,16 @@ function pushDurationLine(lines, durationMs) {
 }
 
 // src/tui/file-card.ts
+import nodePath from "node:path";
+function displayPath(filePath) {
+  const text2 = String(filePath);
+  const cwd = process.cwd();
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const candidates = [text2];
+  if (text2.startsWith(cwd + nodePath.sep)) candidates.push(text2.slice(cwd.length + 1));
+  if (home && text2.startsWith(home + nodePath.sep)) candidates.push("~" + text2.slice(home.length));
+  return candidates.reduce((best, c) => c.length < best.length ? c : best);
+}
 function renderFileCard({
   path: path6,
   content,
@@ -5158,11 +5228,17 @@ function renderFileCard({
 }) {
   return renderCard({
     badges: [
-      new Badge({ label: path6, color: "cyan", icon: "\u25A4" }),
-      details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : null,
+      new Badge({ label: displayPath(path6), color: "cyan", icon: "\u25A4" }),
       ...badges
     ],
-    content
+    // The action and line range describe the content, not the file, so they
+    // close the box off at the bottom right instead of trailing the path.
+    footer: details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : void 0,
+    content,
+    // The one card that earns the extra glyph column: a file preview is the
+    // tallest thing a tool renders, and the shadow keeps it from reading as
+    // part of the surrounding scrollback.
+    shadow: true
   });
 }
 
@@ -7435,6 +7511,91 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   return out.join("\n");
 }
 
+// src/runtime/output-transport.ts
+var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
+var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
+function serialize(data) {
+  return JSON.stringify(data, null, 2);
+}
+function responseWithMessage(data, systemMessage) {
+  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
+}
+function fitsResponse(data, systemMessage) {
+  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
+}
+function systemMessageHeadroom(data) {
+  const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
+  const spent = Buffer.byteLength(serialize(responseWithMessage(data, current)), "utf8");
+  return Math.max(0, HOOK_RESPONSE_BYTE_BUDGET - spent);
+}
+function findLargestCandidate(maximum, render, fits2) {
+  let low = 0;
+  let high = maximum;
+  let best = { text: render(0), retained: 0 };
+  while (low <= high) {
+    const retained = Math.floor((low + high) / 2);
+    const text2 = render(retained);
+    if (fits2(text2)) {
+      best = { text: text2, retained };
+      low = retained + 1;
+    } else {
+      high = retained - 1;
+    }
+  }
+  return best;
+}
+function splitRetained(total) {
+  const head = Math.ceil(total * 0.6);
+  return { head, tail: total - head };
+}
+function limitByLines(data, systemMessage) {
+  const lines = systemMessage.split("\n");
+  return findLargestCandidate(
+    Math.max(0, lines.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        ...lines.slice(0, head),
+        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
+        ...tail > 0 ? lines.slice(-tail) : []
+      ].join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  );
+}
+function limitByCharacters(data, systemMessage) {
+  const characters = Array.from(stripAnsi(systemMessage));
+  return findLargestCandidate(
+    Math.max(0, characters.length - 1),
+    (retained) => {
+      const { head, tail } = splitRetained(retained);
+      return [
+        characters.slice(0, head).join(""),
+        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
+        tail > 0 ? characters.slice(-tail).join("") : ""
+      ].filter(Boolean).join("\n");
+    },
+    (candidate) => fitsResponse(data, candidate)
+  ).text;
+}
+function limitSystemMessage(data, systemMessage) {
+  const lineCandidate = limitByLines(data, systemMessage);
+  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
+}
+function serializeHookResponse(data) {
+  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
+  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
+  let json = serialize(output);
+  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
+    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
+    json = serialize(output);
+  }
+  return {
+    json,
+    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
+  };
+}
+
 // src/render/file-preview.ts
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "webp"]);
 function extensionFromPath(filePath) {
@@ -7468,6 +7629,18 @@ function renderFilePreview(filePath, options = {}) {
   }
   return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
 }
+var SECTION_RESERVE = 1400;
+function previewBudgetBytes() {
+  return Math.max(1200, HOOK_RESPONSE_BYTE_BUDGET - SECTION_RESERVE);
+}
+function jsonBytes(text2) {
+  return Buffer.byteLength(JSON.stringify(text2), "utf8");
+}
+function widthLadder(maxWidth) {
+  const rungs = [];
+  for (let width = maxWidth; width >= 16; width = Math.floor(width * 0.75)) rungs.push(width);
+  return rungs;
+}
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
   const text2 = String(rawPath);
@@ -7485,19 +7658,52 @@ function sliceToRange(content, { start, end }) {
   const lines = content.split("\n");
   return lines.slice(Math.max(0, start - 1), end ?? lines.length).join("\n");
 }
+function renderFittedFileCard(path6, content, kind, details, budget, reRender) {
+  const card = (body) => renderFileCard({ path: path6, content: body, details });
+  if (kind === "image" && reRender) {
+    let smallest = card(content);
+    for (const width of widthLadder(getMaxContentWidth())) {
+      const art = reRender(width);
+      if (!art) continue;
+      smallest = card(art);
+      if (jsonBytes(smallest) <= budget) return smallest;
+    }
+    return smallest;
+  }
+  const full = card(collapsePreview(content));
+  if (jsonBytes(full) <= budget) return full;
+  const total = content.split("\n").length;
+  let low = 0;
+  let high = total;
+  let best = card(collapsePreview(content, { maxLines: 0 }));
+  while (low <= high) {
+    const retained = Math.floor((low + high) / 2);
+    const candidate = card(collapsePreview(content, { maxLines: retained }));
+    if (jsonBytes(candidate) <= budget) {
+      best = candidate;
+      low = retained + 1;
+    } else {
+      high = retained - 1;
+    }
+  }
+  return best;
+}
 function renderFileResult(rawPath, options = {}) {
-  const { action, range: rangeOverride, ...previewOptions } = options;
+  const { action, range: rangeOverride, budgetBytes, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
   const preview = renderFilePreview(filePath, previewOptions);
   if (!preview) return null;
   const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
   const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
-  return renderFileCard({
-    path: filePath,
-    content: collapsePreview(body),
-    details: details || null
-  });
+  return renderFittedFileCard(
+    filePath,
+    body,
+    preview.kind,
+    details || null,
+    budgetBytes ?? previewBudgetBytes(),
+    preview.kind === "image" ? (width) => renderFilePreview(filePath, { ...previewOptions, maxWidth: width })?.content ?? null : void 0
+  );
 }
 function collapsePreview(content, options = {}) {
   return softCollapse(content, { label: "lines", ...options });
@@ -7626,9 +7832,10 @@ defineTool({
     const lines = [];
     pushDurationLine(lines, durationMs);
     const paths = toPathList(input);
+    const budgetBytes = Math.floor(previewBudgetBytes() / Math.max(1, paths.length));
     let missed = 0;
     for (const rawPath of paths) {
-      const box = renderFileResult(rawPath, { action: "read" });
+      const box = renderFileResult(rawPath, { action: "read", budgetBytes });
       if (box) lines.push(box);
       else {
         missed += 1;
@@ -7691,14 +7898,14 @@ defineTool({
     pushDurationLine(lines, durationMs);
     const text2 = extractResultText(result);
     const saved = savedContextPath(input, text2);
-    const prose = text2?.trim() && text2.trim() !== saved ? firstLine(text2.trim(), 200) : null;
-    if (prose) {
-      const failed = /\b(error|warning|no files found)\b/i.test(prose);
-      lines.push((failed ? source_default.yellow("\u26A0 ") : source_default.green("\u29FA ")) + prose);
+    const prose2 = text2?.trim() && text2.trim() !== saved ? firstLine(text2.trim(), 200) : null;
+    if (prose2) {
+      const failed = /\b(error|warning|no files found)\b/i.test(prose2);
+      lines.push((failed ? source_default.yellow("\u26A0 ") : source_default.green("\u29FA ")) + prose2);
     }
     const box = saved ? renderFileResult(saved, { action: "context save", transform: dropInlinedFiles }) : null;
     if (box) lines.push(box);
-    else if (text2 && !prose) lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
+    else if (text2 && !prose2) lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
     return { lines };
   }
 });
@@ -7919,7 +8126,10 @@ var TOOL_PRIMARY_OUTPUT_KEYS = {
   Bash: ["stdout", "output"],
   Glob: ["filenames", "result", "output"],
   Grep: ["filenames", "result", "output"],
-  WebFetch: ["content", "output", "text"],
+  // WebFetch answers `{ code, codeText, url, durationMs, result }` — without
+  // `result` first, the whole response falls through to the metadata card and
+  // the actual answer gets flattened to one truncated line.
+  WebFetch: ["result", "content", "output", "text"],
   WebSearch: ["results", "output", "text"],
   Task: ["description", "result", "output"],
   Agent: ["description", "result", "output"],
@@ -8073,91 +8283,6 @@ function dispatchHook(event, raw) {
   }
 }
 
-// src/runtime/output-transport.ts
-var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
-var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
-function serialize(data) {
-  return JSON.stringify(data, null, 2);
-}
-function responseWithMessage(data, systemMessage) {
-  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
-}
-function fitsResponse(data, systemMessage) {
-  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
-}
-function systemMessageHeadroom(data) {
-  const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
-  const spent = Buffer.byteLength(serialize(responseWithMessage(data, current)), "utf8");
-  return Math.max(0, HOOK_RESPONSE_BYTE_BUDGET - spent);
-}
-function findLargestCandidate(maximum, render, fits2) {
-  let low = 0;
-  let high = maximum;
-  let best = { text: render(0), retained: 0 };
-  while (low <= high) {
-    const retained = Math.floor((low + high) / 2);
-    const text2 = render(retained);
-    if (fits2(text2)) {
-      best = { text: text2, retained };
-      low = retained + 1;
-    } else {
-      high = retained - 1;
-    }
-  }
-  return best;
-}
-function splitRetained(total) {
-  const head = Math.ceil(total * 0.6);
-  return { head, tail: total - head };
-}
-function limitByLines(data, systemMessage) {
-  const lines = systemMessage.split("\n");
-  return findLargestCandidate(
-    Math.max(0, lines.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        ...lines.slice(0, head),
-        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
-        ...tail > 0 ? lines.slice(-tail) : []
-      ].join("\n");
-    },
-    (candidate) => fitsResponse(data, candidate)
-  );
-}
-function limitByCharacters(data, systemMessage) {
-  const characters = Array.from(stripAnsi(systemMessage));
-  return findLargestCandidate(
-    Math.max(0, characters.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        characters.slice(0, head).join(""),
-        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
-        tail > 0 ? characters.slice(-tail).join("") : ""
-      ].filter(Boolean).join("\n");
-    },
-    (candidate) => fitsResponse(data, candidate)
-  ).text;
-}
-function limitSystemMessage(data, systemMessage) {
-  const lineCandidate = limitByLines(data, systemMessage);
-  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
-}
-function serializeHookResponse(data) {
-  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
-  let json = serialize(output);
-  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
-    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
-    json = serialize(output);
-  }
-  return {
-    json,
-    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
-  };
-}
-
 // src/hooks/_normalize.ts
 function asObject(raw) {
   return raw && typeof raw === "object" ? raw : {};
@@ -8207,11 +8332,7 @@ function renderToolSection({
   const ctx = { toolName };
   const section = def.post(input, result, durationMs, ctx);
   const main = new Badge({ toolName });
-  const badges = [main, ...extraTopBadges];
-  badges.push(
-    section.isJson ? new Badge({ label: "JSON", color: "green" }) : new Badge({ label: "OUTPUT", color: "brightGreen" })
-  );
-  for (const b of section.extraBadges ?? []) badges.push(b);
+  const badges = [main, ...extraTopBadges, ...section.extraBadges ?? []];
   return renderSection({ badges, lines: section.lines });
 }
 
@@ -8309,6 +8430,10 @@ ${art}
 source_default.level = 3;
 var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
 var SYSTEM_PROMPT_PATH = path5.join(HOME3, "system-prompt.md");
+function prose(text2, limit) {
+  const capped = text2.length > limit ? text2.slice(0, limit) + "..." : text2;
+  return source_default.gray(wrapText(capped, getMaxContentWidth()));
+}
 function loadSystemPrompt() {
   try {
     if (fs5.existsSync(SYSTEM_PROMPT_PATH)) return fs5.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
@@ -8429,7 +8554,7 @@ defineHook({
       new Badge({ label: "PreCompact", color: "yellow", icon: "\u27F3" }),
       input.trigger ? new Badge({ label: input.trigger, color: "gray" }) : null
     ];
-    const lines = input.customInstructions ? [source_default.gray(input.customInstructions.slice(0, 200))] : [];
+    const lines = input.customInstructions ? [prose(input.customInstructions, 200)] : [];
     return { systemMessage: heading + renderSection({ badges, lines }) };
   }
 });
@@ -8442,7 +8567,7 @@ defineHook({
   handle(input) {
     const heading = renderHeading({ word: "COMPACT", color: "yellow", event: "compact" });
     const badge = new Badge({ label: "PostCompact", color: "yellow", icon: "\u27F3" });
-    const lines = input.summary ? [source_default.gray(input.summary.slice(0, 200))] : [];
+    const lines = input.summary ? [prose(input.summary, 200)] : [];
     return { systemMessage: heading + renderSection({ badges: badge, lines }) };
   }
 });
@@ -8475,10 +8600,7 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" });
     const lines = [];
-    if (input.prompt) {
-      const shown = input.prompt.length > 200 ? input.prompt.slice(0, 200) + "..." : input.prompt;
-      lines.push(source_default.gray(shown));
-    }
+    if (input.prompt) lines.push(prose(input.prompt, 200));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
@@ -8496,10 +8618,7 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" });
     const lines = [];
-    if (input.expandedPrompt) {
-      const shown = input.expandedPrompt.length > 300 ? input.expandedPrompt.slice(0, 300) + "..." : input.expandedPrompt;
-      lines.push(source_default.gray(shown));
-    }
+    if (input.expandedPrompt) lines.push(prose(input.expandedPrompt, 300));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });

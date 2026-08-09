@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>claude-code-hooks — beautified hook output for Claude Code</title>
-  <meta name="description" content="A Claude Code plugin that beautifies 13 post-tool and lifecycle hook events with block-letter headings, colored badges, syntax-highlighted diffs and ASCII image previews." />
+  <meta name="description" content="A Claude Code plugin that beautifies every lifecycle hook and tool result: block-letter headings, colored badges, syntax-highlighted file cards, shell and browser output, and ANSI image previews." />
   <link rel="canonical" href="https://tuomashatakka.github.io/claude-code-hooks/" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="claude-code-hooks" />
-  <meta property="og:description" content="Beautified terminal output for 13 active Claude Code hook events — block-letter headings, badges, diffs and ASCII image previews." />
+  <meta property="og:description" content="Beautified terminal output for every Claude Code hook — headings, badges, syntax-highlighted files, shell, browser automation and ANSI image previews. Every example captured from the live pipeline." />
   <meta property="og:url" content="https://tuomashatakka.github.io/claude-code-hooks/" />
   <meta name="twitter:card" content="summary" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⬡</text></svg>" />
@@ -25,7 +25,9 @@
 
       <header class="titlebar">
         <span class="lights" aria-hidden="true"><i class="l-r"></i><i class="l-y"></i><i class="l-g"></i></span>
-        <span class="titletext">✳ Claude Code</span>
+        <span class="tab-branch">✳ claude-code-hooks</span>
+        <span class="tab-title" id="tabtitle">beautified hook output</span>
+        <span class="tab-cwd">you@local:~/.claude/plugins/hooks</span>
         <span class="tb-actions">
           <button type="button" id="restart" class="tb-btn" aria-label="Back to the first example">↻</button>
         </span>
@@ -40,8 +42,9 @@
             <span class="boot-legend">claude-code-hooks v2.2.0</span>
             <div class="boot-cols">
               <div class="boot-left">
-                <p class="boot-lead">⬡ 13 hook events, beautified</p>
-                <p class="dim">block headings · tabbed cards · diffs · sextant images</p>
+                <p class="boot-lead">⬡ every hook, beautified</p>
+                <p class="dim">block headings · framed cards · diffs · sextant images</p>
+                <p class="dim">13 events · 15 tool renderers · 33 live examples</p>
                 <p class="dim">TypeScript + Bun · runs on plain <span class="fg">node</span></p>
               </div>
               <div class="boot-right">
@@ -50,7 +53,7 @@
                 <p class="cmdrow"><code id="cmd-install">/plugin install hooks@claude-code-hooks</code><button type="button" class="copy" data-copy="#cmd-install">copy</button></p>
                 <hr />
                 <h2 class="boot-h">What it does</h2>
-                <p>Renders <span class="fg">PostToolUse</span>, <span class="fg">SessionStart</span>, and 11 more lifecycle events as readable terminal output instead of a wall of JSON. <span class="fg">PreToolUse</span> stays disabled.</p>
+                <p>Renders <span class="fg">PostToolUse</span>, <span class="fg">SessionStart</span> and 11 more lifecycle events as readable terminal output instead of a wall of JSON — shell, file previews, diffs, browser automation, tasks and failures each get their own treatment. <span class="fg">PreToolUse</span> stays disabled.</p>
                 <p class="dim"><a href="https://github.com/tuomashatakka/claude-code-hooks">github.com/tuomashatakka/claude-code-hooks</a> for more</p>
               </div>
             </div>
@@ -68,17 +71,33 @@
                captured from the live hook pipeline on every deploy. -->
           <div id="stream"></div>
 
+          <!-- Spinner row, same place Claude Code puts it. Only visible while
+               an example is still landing. -->
+          <p class="forging" id="forging" hidden>✳ <span class="fg">Forging…</span> <span class="dim">(rendering)</span></p>
+
         </div>
 
         <div class="composer">
           <span class="chev" aria-hidden="true">❯</span>
           <span class="hint" id="hint" aria-live="polite"></span>
+          <span class="caret" aria-hidden="true"></span>
           <span class="stepper">
             <button type="button" id="prev" class="tb-btn" aria-label="Previous example">←</button>
             <span class="counter" id="counter">1 / 1</span>
             <button type="button" id="next" class="tb-btn" aria-label="Next example">→</button>
           </span>
         </div>
+
+        <!-- Chapter strip. Filled from demo-data.js; the static list is what a
+             reader without JS gets, and it says what the page covers. -->
+        <nav class="chapters" id="chapters" aria-label="Chapters">
+          <a href="#session-start">session</a>
+          <a href="#bash-grep">shell</a>
+          <a href="#read-source">files</a>
+          <a href="#pw-navigate">web</a>
+          <a href="#task-create">tasks</a>
+          <a href="#tool-failure">failure</a>
+        </nav>
 
         <div class="status">
           <div class="meters" aria-hidden="true">

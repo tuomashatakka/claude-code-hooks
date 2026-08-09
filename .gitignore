@@ -7,3 +7,5 @@ debug.log
 transcript.output
 public/demo-data.js
 .playwright-mcp/
+.logs/
+packages/*/dist/

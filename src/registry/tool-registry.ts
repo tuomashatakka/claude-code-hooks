@@ -39,6 +39,15 @@ export function defineGenericTool<TInput = RawToolInput, TResult = RawToolResult
   GENERIC = { matches: () => true, ...def } as ToolDefinition<any, any>;
 }
 
+/**
+ * Every registered strategy, generic fallback last. Used by the showcase
+ * capture to prove each one is demonstrated on the page — identity comparison
+ * against what `getToolDefinition` returns, so no strategy needs an id.
+ */
+export function listToolDefinitions(): ToolDefinition[] {
+  return [...REGISTRY, ...(GENERIC ? [GENERIC] : [])];
+}
+
 function matches(matcher: ToolMatcher, rawName: string): boolean {
   if (typeof matcher === 'function') return matcher(rawName);
   if (Array.isArray(matcher)) return matcher.includes(rawName);

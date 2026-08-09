@@ -15,7 +15,37 @@ const TMP = os.tmpdir();
 
 export const SMOKE_PNG = path.join(TMP, 'claude-hooks-smoke.png');
 export const SMOKE_JPG = path.join(TMP, 'claude-hooks-smoke.jpg');
-export const DEMO_PNG = path.join(TMP, 'claude-hooks-demo.png');
+
+/**
+ * The showcase's fixtures live inside its fake HOME rather than in /tmp.
+ *
+ * The renderer shortens a path it can place — `~/…` for HOME, project-relative
+ * for the cwd — and the capture then has nothing left to rewrite. Rewriting a
+ * path *after* rendering is what used to break the cards: the badge rule was
+ * measured against the long form and the box against the short one, so the two
+ * ended at different columns.
+ */
+export const demoImagePath = (home: string) => path.join(home, 'docs', 'sigil.png');
+export const demoContextPath = (home: string) =>
+  path.join(home, '.local', 'share', 'wcgw', 'memory', 'hooks-badge-parity.txt');
+
+// wcgw's ContextSave writes a memory file and answers with its path; the hook
+// re-reads it off disk and drops everything under "# Relevant Files:". The
+// showcase needs a real file at a real path to show that trimming happening.
+const DEMO_CONTEXT_BODY = [
+  '# Project: claude-code-hooks',
+  '# Objective: badge parity across all 13 active hook events',
+  '',
+  '# All relevant file globs:',
+  'src/hooks/index.ts',
+  'src/tui/badge.ts',
+  'src/registry/hook-registry.ts',
+  '',
+  '# Build/test commands: bun test && bun run smoke',
+  '',
+  '# Relevant Files:',
+  ...Array.from({ length: 1200 }, (_, i) => `line ${i + 1} of inlined file content`),
+].join('\n');
 
 /** Flat RGBA buffer from a per-pixel color function. */
 function paint(
@@ -78,26 +108,45 @@ function demoSigil(width: number, height: number) {
   };
 }
 
-/** Writes every image fixture and returns their paths. */
-export function writeImageFixtures(): { png: string; jpg: string; demo: string } {
+/** The two images scripts/smoke.ts asserts against. */
+export function writeImageFixtures(): { png: string; jpg: string } {
   writePng(SMOKE_PNG, 8, 8, paint(8, 8, smokeGradient));
 
   const jpegBuffer = jpeg.encode({ data: paint(8, 8, smokeGradient), width: 8, height: 8 }, 50).data;
   fs.writeFileSync(SMOKE_JPG, jpegBuffer);
 
-  const dw = 60;
-  const dh = 44;
-  writePng(DEMO_PNG, dw, dh, paint(dw, dh, demoSigil(dw, dh)));
-
-  return { png: SMOKE_PNG, jpg: SMOKE_JPG, demo: DEMO_PNG };
+  return { png: SMOKE_PNG, jpg: SMOKE_JPG };
 }
 
 export function removeImageFixtures(): void {
-  for (const f of [SMOKE_PNG, SMOKE_JPG, DEMO_PNG]) {
+  for (const f of [SMOKE_PNG, SMOKE_JPG]) {
     try {
       fs.unlinkSync(f);
     } catch {
       // already gone — nothing to clean up
     }
+  }
+}
+
+/** The sigil and the saved context the showcase reads, inside its fake HOME. */
+export function writeDemoFixtures(home: string): { image: string; context: string } {
+  const image = demoImagePath(home);
+  const context = demoContextPath(home);
+
+  fs.mkdirSync(path.dirname(image), { recursive: true });
+  fs.mkdirSync(path.dirname(context), { recursive: true });
+
+  const dw = 60;
+  const dh = 44;
+  writePng(image, dw, dh, paint(dw, dh, demoSigil(dw, dh)));
+  fs.writeFileSync(context, DEMO_CONTEXT_BODY);
+
+  return { image, context };
+}
+
+export function removeDemoFixtures(home: string): void {
+  // demo-home is committed, so the generated trees come back out whole.
+  for (const dir of [path.join(home, 'docs'), path.join(home, '.local')]) {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 }

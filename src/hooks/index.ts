@@ -4,10 +4,12 @@ import path from 'node:path';
 import { defineHook } from '../registry/hook-registry.ts';
 import {
   Badge,
+  getMaxContentWidth,
   pushDurationLine,
   renderHeading,
   renderSection,
 } from '../tui/index.ts';
+import { wrapText } from '../render/primitives.ts';
 import { debugLog } from '../runtime/debug.ts';
 import { systemMessageHeadroom } from '../runtime/output-transport.ts';
 import {
@@ -27,6 +29,16 @@ chalk.level = 3;
 
 const HOME = process.env.HOME ?? process.env.USERPROFILE ?? '';
 const SYSTEM_PROMPT_PATH = path.join(HOME, 'system-prompt.md');
+
+/**
+ * A quoted prompt or summary, capped and wrapped to the terminal width.
+ * These are the only lines the plugin prints that are prose rather than
+ * structure, so they are the only ones that need wrapping.
+ */
+function prose(text: string, limit: number): string {
+  const capped = text.length > limit ? text.slice(0, limit) + '...' : text;
+  return chalk.gray(wrapText(capped, getMaxContentWidth()));
+}
 
 function loadSystemPrompt(): string | null {
   try {
@@ -165,9 +177,7 @@ defineHook({
       new Badge({ label: 'PreCompact', color: 'yellow', icon: '⟳' }),
       input.trigger ? new Badge({ label: input.trigger, color: 'gray' }) : null,
     ];
-    const lines = input.customInstructions
-      ? [chalk.gray(input.customInstructions.slice(0, 200))]
-      : [];
+    const lines = input.customInstructions ? [prose(input.customInstructions, 200)] : [];
     return { systemMessage: heading + renderSection({ badges, lines }) };
   },
 });
@@ -182,7 +192,7 @@ defineHook({
   handle(input) {
     const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' });
     const badge = new Badge({ label: 'PostCompact', color: 'yellow', icon: '⟳' });
-    const lines = input.summary ? [chalk.gray(input.summary.slice(0, 200))] : [];
+    const lines = input.summary ? [prose(input.summary, 200)] : [];
     return { systemMessage: heading + renderSection({ badges: badge, lines }) };
   },
 });
@@ -220,10 +230,7 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' });
     const lines: string[] = [];
-    if (input.prompt) {
-      const shown = input.prompt.length > 200 ? input.prompt.slice(0, 200) + '...' : input.prompt;
-      lines.push(chalk.gray(shown));
-    }
+    if (input.prompt) lines.push(prose(input.prompt, 200));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   },
 });
@@ -243,12 +250,7 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: 'UserPromptExpansion', color: 'magenta', icon: '✱' });
     const lines: string[] = [];
-    if (input.expandedPrompt) {
-      const shown = input.expandedPrompt.length > 300
-        ? input.expandedPrompt.slice(0, 300) + '...'
-        : input.expandedPrompt;
-      lines.push(chalk.gray(shown));
-    }
+    if (input.expandedPrompt) lines.push(prose(input.expandedPrompt, 300));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   },
 });

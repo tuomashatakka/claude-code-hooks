@@ -8,15 +8,18 @@
 // map onto the same --var() palette public/index.css already defines, so
 // captured output matches the rest of the page.
 
+// Both columns are `var()` so the page's palette stays the single place colors
+// are decided — index.css mirrors the user's ~/.hyper.js, and the captured
+// markup inherits it without being re-captured.
 const NAMED: Array<{ normal: string; bright: string }> = [
-  { normal: '#0c0c0e', bright: 'var(--fg-dim)' }, // 0 black / bright-black (chalk.gray)
-  { normal: 'var(--red)', bright: 'var(--red)' }, // 1 red
+  { normal: 'var(--term-bg)', bright: 'var(--fg-dim)' }, // 0 black / bright-black (chalk.gray)
+  { normal: 'var(--red)', bright: 'var(--red-br)' }, // 1 red
   { normal: 'var(--green)', bright: 'var(--brightgreen)' }, // 2 green
-  { normal: 'var(--yellow)', bright: 'var(--yellow)' }, // 3 yellow
-  { normal: 'var(--blue)', bright: 'var(--blue)' }, // 4 blue
-  { normal: 'var(--magenta)', bright: 'var(--magenta)' }, // 5 magenta
-  { normal: 'var(--cyan)', bright: 'var(--cyan)' }, // 6 cyan
-  { normal: 'var(--fg)', bright: '#ffffff' }, // 7 white
+  { normal: 'var(--yellow)', bright: 'var(--yellow-br)' }, // 3 yellow
+  { normal: 'var(--blue)', bright: 'var(--blue-br)' }, // 4 blue
+  { normal: 'var(--magenta)', bright: 'var(--magenta-br)' }, // 5 magenta
+  { normal: 'var(--cyan)', bright: 'var(--cyan-br)' }, // 6 cyan
+  { normal: 'var(--fg)', bright: 'var(--fg-bright)' }, // 7 white
 ];
 
 // image-to-ascii degrades to xterm-256 (\x1b[38;5;N) once a render would blow

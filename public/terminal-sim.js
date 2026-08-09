@@ -24,11 +24,15 @@
   const counter = document.getElementById('counter');
   const prevBtn = document.getElementById('prev');
   const nextBtn = document.getElementById('next');
+  const chapterNav = document.getElementById('chapters');
+  const forging = document.getElementById('forging');
+  const tabTitle = document.getElementById('tabtitle');
 
   wireCopyButtons(document);
 
   const session = window.__SESSION__;
   const examples = session && Array.isArray(session.examples) ? session.examples : null;
+  const chapters = session && Array.isArray(session.chapters) ? session.chapters : [];
   if (!stream || !examples || !examples.length) {
     // No capture: the static banner already carries the install commands, so
     // leaving it untouched is the right failure.
@@ -46,6 +50,66 @@
   let index = 0;
   let run = 0;             // bumped to cancel an in-flight reveal
   let revealing = false;
+
+  /* ---------- chapters + deep links ---------- */
+
+  // Every example owns a URL hash, so a single renderer can be linked to
+  // directly — the readme points at #read-image, #agent-browser and friends.
+  const indexOfId = id => examples.findIndex(ex => ex.id === id);
+
+  function indexFromHash() {
+    const id = decodeURIComponent(String(location.hash || '').replace(/^#/, ''));
+    if (!id) return 0;
+    const direct = indexOfId(id);
+    if (direct >= 0) return direct;
+    // A chapter name in the hash lands on that chapter's first example.
+    const chapter = chapters.find(c => c.id === id);
+    return chapter ? chapter.start : 0;
+  }
+
+  function chapterOf(i) {
+    const id = examples[i] && examples[i].chapter;
+    return chapters.find(c => c.id === id) || null;
+  }
+
+  function buildChapterStrip() {
+    if (!chapterNav || !chapters.length) return;
+    chapterNav.textContent = '';
+    for (const chapter of chapters) {
+      const link = document.createElement('a');
+      link.href = '#' + examples[chapter.start].id;
+      link.dataset.chapter = chapter.id;
+      link.textContent = chapter.label;
+      link.title = chapter.count + (chapter.count === 1 ? ' example' : ' examples');
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        index = chapter.start;
+        show(index);
+      });
+      chapterNav.appendChild(link);
+    }
+  }
+
+  function markChapter(i) {
+    const active = chapterOf(i);
+    if (chapterNav) {
+      chapterNav.querySelectorAll('a').forEach(link => {
+        link.classList.toggle('on', Boolean(active) && link.dataset.chapter === active.id);
+      });
+    }
+    if (tabTitle && active) tabTitle.textContent = active.label + ' · ' + examples[i].id;
+  }
+
+  // replaceState, not `location.hash =`: stepping through 33 examples should
+  // not bury the visitor's previous page under 33 history entries.
+  function syncHash(i) {
+    const next = '#' + examples[i].id;
+    if (location.hash === next) return;
+    if (history.replaceState) history.replaceState(null, '', next);
+    else location.hash = next;
+  }
+
+  buildChapterStrip();
 
   // The banner is part of the session-start frame. Past that it would eat the
   // room an example needs, so it collapses into the compact install bar.
@@ -79,6 +143,9 @@
     revealing = true;
     setHint('');
     setChrome(i);
+    setForging(true);
+    syncHash(i);
+    markChapter(i);
 
     if (ex.note) stream.appendChild(el('note', escapeHtml(ex.note)));
     if (ex.prompt) stream.appendChild(el('turn', '&gt; ' + escapeHtml(ex.prompt)));
@@ -115,15 +182,26 @@
     }
 
     if (token !== run) return;
+    settle(i);
+  }
+
+  /** Everything that marks an example as fully landed. */
+  function settle(i) {
     scrollback.scrollTop = 0;
     revealing = false;
-    counter.textContent = (i + 1) + ' / ' + examples.length;
+    setForging(false);
+    const chapter = chapterOf(i);
+    counter.textContent = (chapter ? chapter.label + ' · ' : '') + (i + 1) + ' / ' + examples.length;
     setHint('press any key or click to continue');
   }
 
   function setHint(text) {
     hint.textContent = text;
     hint.classList.toggle('on', Boolean(text));
+  }
+
+  function setForging(on) {
+    if (forging) forging.hidden = !on;
   }
 
   function go(delta) {
@@ -148,10 +226,7 @@
     const frag = document.createDocumentFragment();
     ex.lines.slice(first + shown).forEach(l => frag.appendChild(el('cap-line', l || '&nbsp;')));
     block.appendChild(frag);
-    revealing = false;
-    scrollback.scrollTop = 0;
-    counter.textContent = (i + 1) + ' / ' + examples.length;
-    setHint('press any key or click to continue');
+    settle(i);
   }
 
   /* ---------- input ---------- */
@@ -167,6 +242,14 @@
     // Buttons and links own their clicks.
     if (e.target.closest('button, a')) return;
     go(1);
+  });
+
+  // A pasted or bookmarked …/#read-image lands on that example directly.
+  window.addEventListener('hashchange', () => {
+    const target = indexFromHash();
+    if (target === index) return;
+    index = target;
+    show(index);
   });
 
   prevBtn.addEventListener('click', () => go(-1));
@@ -208,5 +291,6 @@
     });
   }
 
-  show(0);
+  index = indexFromHash();
+  show(index);
 })();

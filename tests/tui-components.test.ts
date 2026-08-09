@@ -37,8 +37,29 @@ describe('tui cards', () => {
 
   test('renders an untitled box through the same layout primitive', () => {
     const lines = renderBox({ content: 'hello' }).split('\n');
-    expect(lines.length).toBe(5);
-    expect(stripAnsi(lines[2]!)).toContain('hello');
+    // blank, ▁ top edge, pad, body, pad, ▔ bottom edge, blank
+    expect(lines.length).toBe(7);
+    expect(stripAnsi(lines[3]!)).toContain('hello');
+    expect(stripAnsi(lines[1]!)).toMatch(/^▁+$/);
+    expect(stripAnsi(lines[5]!)).toMatch(/^▔+$/);
+  });
+
+  test('frames every body row with the side glyphs, flush with both edges', () => {
+    const lines = renderCard({ badges: RUNNING_BADGE, content: 'a\nbb\nccc' }).split('\n');
+    const framed = lines.slice(2, -2).map(stripAnsi);
+
+    expect(framed.every(line => line.startsWith('▏') && line.endsWith('▕'))).toBeTrue();
+    const widths = new Set([...framed, stripAnsi(lines[1]!), stripAnsi(lines.at(-2)!)].map(visibleWidth));
+    expect(widths.size).toBe(1);
+  });
+
+  test('casts a shadow only when asked, one column right of the frame', () => {
+    const plain = stripAnsi(renderCard({ badges: RUNNING_BADGE, content: 'x' }));
+    const cast = stripAnsi(renderCard({ badges: RUNNING_BADGE, content: 'x', shadow: true }));
+
+    expect(plain).not.toContain('░');
+    expect(cast).toContain('▕░');
+    expect(cast.split('\n').at(-2)).toMatch(/^ ░+$/);
   });
 
   test('places cards in columns when their combined width fits comfortably', () => {

@@ -29,7 +29,10 @@ const TOOL_PRIMARY_OUTPUT_KEYS: Record<string, string[]> = {
   Bash:        ['stdout', 'output'],
   Glob:        ['filenames', 'result', 'output'],
   Grep:        ['filenames', 'result', 'output'],
-  WebFetch:    ['content', 'output', 'text'],
+  // WebFetch answers `{ code, codeText, url, durationMs, result }` — without
+  // `result` first, the whole response falls through to the metadata card and
+  // the actual answer gets flattened to one truncated line.
+  WebFetch:    ['result', 'content', 'output', 'text'],
   WebSearch:   ['results', 'output', 'text'],
   Task:        ['description', 'result', 'output'],
   Agent:       ['description', 'result', 'output'],
