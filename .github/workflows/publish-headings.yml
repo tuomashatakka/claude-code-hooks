@@ -1,9 +1,10 @@
 name: Publish ansi-headings
 
-# Bundles src/render/headings.ts (and its local deps: phrase.ts, primitives.ts,
-# glyphs.json) standalone and publishes it as @tuomashatakka/ansi-headings to
-# GitHub Packages. Independent of the plugin's git-based release process in
-# release.yml - this package has its own version line.
+# Bundles packages/ansi-headings standalone and publishes it as
+# @tuomashatakka/ansi-headings to GitHub Packages. Independent of the plugin's
+# git-based release process in release.yml - this package has its own version
+# line. The build itself lives in scripts/build-package.ts so it cannot drift
+# from where the sources actually are.
 on:
   workflow_dispatch:
     inputs:
@@ -43,14 +44,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Test
+        run: bun test
+
       - name: Build bundle
-        run: |
-          mkdir -p packages/ansi-headings/dist
-          bun build src/render/headings.ts \
-            --outfile packages/ansi-headings/dist/index.js \
-            --target node \
-            --format esm \
-            --external chalk
+        run: bun run scripts/build-package.ts ansi-headings
 
       - name: Publish
         uses: ./.github/actions/release-package

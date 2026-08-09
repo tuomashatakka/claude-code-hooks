@@ -1,8 +1,10 @@
 name: Publish image-to-ascii
 
-# Bundles src/render/image-to-ascii.ts standalone and publishes it as
+# Bundles packages/image-to-ascii standalone and publishes it as
 # @tuomashatakka/image-to-ascii to GitHub Packages. Independent of the plugin's
-# git-based release process in release.yml - this package has its own version line.
+# git-based release process in release.yml - this package has its own version
+# line. The build itself lives in scripts/build-package.ts so it cannot drift
+# from where the sources actually are.
 on:
   workflow_dispatch:
     inputs:
@@ -46,14 +48,7 @@ jobs:
         run: bun test
 
       - name: Build bundle
-        run: |
-          mkdir -p packages/image-to-ascii/dist
-          bun build src/render/image-to-ascii.ts \
-            --outfile packages/image-to-ascii/dist/index.js \
-            --target node \
-            --format esm \
-            --external pngjs \
-            --external jpeg-js
+        run: bun run scripts/build-package.ts image-to-ascii
 
       - name: Publish
         uses: ./.github/actions/release-package
