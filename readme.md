@@ -65,8 +65,8 @@ splits any unknown response into its answer and its metadata.
 | `wcgw FileWriteOrEdit` | Search/replace blocks parsed to tell an edit from a write, result read back off disk | [#wcgw-write](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-write) |
 | `wcgw ReadFiles`, `ReadImage` | One card per path, sharing a single response budget | [#wcgw-read](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-read) |
 | `wcgw Initialize`, `ContextSave` | Workspace handshake as three lines; saved context with its inlined files accounted for rather than printed | [#wcgw-ctx](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-ctx) |
-| Playwright `browser_*` | Output or JSON card plus a `ƒ` badge naming the operation | [#pw-navigate](https://tuomashatakka.github.io/claude-code-hooks/#pw-navigate) |
-| `agent-browser` (via `Bash`) | One `ƒ` badge per subcommand in the chain | [#agent-browser](https://tuomashatakka.github.io/claude-code-hooks/#agent-browser) |
+| Playwright `browser_*` | Output or JSON card plus a `ƒ` badge naming the operation; a screenshot draws the picture instead | [#pw-navigate](https://tuomashatakka.github.io/claude-code-hooks/#pw-navigate) |
+| `agent-browser` (via `Bash`) | One `ƒ` badge per subcommand in the chain; a screenshot it saves is drawn in place of its output | [#agent-browser](https://tuomashatakka.github.io/claude-code-hooks/#agent-browser) |
 | `Agent`, `Task` | Launch metadata as a card instead of raw JSON | [#agent-launch](https://tuomashatakka.github.io/claude-code-hooks/#agent-launch) |
 | `TaskCreate`, `TaskUpdate`, `TaskList` | Block-weight checkbox per task, state transitions spelled out | [#task-create](https://tuomashatakka.github.io/claude-code-hooks/#task-create) |
 | `ExitPlanMode` | A block-letter sign-off | [#exit-plan](https://tuomashatakka.github.io/claude-code-hooks/#exit-plan) |
@@ -88,9 +88,9 @@ empty, completed tasks show a checkmark, and descriptions sit directly beneath
 the task-state caption.
 
 `SessionStart` prints `assets/welcome.png` as braille. The banner is sized
-against what is actually left of the hook transport's byte budget once the
-heading, the badges and the system prompt handed back as `additionalContext`
-have taken their share, so it arrives whole rather than with its middle omitted.
+against what is actually left of the message's character budget once the
+heading and the badges have taken their share, so it arrives whole rather than
+with its middle omitted.
 Point `CLAUDE_HOOKS_WELCOME_IMAGE` at another file to change the face; if no
 image can be rendered, a random `.txt` from `$HOME/Documents/Prompts/anime-ascii`
 is used instead, skipping any that would not fit.
@@ -110,19 +110,37 @@ smaller representation scores better. Set `CLAUDE_HOOKS_IMAGE_MODE=half` (or
 use `TERM=dumb`) for the legacy half-block fallback when a terminal font does
 not cover the sextant glyphs.
 
+Width comes from the terminal rather than from a guess. A hook's stdout is a
+pipe — Claude Code reads the response JSON off it — so `process.stdout.columns`
+is undefined in exactly the situation that matters, and the fallback that stood
+in for it sized every card and every picture to 96 columns however wide the
+window was. The controlling terminal is asked directly through `/dev/tty`,
+falling back only where there is none to ask.
+
 For Codex, `PostToolUse` output is emitted once as stdout JSON and does not
 mirror the same `systemMessage` to stderr, preventing doubled cards while
-preserving the strict hook wire envelope. When a composed render exceeds Claude
-Code's 10KB hook transport budget, the final transport layer retains as many
-leading and trailing lines as fit and inserts a compact omitted-line count.
-Single oversized lines use the same strategy at character granularity. That is a
+preserving the strict hook wire envelope.
+
+Claude Code caps each hook output string at 10,000 characters, and *characters*
+is the whole of it: the limit is `value.length <= 1e4` against the parsed string,
+applied one field at a time. An ESC counts once rather than as the six bytes
+`JSON.stringify` spends writing `\u001b`, a block glyph counts once rather than
+three, and `additionalContext` is weighed on its own instead of competing for the
+same room. Budgeting in JSON bytes of the whole envelope — as this plugin used to
+— overcharges by roughly five times on output that is mostly escape sequences,
+which is all of it.
+
+When a composed render still exceeds the limit, the transport retains as many
+leading and trailing lines as fit and inserts a compact omitted-line count;
+single oversized lines use the same strategy at character granularity. That is a
 backstop, not a plan: previews size themselves first, weighing the finished card
-in JSON bytes and re-rendering — fewer lines for text, a smaller picture for
-images — until it fits, because a picture with its middle cut out is worse than
-a smaller one. The image renderer is handed the card's own byte budget (JSON
-escapes, UTF-8 glyph widths and the card's per-row background fill all charged
-up front) and searches two axes to meet it: the column ladder it always had, and
-a row cap. The rows matter because width is not always available to give — a
+in the same characters Claude Code counts and re-rendering — fewer lines for
+text, a smaller picture for images — until it fits, because a picture with its
+middle cut out is worse than a smaller one. A picture that fits with room to
+spare is then re-aimed upward against its own measured cost, because the wrapper
+model is deliberately pessimistic and the renderer can only pick whole cells.
+The image renderer searches two axes to meet the budget: the column ladder it
+always had, and a row cap. The rows matter because width is not always available to give — a
 tall, narrow source is already at its narrowest the moment it is decoded, so
 every rung of a width-only ladder renders the identical grid at the identical
 price. Capping rows resizes it instead, and the whole picture survives, smaller.

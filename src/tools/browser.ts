@@ -16,6 +16,7 @@ import {
   simpleHighlight,
 } from '../render/highlight.ts';
 import { operationBadges, playwrightOperation } from './browser-operations.ts';
+import { renderScreenshot } from '../render/screenshot.ts';
 import type { RawToolInput, RawToolResult } from '../types/tool-io.ts';
 
 defineTool<RawToolInput, RawToolResult>({
@@ -28,6 +29,20 @@ defineTool<RawToolInput, RawToolResult>({
     pushDurationLine(lines, durationMs);
 
     const text = extractResultText(result);
+
+    // A screenshot's result *is* the picture; the prose naming the file it was
+    // written to says strictly less than showing it. Drawn in place of the
+    // output card rather than beside it — the path stays on the title badge.
+    const shot = renderScreenshot(result, text);
+    if (shot) {
+      lines.push(shot);
+      return {
+        lines,
+        isJson: false,
+        extraBadges: operationBadges(operation ? [operation] : []),
+      };
+    }
+
     if (text?.trim()) {
       const language = detectOutputLanguage(text);
       const formatted = language === 'json' ? formatJSON(text) : text;

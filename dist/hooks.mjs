@@ -3707,9 +3707,9 @@ var require_decoder = __commonJS({
         return a < 0 ? 0 : a > 255 ? 255 : a;
       }
       constructor.prototype = {
-        load: function load(path6) {
+        load: function load(path7) {
           var xhr = new XMLHttpRequest();
-          xhr.open("GET", path6, true);
+          xhr.open("GET", path7, true);
           xhr.responseType = "arraybuffer";
           xhr.onload = (function() {
             var data = new Uint8Array(xhr.response || xhr.mozResponseArrayBuffer);
@@ -4798,9 +4798,9 @@ source_default.level = 3;
 var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
 function expandPersistedOutput(text2) {
   if (typeof text2 !== "string" || !text2.includes("<persisted-output>")) return text2;
-  return text2.replace(PERSISTED_RE, (match, path6) => {
+  return text2.replace(PERSISTED_RE, (match, path7) => {
     try {
-      return readFileSync(path6, "utf8");
+      return readFileSync(path7, "utf8");
     } catch {
       return match;
     }
@@ -5064,6 +5064,10 @@ var RUNNING_BADGE = new Badge({ label: "Running", color: "magenta", icon: "\u23C
 var OUTPUT_BADGE = new Badge({ label: "Output", color: "brightGreen", icon: "\u2258" });
 var META_BADGE = new Badge({ label: "metadata", color: "gray", icon: "\u26C1" });
 
+// src/tui/card.ts
+import fs from "node:fs";
+import tty2 from "node:tty";
+
 // src/tui/tokens.ts
 var TUI_TOKENS = {
   width: {
@@ -5093,8 +5097,23 @@ var TUI_TOKENS = {
 
 // src/tui/card.ts
 source_default.level = 3;
+var cachedColumns = null;
+function terminalColumns() {
+  if (cachedColumns !== null) return cachedColumns;
+  const declared = process.stdout.columns || process.stderr.columns || Number(process.env.COLUMNS) || 0;
+  if (declared > 0) return cachedColumns = declared;
+  try {
+    const fd = fs.openSync("/dev/tty", "r+");
+    const stream = new tty2.WriteStream(fd);
+    const columns = stream.columns || 0;
+    stream.destroy();
+    return cachedColumns = columns;
+  } catch {
+    return cachedColumns = 0;
+  }
+}
 function getMaxLayoutWidth() {
-  const columns = process.stdout.columns || Number(process.env.COLUMNS) || 0;
+  const columns = terminalColumns();
   const { fallbackContent, outerIndentMargin } = TUI_TOKENS.width;
   return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin);
 }
@@ -5221,14 +5240,14 @@ function displayPath(filePath) {
   return candidates.reduce((best, c) => c.length < best.length ? c : best);
 }
 function renderFileCard({
-  path: path6,
+  path: path7,
   content,
   details = null,
   badges = []
 }) {
   return renderCard({
     badges: [
-      new Badge({ label: displayPath(path6), color: "cyan", icon: "\u25A4" }),
+      new Badge({ label: displayPath(path7), color: "cyan", icon: "\u25A4" }),
       ...badges
     ],
     // The action and line range describe the content, not the file, so they
@@ -6057,110 +6076,18 @@ function operationBadges(operations) {
   }));
 }
 
-// src/tools/bash.ts
-source_default.level = 3;
-function splitCommandRows(cmd) {
-  const rows = [];
-  let current = "";
-  let quote = null;
-  let heredoc = null;
-  const push = (sep) => {
-    rows.push({ text: current.replace(/^\s+|\s+$/g, ""), sep });
-    current = "";
-  };
-  const lines = cmd.split("\n");
-  for (let li = 0; li < lines.length; li++) {
-    const line = lines[li];
-    if (heredoc !== null) {
-      current += (current ? "\n" : "") + line;
-      if (line.trim() === heredoc) heredoc = null;
-      continue;
-    }
-    if (li > 0) current += "\n";
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (quote) {
-        current += ch;
-        if (quote === '"' && ch === "\\" && i + 1 < line.length) current += line[++i];
-        else if (ch === quote) quote = null;
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        quote = ch;
-        current += ch;
-        continue;
-      }
-      const here = line.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-      if (here) {
-        current += here[0];
-        i += here[0].length - 1;
-        heredoc = here[2];
-        continue;
-      }
-      if (ch === ";") {
-        push(";");
-        continue;
-      }
-      if ((ch === "&" || ch === "|") && line[i + 1] === ch) {
-        push(ch + ch);
-        i++;
-        continue;
-      }
-      current += ch;
-    }
-  }
-  push("");
-  return rows.filter((r) => r.text.length > 0);
-}
-function commandOf(input) {
-  const raw = input.command ?? input.action_json;
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
-}
-function renderCommand(cmd) {
-  return splitCommandRows(cmd).map(({ text: text2, sep }, i) => {
-    const body = simpleHighlight(text2, "bash") + (sep ? " " + source_default.gray(sep) : "");
-    return i === 0 ? source_default.gray("$ ") + body : body;
-  }).join("\n");
-}
-defineTool({
-  matches: ["Bash", "mcp__wcgw__BashCommand"],
-  post(_input, result, durationMs) {
-    const raw = extractResultText(result) ?? "";
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const cards = [];
-    const cmd = commandOf(_input);
-    if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
-    const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
-    if (stdout.trim()) {
-      const lang = detectOutputLanguage(stdout);
-      const highlighted = simpleHighlight(lang === "json" ? formatJSON(stdout) : stdout, lang);
-      const processedStdout = lang === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
-      cards.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(processedStdout) }));
-    }
-    if (cards.length) lines.push(renderColumns({ items: cards }));
-    const trailerParts = [];
-    if (status !== null) {
-      trailerParts.push(status === "0" ? source_default.green(`exit:${status}`) : source_default.red(`exit:${status}`));
-    }
-    if (cwd) trailerParts.push(source_default.gray("cwd:") + source_default.cyan(shortenPath(cwd)));
-    for (const [k, v] of Object.entries(extra)) {
-      trailerParts.push(source_default.gray(`${k}:`) + v);
-    }
-    if (trailerParts.length) lines.push("  " + trailerParts.join("  "));
-    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
-    return { lines, extraBadges: operationBadges(operations) };
-  }
-});
+// src/render/screenshot.ts
+import fs4 from "node:fs";
+import path2 from "node:path";
 
 // src/render/file-preview.ts
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 
 // packages/image-to-ascii/src/decode.ts
 var import_pngjs = __toESM(require_png(), 1);
 var import_jpeg_js = __toESM(require_jpeg_js(), 1);
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
+import fs2 from "node:fs";
 import os2 from "node:os";
 import path from "node:path";
 function decodeWebp(buffer) {
@@ -6168,16 +6095,16 @@ function decodeWebp(buffer) {
   const inPath = `${base}.webp`;
   const outPath = `${base}.png`;
   try {
-    fs.writeFileSync(inPath, buffer);
+    fs2.writeFileSync(inPath, buffer);
     execFileSync("sips", ["-s", "format", "png", inPath, "--out", outPath], { stdio: "ignore" });
-    return import_pngjs.PNG.sync.read(fs.readFileSync(outPath));
+    return import_pngjs.PNG.sync.read(fs2.readFileSync(outPath));
   } finally {
     try {
-      fs.unlinkSync(inPath);
+      fs2.unlinkSync(inPath);
     } catch {
     }
     try {
-      fs.unlinkSync(outPath);
+      fs2.unlinkSync(outPath);
     } catch {
     }
   }
@@ -7530,29 +7457,30 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
 
 // src/runtime/output-transport.ts
 var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
-var HOOK_RESPONSE_BYTE_BUDGET = 9e3;
-function serialize(data) {
-  return JSON.stringify(data, null, 2);
-}
+var HOOK_FIELD_CHAR_LIMIT = 1e4;
+var SAFETY_MARGIN = 200;
+var HOOK_RESPONSE_CHAR_BUDGET = HOOK_FIELD_CHAR_LIMIT - SAFETY_MARGIN;
 function responseWithMessage(data, systemMessage) {
   return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
 }
-function fitsResponse(data, systemMessage) {
-  return Buffer.byteLength(serialize(responseWithMessage(data, systemMessage)), "utf8") <= HOOK_RESPONSE_BYTE_BUDGET;
+function messageCost(systemMessage) {
+  return CLEAR_LINE_PREFIX.length + systemMessage.length;
+}
+function fits(systemMessage) {
+  return messageCost(systemMessage) <= HOOK_RESPONSE_CHAR_BUDGET;
 }
 function systemMessageHeadroom(data) {
   const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
-  const spent = Buffer.byteLength(serialize(responseWithMessage(data, current)), "utf8");
-  return Math.max(0, HOOK_RESPONSE_BYTE_BUDGET - spent);
+  return Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - messageCost(current));
 }
-function findLargestCandidate(maximum, render, fits2) {
+function findLargestCandidate(maximum, render, accepts) {
   let low = 0;
   let high = maximum;
   let best = { text: render(0), retained: 0 };
   while (low <= high) {
     const retained = Math.floor((low + high) / 2);
     const text2 = render(retained);
-    if (fits2(text2)) {
+    if (accepts(text2)) {
       best = { text: text2, retained };
       low = retained + 1;
     } else {
@@ -7565,7 +7493,7 @@ function splitRetained(total) {
   const head = Math.ceil(total * 0.6);
   return { head, tail: total - head };
 }
-function limitByLines(data, systemMessage) {
+function limitByLines(systemMessage) {
   const lines = systemMessage.split("\n");
   return findLargestCandidate(
     Math.max(0, lines.length - 1),
@@ -7577,10 +7505,10 @@ function limitByLines(data, systemMessage) {
         ...tail > 0 ? lines.slice(-tail) : []
       ].join("\n");
     },
-    (candidate) => fitsResponse(data, candidate)
+    fits
   );
 }
-function limitByCharacters(data, systemMessage) {
+function limitByCharacters(systemMessage) {
   const characters = Array.from(stripAnsi(systemMessage));
   return findLargestCandidate(
     Math.max(0, characters.length - 1),
@@ -7592,23 +7520,19 @@ function limitByCharacters(data, systemMessage) {
         tail > 0 ? characters.slice(-tail).join("") : ""
       ].filter(Boolean).join("\n");
     },
-    (candidate) => fitsResponse(data, candidate)
+    fits
   ).text;
 }
-function limitSystemMessage(data, systemMessage) {
-  const lineCandidate = limitByLines(data, systemMessage);
-  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(data, systemMessage);
+function limitSystemMessage(systemMessage) {
+  const lineCandidate = limitByLines(systemMessage);
+  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(systemMessage);
 }
 function serializeHookResponse(data) {
   const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  let output = systemMessage ? responseWithMessage(data, systemMessage) : { ...data };
-  let json = serialize(output);
-  if (systemMessage && Buffer.byteLength(json, "utf8") > HOOK_RESPONSE_BYTE_BUDGET) {
-    output = responseWithMessage(data, limitSystemMessage(data, systemMessage));
-    json = serialize(output);
-  }
+  const message = systemMessage && !fits(systemMessage) ? limitSystemMessage(systemMessage) : systemMessage;
+  const output = message === null ? { ...data } : responseWithMessage(data, message);
   return {
-    json,
+    json: JSON.stringify(output, null, 2),
     systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
   };
 }
@@ -7632,9 +7556,9 @@ function renderFilePreview(filePath, options = {}) {
   const maxWidth = options.maxWidth ?? getMaxContentWidth();
   if (isImageExtension(ext)) {
     try {
-      const ascii = imageToAscii(fs2.readFileSync(filePath), ext, {
+      const ascii = imageToAscii(fs3.readFileSync(filePath), ext, {
         maxWidth,
-        budget: imageBudget(options.budgetBytes ?? previewBudgetBytes())
+        budget: imageBudget(options.budgetChars ?? previewBudgetChars())
       });
       if (ascii) return { content: ascii, kind: "image" };
     } catch {
@@ -7643,32 +7567,31 @@ function renderFilePreview(filePath, options = {}) {
   const shape = (raw) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
   if (options.readText !== false) {
     try {
-      return { content: shape(fs2.readFileSync(filePath, "utf8")), kind: "text" };
+      return { content: shape(fs3.readFileSync(filePath, "utf8")), kind: "text" };
     } catch {
     }
   }
   return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
 }
-var SECTION_RESERVE = 1400;
-function previewBudgetBytes() {
-  return Math.max(1200, HOOK_RESPONSE_BYTE_BUDGET - SECTION_RESERVE);
+var SECTION_RESERVE = 700;
+function previewBudgetChars() {
+  return Math.max(1200, HOOK_RESPONSE_CHAR_BUDGET - SECTION_RESERVE);
 }
-function jsonBytes(text2) {
-  return Buffer.byteLength(JSON.stringify(text2), "utf8");
+function charCost(text2) {
+  return text2.length;
 }
-var JSON_ESCAPE_SURCHARGE = 5;
-var CARD_CHROME = 1450;
-var CARD_PER_ROW = 150;
-function imageBudget(cardBytes) {
+var CARD_CHROME = 520;
+var CARD_PER_ROW = 105;
+function imageBudget(cardChars) {
   return {
-    total: Math.max(600, cardBytes),
-    bytes: true,
-    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    total: Math.max(600, cardChars),
     overhead: CARD_CHROME,
     perRow: CARD_PER_ROW
   };
 }
 var BUDGET_LADDER = [0.75, 0.5, 0.3, 0.15];
+var GROWTH_ATTEMPTS = 3;
+var GROWTH_THRESHOLD = 0.94;
 var NO_ROOM = source_default.gray.italic("\u2026 image preview omitted \u2014 no room left in this message \u2026");
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
@@ -7687,22 +7610,38 @@ function sliceToRange(content, { start, end }) {
   const lines = content.split("\n");
   return lines.slice(Math.max(0, start - 1), end ?? lines.length).join("\n");
 }
-function renderFittedFileCard(path6, content, kind, details, budget, reRender) {
-  const card = (body) => renderFileCard({ path: path6, content: body, details });
+function growImageCard(card, reRender, fitted, budget) {
+  let best = fitted;
+  let cost = charCost(best);
+  let aim = budget;
+  for (let attempt = 0; attempt < GROWTH_ATTEMPTS && cost < budget * GROWTH_THRESHOLD; attempt++) {
+    aim = Math.floor(aim * (budget / cost));
+    const art = reRender(aim);
+    if (!art) break;
+    const candidate = card(art);
+    const candidateCost = charCost(candidate);
+    if (candidateCost > budget || candidateCost <= cost) break;
+    best = candidate;
+    cost = candidateCost;
+  }
+  return best;
+}
+function renderFittedFileCard(path7, content, kind, details, budget, reRender) {
+  const card = (body) => renderFileCard({ path: path7, content: body, details });
   if (kind === "image" && reRender) {
     let smallest = card(content);
-    if (jsonBytes(smallest) <= budget) return smallest;
+    if (charCost(smallest) <= budget) return growImageCard(card, reRender, smallest, budget);
     for (const share of BUDGET_LADDER) {
       const art = reRender(Math.floor(budget * share));
       if (!art) continue;
       const candidate = card(art);
-      if (jsonBytes(candidate) <= budget) return candidate;
-      if (jsonBytes(candidate) < jsonBytes(smallest)) smallest = candidate;
+      if (charCost(candidate) <= budget) return candidate;
+      if (charCost(candidate) < charCost(smallest)) smallest = candidate;
     }
-    return jsonBytes(smallest) <= budget ? smallest : card(NO_ROOM);
+    return charCost(smallest) <= budget ? smallest : card(NO_ROOM);
   }
   const full = card(collapsePreview(content));
-  if (jsonBytes(full) <= budget) return full;
+  if (charCost(full) <= budget) return full;
   const total = content.split("\n").length;
   let low = 0;
   let high = total;
@@ -7710,7 +7649,7 @@ function renderFittedFileCard(path6, content, kind, details, budget, reRender) {
   while (low <= high) {
     const retained = Math.floor((low + high) / 2);
     const candidate = card(collapsePreview(content, { maxLines: retained }));
-    if (jsonBytes(candidate) <= budget) {
+    if (charCost(candidate) <= budget) {
       best = candidate;
       low = retained + 1;
     } else {
@@ -7720,11 +7659,11 @@ function renderFittedFileCard(path6, content, kind, details, budget, reRender) {
   return best;
 }
 function renderFileResult(rawPath, options = {}) {
-  const { action, range: rangeOverride, budgetBytes, ...previewOptions } = options;
+  const { action, range: rangeOverride, budgetChars, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
-  const cardBudget = budgetBytes ?? previewBudgetBytes();
-  const preview = renderFilePreview(filePath, { ...previewOptions, budgetBytes: cardBudget });
+  const cardBudget = budgetChars ?? previewBudgetChars();
+  const preview = renderFilePreview(filePath, { ...previewOptions, budgetChars: cardBudget });
   if (!preview) return null;
   const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
   const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
@@ -7734,12 +7673,183 @@ function renderFileResult(rawPath, options = {}) {
     preview.kind,
     details || null,
     cardBudget,
-    preview.kind === "image" ? (bytes) => renderFilePreview(filePath, { ...previewOptions, budgetBytes: bytes })?.content ?? null : void 0
+    preview.kind === "image" ? (bytes) => renderFilePreview(filePath, { ...previewOptions, budgetChars: bytes })?.content ?? null : void 0
   );
 }
 function collapsePreview(content, options = {}) {
   return softCollapse(content, { label: "lines", ...options });
 }
+function renderInlineImageResult(data, ext, label, options = {}) {
+  const cardBudget = options.budgetChars ?? previewBudgetChars();
+  const maxWidth = getMaxContentWidth();
+  const render = (budgetChars) => {
+    try {
+      return imageToAscii(data, ext, { maxWidth, budget: imageBudget(budgetChars) }) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const art = render(cardBudget);
+  if (!art) return null;
+  return renderFittedFileCard(label, art, "image", options.action ?? null, cardBudget, render);
+}
+
+// src/render/screenshot.ts
+var CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi;
+var TRAILING_PUNCTUATION = /[.,;:!?)\]}'"`]+$/;
+function isReadableFile(candidate) {
+  try {
+    return fs4.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+function findImagePath(text2, cwd = process.cwd()) {
+  if (!text2) return null;
+  for (const match of String(text2).matchAll(CANDIDATE_RE)) {
+    const candidate = match[0].replace(TRAILING_PUNCTUATION, "");
+    if (!isImageExtension(extensionFromPath(candidate))) continue;
+    const resolved = path2.isAbsolute(candidate) ? candidate : path2.resolve(cwd, candidate);
+    if (isReadableFile(resolved)) return resolved;
+  }
+  return null;
+}
+var MIME_EXTENSIONS = {
+  png: ".png",
+  jpeg: ".jpg",
+  jpg: ".jpg",
+  webp: ".webp"
+};
+function inlineImageFrom(value) {
+  if (!value || typeof value !== "object") return null;
+  const block = value;
+  if (block.type !== "image" || typeof block.data !== "string" || !block.data) return null;
+  const subtype = String(block.mimeType ?? "image/png").split("/")[1]?.toLowerCase() ?? "png";
+  const ext = MIME_EXTENSIONS[subtype];
+  if (!ext) return null;
+  try {
+    return { data: Buffer.from(block.data, "base64"), ext };
+  } catch {
+    return null;
+  }
+}
+function findInlineImage(result) {
+  if (!result || typeof result !== "object") return null;
+  const direct = inlineImageFrom(result);
+  if (direct) return direct;
+  const content = result.content;
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    const image = inlineImageFrom(block);
+    if (image) return image;
+  }
+  return null;
+}
+function renderScreenshot(result, text2, action = "screenshot") {
+  const file = findImagePath(text2);
+  if (file) return renderFileResult(file, { action });
+  const inline = findInlineImage(result);
+  if (inline) return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action });
+  return null;
+}
+
+// src/tools/bash.ts
+source_default.level = 3;
+function splitCommandRows(cmd) {
+  const rows = [];
+  let current = "";
+  let quote = null;
+  let heredoc = null;
+  const push = (sep) => {
+    rows.push({ text: current.replace(/^\s+|\s+$/g, ""), sep });
+    current = "";
+  };
+  const lines = cmd.split("\n");
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (heredoc !== null) {
+      current += (current ? "\n" : "") + line;
+      if (line.trim() === heredoc) heredoc = null;
+      continue;
+    }
+    if (li > 0) current += "\n";
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (quote) {
+        current += ch;
+        if (quote === '"' && ch === "\\" && i + 1 < line.length) current += line[++i];
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        current += ch;
+        continue;
+      }
+      const here = line.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+      if (here) {
+        current += here[0];
+        i += here[0].length - 1;
+        heredoc = here[2];
+        continue;
+      }
+      if (ch === ";") {
+        push(";");
+        continue;
+      }
+      if ((ch === "&" || ch === "|") && line[i + 1] === ch) {
+        push(ch + ch);
+        i++;
+        continue;
+      }
+      current += ch;
+    }
+  }
+  push("");
+  return rows.filter((r) => r.text.length > 0);
+}
+function commandOf(input) {
+  const raw = input.command ?? input.action_json;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+function renderCommand(cmd) {
+  return splitCommandRows(cmd).map(({ text: text2, sep }, i) => {
+    const body = simpleHighlight(text2, "bash") + (sep ? " " + source_default.gray(sep) : "");
+    return i === 0 ? source_default.gray("$ ") + body : body;
+  }).join("\n");
+}
+defineTool({
+  matches: ["Bash", "mcp__wcgw__BashCommand"],
+  post(_input, result, durationMs) {
+    const raw = extractResultText(result) ?? "";
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const cards = [];
+    const cmd = commandOf(_input);
+    if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
+    const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
+    const shot = operations.length ? renderScreenshot(result, stdout) : null;
+    if (shot) cards.push(shot);
+    else if (stdout.trim()) {
+      const lang = detectOutputLanguage(stdout);
+      const highlighted = simpleHighlight(lang === "json" ? formatJSON(stdout) : stdout, lang);
+      const processedStdout = lang === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
+      cards.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(processedStdout) }));
+    }
+    if (cards.length) lines.push(renderColumns({ items: cards }));
+    const trailerParts = [];
+    if (status !== null) {
+      trailerParts.push(status === "0" ? source_default.green(`exit:${status}`) : source_default.red(`exit:${status}`));
+    }
+    if (cwd) trailerParts.push(source_default.gray("cwd:") + source_default.cyan(shortenPath(cwd)));
+    for (const [k, v] of Object.entries(extra)) {
+      trailerParts.push(source_default.gray(`${k}:`) + v);
+    }
+    if (trailerParts.length) lines.push("  " + trailerParts.join("  "));
+    return { lines, extraBadges: operationBadges(operations) };
+  }
+});
 
 // src/tools/read.ts
 defineTool({
@@ -7864,10 +7974,10 @@ defineTool({
     const lines = [];
     pushDurationLine(lines, durationMs);
     const paths = toPathList(input);
-    const budgetBytes = Math.floor(previewBudgetBytes() / Math.max(1, paths.length));
+    const budgetChars = Math.floor(previewBudgetChars() / Math.max(1, paths.length));
     let missed = 0;
     for (const rawPath of paths) {
-      const box = renderFileResult(rawPath, { action: "read", budgetBytes });
+      const box = renderFileResult(rawPath, { action: "read", budgetChars });
       if (box) lines.push(box);
       else {
         missed += 1;
@@ -7905,15 +8015,15 @@ defineTool({
 });
 
 // src/tools/wcgw-ctx.ts
-import path2 from "node:path";
+import path3 from "node:path";
 source_default.level = 3;
 var SAVED_PATH_RE = /(\/[^\s"']*\.txt)/;
 function savedContextPath(input, resultText) {
   const fromResult = resultText ? SAVED_PATH_RE.exec(resultText)?.[1] : null;
   if (fromResult) return fromResult;
   if (!input.id) return null;
-  const dataHome = process.env.XDG_DATA_HOME || path2.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
-  return path2.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
+  const dataHome = process.env.XDG_DATA_HOME || path3.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
+  return path3.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
 }
 var RELEVANT_FILES_MARKER = "\n# Relevant Files:";
 function dropInlinedFiles(raw) {
@@ -8130,6 +8240,15 @@ defineTool({
     const lines = [];
     pushDurationLine(lines, durationMs);
     const text2 = extractResultText(result);
+    const shot = renderScreenshot(result, text2);
+    if (shot) {
+      lines.push(shot);
+      return {
+        lines,
+        isJson: false,
+        extraBadges: operationBadges(operation ? [operation] : [])
+      };
+    }
     if (text2?.trim()) {
       const language = detectOutputLanguage(text2);
       const formatted = language === "json" ? formatJSON(text2) : text2;
@@ -8267,14 +8386,14 @@ defineGenericTool({
 });
 
 // src/hooks/index.ts
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs7 from "node:fs";
+import path6 from "node:path";
 
 // src/runtime/debug.ts
-import fs3 from "node:fs";
-import path3 from "node:path";
+import fs5 from "node:fs";
+import path4 from "node:path";
 var HOME = process.env.HOME || process.env.USERPROFILE || "";
-var DEBUG_LOG = path3.join(HOME, ".claude", "debug.log");
+var DEBUG_LOG = path4.join(HOME, ".claude", "debug.log");
 function debugLog(scope, ...parts) {
   try {
     const ts = (/* @__PURE__ */ new Date()).toISOString();
@@ -8287,7 +8406,7 @@ function debugLog(scope, ...parts) {
         }
       })()
     ).join(" ");
-    fs3.appendFileSync(DEBUG_LOG, `[${ts}] [${scope}] ${line}
+    fs5.appendFileSync(DEBUG_LOG, `[${ts}] [${scope}] ${line}
 `);
   } catch {
   }
@@ -8369,34 +8488,32 @@ function renderToolSection({
 }
 
 // src/render/welcome.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs6 from "node:fs";
+import path5 from "node:path";
 import { fileURLToPath } from "node:url";
-var JSON_ESCAPE_SURCHARGE2 = 5;
-var JSON_NEWLINE_SURCHARGE = 1;
 var RESERVE = 8;
 var HOME2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var WELCOME_ASSET = path4.join("assets", "welcome.png");
-var ASCII_DIR = path4.join(HOME2, "Documents", "Prompts", "anime-ascii");
+var WELCOME_ASSET = path5.join("assets", "welcome.png");
+var ASCII_DIR = path5.join(HOME2, "Documents", "Prompts", "anime-ascii");
 function findAsset() {
   const candidates = [];
   const declared = process.env.CLAUDE_PLUGIN_ROOT;
-  if (declared) candidates.push(path4.join(declared, WELCOME_ASSET));
+  if (declared) candidates.push(path5.join(declared, WELCOME_ASSET));
   let dir;
   try {
-    dir = path4.dirname(fileURLToPath(import.meta.url));
+    dir = path5.dirname(fileURLToPath(import.meta.url));
   } catch {
     dir = process.cwd();
   }
   for (let i = 0; i < 6; i++) {
-    candidates.push(path4.join(dir, WELCOME_ASSET));
-    const parent = path4.dirname(dir);
+    candidates.push(path5.join(dir, WELCOME_ASSET));
+    const parent = path5.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   for (const candidate of candidates) {
     try {
-      if (fs4.statSync(candidate).isFile()) return candidate;
+      if (fs6.statSync(candidate).isFile()) return candidate;
     } catch {
     }
   }
@@ -8404,18 +8521,13 @@ function findAsset() {
 }
 function welcomeImagePath() {
   const override = process.env.CLAUDE_HOOKS_WELCOME_IMAGE;
-  if (override) return fs4.existsSync(override) ? override : null;
+  if (override) return fs6.existsSync(override) ? override : null;
   return findAsset();
 }
-function jsonBudget(total) {
-  return {
-    total,
-    bytes: true,
-    escapeSurcharge: JSON_ESCAPE_SURCHARGE2,
-    perRow: JSON_NEWLINE_SURCHARGE
-  };
+function charBudget(total) {
+  return { total };
 }
-function fits(art, spec) {
+function fits2(art, spec) {
   return costOf(art.split("\n"), spec) <= spec.total;
 }
 var BANNER = { dither: false, threshold: 0.35 };
@@ -8424,13 +8536,13 @@ function renderWelcomeImage(spec) {
   const file = welcomeImagePath();
   if (!file) return null;
   try {
-    const art = imageToAscii(fs4.readFileSync(file), path4.extname(file), {
+    const art = imageToAscii(fs6.readFileSync(file), path5.extname(file), {
       maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
       mode: "braille",
       braille: BANNER,
       budget: spec
     });
-    return art && fits(art, spec) ? art : null;
+    return art && fits2(art, spec) ? art : null;
   } catch (e) {
     debugLog("SessionStart", "render-welcome-image", e.message);
     return null;
@@ -8438,11 +8550,11 @@ function renderWelcomeImage(spec) {
 }
 function loadAsciiArt(spec) {
   try {
-    if (!fs4.existsSync(ASCII_DIR)) return null;
-    const files = fs4.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
+    if (!fs6.existsSync(ASCII_DIR)) return null;
+    const files = fs6.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
     for (const pick of files.sort(() => Math.random() - 0.5)) {
-      const art = fs4.readFileSync(path4.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
-      if (fits(art, spec)) return art;
+      const art = fs6.readFileSync(path5.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
+      if (fits2(art, spec)) return art;
     }
   } catch (e) {
     debugLog("SessionStart", "load-ascii", e.message);
@@ -8451,7 +8563,7 @@ function loadAsciiArt(spec) {
 }
 function renderWelcome(headroom) {
   if (headroom <= RESERVE) return "";
-  const spec = jsonBudget(headroom - RESERVE);
+  const spec = charBudget(headroom - RESERVE);
   const art = renderWelcomeImage(spec) ?? loadAsciiArt(spec);
   return art ? `
 ${art}
@@ -8461,14 +8573,14 @@ ${art}
 // src/hooks/index.ts
 source_default.level = 3;
 var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var SYSTEM_PROMPT_PATH = path5.join(HOME3, "system-prompt.md");
+var SYSTEM_PROMPT_PATH = path6.join(HOME3, "system-prompt.md");
 function prose(text2, limit) {
   const capped = text2.length > limit ? text2.slice(0, limit) + "..." : text2;
   return source_default.gray(wrapText(capped, getMaxContentWidth()));
 }
 function loadSystemPrompt() {
   try {
-    if (fs5.existsSync(SYSTEM_PROMPT_PATH)) return fs5.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
+    if (fs7.existsSync(SYSTEM_PROMPT_PATH)) return fs7.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
   } catch (e) {
     debugLog("SessionStart", "load-system-prompt", e.message);
   }

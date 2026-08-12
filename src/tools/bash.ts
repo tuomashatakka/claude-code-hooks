@@ -12,6 +12,7 @@ import {
 import { simpleHighlight, formatJSON, detectOutputLanguage } from '../render/highlight.ts';
 import { parseWcgwTrailer, shortenPath } from '../parsers/wcgw-trailer.ts';
 import { agentBrowserOperations, operationBadges } from './browser-operations.ts';
+import { renderScreenshot } from '../render/screenshot.ts';
 import type { BashInput, WcgwBashCommandInput, RawToolResult } from '../types/tool-io.ts';
 
 chalk.level = 3;
@@ -132,8 +133,14 @@ defineTool<AnyBashInput, RawToolResult>({
     if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
 
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
+    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map(row => row.text)) : [];
 
-    if (stdout.trim()) {
+    // agent-browser reports a screenshot by printing where it put it. Only its
+    // output is searched for one: a command that merely *mentions* a `.png` —
+    // `ls`, `git status`, a build log — is not asking for it to be drawn.
+    const shot = operations.length ? renderScreenshot(result, stdout) : null;
+    if (shot) cards.push(shot);
+    else if (stdout.trim()) {
       const lang = detectOutputLanguage(stdout);
       const highlighted = simpleHighlight(lang === 'json' ? formatJSON(stdout) : stdout, lang);
 
@@ -158,7 +165,6 @@ defineTool<AnyBashInput, RawToolResult>({
     }
     if (trailerParts.length) lines.push('  ' + trailerParts.join('  '));
 
-    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map(row => row.text)) : [];
     return { lines, extraBadges: operationBadges(operations) };
   },
 });
