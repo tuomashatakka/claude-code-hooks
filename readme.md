@@ -117,10 +117,16 @@ Code's 10KB hook transport budget, the final transport layer retains as many
 leading and trailing lines as fit and inserts a compact omitted-line count.
 Single oversized lines use the same strategy at character granularity. That is a
 backstop, not a plan: previews size themselves first, weighing the finished card
-in JSON bytes and re-rendering — fewer lines for text, a narrower image for
-pictures — until it fits, because a picture with its middle cut out is worse
-than a smaller one. The showcase capture fails the build if any example reaches
-the backstop.
+in JSON bytes and re-rendering — fewer lines for text, a smaller picture for
+images — until it fits, because a picture with its middle cut out is worse than
+a smaller one. The image renderer is handed the card's own byte budget (JSON
+escapes, UTF-8 glyph widths and the card's per-row background fill all charged
+up front) and searches two axes to meet it: the column ladder it always had, and
+a row cap. The rows matter because width is not always available to give — a
+tall, narrow source is already at its narrowest the moment it is decoded, so
+every rung of a width-only ladder renders the identical grid at the identical
+price. Capping rows resizes it instead, and the whole picture survives, smaller.
+The showcase capture fails the build if any example reaches the backstop.
 `PreToolUse` is intentionally not registered, so this plugin never intercepts
 or delays a tool before it runs.
 

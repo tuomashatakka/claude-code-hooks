@@ -1,5 +1,6 @@
+import chalk from 'chalk';
 import fs from 'node:fs';
-import { imageToAscii } from '@tuomashatakka/image-to-ascii';
+import { imageToAscii, type BudgetSpec } from '@tuomashatakka/image-to-ascii';
 import { formatJSON, isJSON, simpleHighlight, langFromPath, detectContentLanguage } from './highlight.ts';
 import { softCollapse, type SoftCollapseOptions } from './primitives.ts';
 import { getMaxContentWidth, renderFileCard } from '../tui/index.ts';
@@ -18,6 +19,8 @@ export interface FilePreviewOptions {
   fallbackText?: string | null;
   readText?: boolean;
   maxWidth?: number;
+  /** JSON bytes the finished *card* may cost. Images are sized to it. */
+  budgetBytes?: number;
   /** Reshape the raw text before highlighting — e.g. drop a bulky trailer. */
   transform?: ((raw: string) => string) | null;
 }
@@ -47,7 +50,10 @@ export function renderFilePreview(filePath: string, options: FilePreviewOptions 
 
   if (isImageExtension(ext)) {
     try {
-      const ascii = imageToAscii(fs.readFileSync(filePath), ext, maxWidth);
+      const ascii = imageToAscii(fs.readFileSync(filePath), ext, {
+        maxWidth,
+        budget: imageBudget(options.budgetBytes ?? previewBudgetBytes()),
+      });
       if (ascii) return { content: ascii, kind: 'image' };
     } catch {}
   }
@@ -90,12 +96,43 @@ function jsonBytes(text: string): number {
   return Buffer.byteLength(JSON.stringify(text), 'utf8');
 }
 
-/** Widths to try for a picture, largest first. */
-function widthLadder(maxWidth: number): number[] {
-  const rungs: number[] = [];
-  for (let width = maxWidth; width >= 16; width = Math.floor(width * 0.75)) rungs.push(width);
-  return rungs;
+/**
+ * What the picture inside a card is really charged, so the renderer can size
+ * itself once instead of being re-measured into place.
+ *
+ * The three surcharges are the three ways the naive count — characters the
+ * renderer emitted — comes out low: the response is JSON, where one ESC costs
+ * six bytes; the glyphs are astral, where one character costs four; and the
+ * card pads every row out to its own width in a background fill and closes it
+ * with an SGR pair. The constants below are measured off rendered cards rather
+ * than derived, because deriving them means predicting how chalk rewrites
+ * nested styles, and every attempt at that came out low by a factor of three.
+ */
+const JSON_ESCAPE_SURCHARGE = 5;  // the five extra bytes of a JSON-escaped ESC
+const CARD_CHROME = 1_450;        // title badge, both edges, footer, shadow
+const CARD_PER_ROW = 150;         // background fill, its SGR pair, the newline
+
+function imageBudget(cardBytes: number): BudgetSpec {
+  return {
+    total: Math.max(600, cardBytes),
+    bytes: true,
+    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    overhead: CARD_CHROME,
+    perRow: CARD_PER_ROW,
+  };
 }
+
+/**
+ * Shares of the card budget to re-render a picture against, should the measured
+ * card still land over it. Modelling the wrapper gets close, not exact, so the
+ * ladder buys the slack back — and it is a *budget* ladder rather than the width
+ * ladder it replaces, because width is not the axis that shrinks a tall image:
+ * a 40x4000 source renders two columns wide however much room it is given.
+ */
+const BUDGET_LADDER = [0.75, 0.5, 0.3, 0.15];
+
+/** Stands in for a picture that no budget could fit. */
+const NO_ROOM = chalk.gray.italic('… image preview omitted — no room left in this message …');
 
 // wcgw addresses files as `/path/to/file.ts:10-40`. Split the range off so the
 // path still resolves on disk, and keep it around to show alongside the box.
@@ -129,13 +166,11 @@ export interface FileResultOptions extends FilePreviewOptions {
   action?: string | null;
   /** Window to show. Overrides any `:10-40` suffix carried by the path. */
   range?: LineRange | null;
-  /** Share of the response this card may spend. Split it when drawing several. */
-  budgetBytes?: number;
 }
 
 /**
  * The tallest card that fits: text loses lines off the bottom, pictures are
- * re-rendered narrower so the whole of the image survives.
+ * re-rendered against a smaller budget so the whole of the image survives.
  */
 export function renderFittedFileCard(
   path: string,
@@ -143,19 +178,27 @@ export function renderFittedFileCard(
   kind: FilePreviewKind,
   details: string | null,
   budget: number,
-  reRender?: (width: number) => string | null,
+  reRender?: (budgetBytes: number) => string | null,
 ): string {
   const card = (body: string) => renderFileCard({ path, content: body, details });
 
   if (kind === 'image' && reRender) {
     let smallest = card(content);
-    for (const width of widthLadder(getMaxContentWidth())) {
-      const art = reRender(width);
+    if (jsonBytes(smallest) <= budget) return smallest;
+
+    for (const share of BUDGET_LADDER) {
+      const art = reRender(Math.floor(budget * share));
       if (!art) continue;
-      smallest = card(art);
-      if (jsonBytes(smallest) <= budget) return smallest;
+      const candidate = card(art);
+      if (jsonBytes(candidate) <= budget) return candidate;
+      if (jsonBytes(candidate) < jsonBytes(smallest)) smallest = candidate;
     }
-    return smallest;
+
+    // Nothing rendered small enough. Shipping the smallest anyway is the one
+    // outcome worth avoiding: the transport answers an oversized message by
+    // cutting its middle out, and half a picture with a hole in it says less
+    // than a line admitting there was no room for one.
+    return jsonBytes(smallest) <= budget ? smallest : card(NO_ROOM);
   }
 
   const full = card(collapsePreview(content));
@@ -185,7 +228,8 @@ export function renderFileResult(rawPath: string, options: FileResultOptions = {
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
 
-  const preview = renderFilePreview(filePath, previewOptions);
+  const cardBudget = budgetBytes ?? previewBudgetBytes();
+  const preview = renderFilePreview(filePath, { ...previewOptions, budgetBytes: cardBudget });
   if (!preview) return null;
 
   const body = range && preview.kind === 'text'
@@ -199,9 +243,9 @@ export function renderFileResult(rawPath: string, options: FileResultOptions = {
     body,
     preview.kind,
     details || null,
-    budgetBytes ?? previewBudgetBytes(),
+    cardBudget,
     preview.kind === 'image'
-      ? width => renderFilePreview(filePath, { ...previewOptions, maxWidth: width })?.content ?? null
+      ? bytes => renderFilePreview(filePath, { ...previewOptions, budgetBytes: bytes })?.content ?? null
       : undefined,
   );
 }

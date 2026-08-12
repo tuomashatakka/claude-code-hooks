@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { renderFileResult, stripLineRange } from '../src/render/file-preview.ts';
+import { PNG } from 'pngjs';
+import { previewBudgetBytes, renderFileResult, stripLineRange } from '../src/render/file-preview.ts';
 import { stripAnsi } from '../src/render/primitives.ts';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-result-'));
@@ -58,6 +59,32 @@ describe('renderFileResult', () => {
     expect(out).toContain('const d = 4;');
     expect(out).not.toContain('const a = 1;');
   });
+
+  // The transport's answer to an oversized message is to cut its middle out, so
+  // a card that overruns its budget reaches the terminal as a picture with a
+  // hole in it. Every shape has to come in under it — the tall, narrow one that
+  // no width the renderer could pick would ever shrink most of all.
+  test.each([
+    ['tall',   40,  4_000],
+    ['wide',   4_000,  40],
+    ['square', 900,   900],
+  ])('sizes a %s image to the card budget', (_shape, width, height) => {
+    const image = path.join(dir, `${_shape}.png`);
+    const png = new PNG({ width, height });
+    for (let i = 0; i < width * height; i++) {
+      const at = i << 2;
+      png.data[at] = (i * 31) % 256;
+      png.data[at + 1] = (i * 7) % 256;
+      png.data[at + 2] = (i * 19) % 256;
+      png.data[at + 3] = 255;
+    }
+    fs.writeFileSync(image, PNG.sync.write(png));
+
+    const card = renderFileResult(image, { action: 'read' })!;
+    expect(Buffer.byteLength(JSON.stringify(card), 'utf8')).toBeLessThanOrEqual(previewBudgetBytes());
+    // A card that fits by giving up on the picture is not a fit worth having.
+    expect(stripAnsi(card)).not.toContain('image preview omitted');
+  }, 20_000);
 
   test('transform reshapes the raw text before highlighting', () => {
     const out = stripAnsi(renderFileResult(target, { transform: raw => raw.split('\n')[0]! })!);

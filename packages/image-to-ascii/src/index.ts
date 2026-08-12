@@ -37,6 +37,11 @@ function quantizeChannel(value: number, levels: number): number {
   return Math.round((Math.min(steps, Math.max(0, index)) * 255) / steps);
 }
 const MIN_COLS = 24;
+// Floor and step of the row ladder the budget search falls back on. Below about
+// eight rows a photograph has stopped being recognisable, so there is nothing
+// left to buy by shrinking further.
+const MIN_ROWS = 8;
+const ROW_DECAY = 0.7;
 
 /**
  * Which colour tiers the ladder may use. `auto` walks the whole ladder;
@@ -333,12 +338,13 @@ export function fitGeometry(
   requestedCols: number,
   basis: CoverageBasis = BASES['2x3'],
   aspect: number = cellAspect(),
+  maxRows: number = MAX_ROWS,
 ): { cols: number; rows: number } {
   let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis.cols)));
   let rows = Math.max(1, Math.round((height * cols) / (width * aspect)));
-  if (rows > MAX_ROWS) {
-    cols = Math.max(1, Math.floor((cols * MAX_ROWS) / rows));
-    rows = Math.max(1, Math.min(MAX_ROWS, Math.round((height * cols) / (width * aspect))));
+  if (rows > maxRows) {
+    cols = Math.max(1, Math.floor((cols * maxRows) / rows));
+    rows = Math.max(1, Math.min(maxRows, Math.round((height * cols) / (width * aspect))));
   }
   return { cols, rows };
 }
@@ -479,8 +485,9 @@ function renderFitted(
   requestedCols: number,
   attempt: (typeof ATTEMPTS)[number],
   ctx: RenderContext,
+  maxRows: number = MAX_ROWS,
 ): Render {
-  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis);
+  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis, cellAspect(), maxRows);
   const quantize = quantizer(attempt);
   const alphaPlane = ctx.samples.planes.get('2x3')!;
   const lines: string[] = [];
@@ -517,13 +524,14 @@ function renderHalfBlocks(
   sat: ImageSAT,
   requestedCols: number,
   attempt: (typeof ATTEMPTS)[number],
+  maxRows: number = MAX_ROWS,
 ): Render {
   // Half blocks pack two image rows into one cell and one image column into one
   // cell — a 1x2 basis rather than the sextants' 2x3. The pixel-row count is
   // deliberately not forced even: an image with an odd number of rows leaves the
   // final cell's lower half unpainted rather than inventing a row for it.
   const aspect = cellAspect();
-  const scale = Math.max(1, img.width / requestedCols, (img.height * 2) / (aspect * MAX_ROWS * 2));
+  const scale = Math.max(1, img.width / requestedCols, (img.height * 2) / (aspect * maxRows * 2));
   const targetWidth = Math.max(1, Math.round(img.width / scale));
   const pxRows = Math.max(1, Math.round((img.height * 2) / (scale * aspect)));
   const quantize = quantizer(attempt);
@@ -579,6 +587,12 @@ function bestFittingRender(
   // so a coarse scan walks straight past the good ones.
   const WINDOW = 16;
 
+  // A tall, narrow source arrives here already below MIN_COLS — its width is
+  // bounded by its own pixels, not by the caller's request. Flooring the search
+  // at MIN_COLS would then skip every rung and hand back the one render that
+  // was already too big, so the floor follows the image down.
+  const floor = Math.max(1, Math.min(MIN_COLS, startCols));
+
   let best: Render | null = null;
   let bestScore = -Infinity;
 
@@ -596,19 +610,25 @@ function bestFittingRender(
   // without paying for a search when it already fits.
   if (consider(startCols)) return best;
 
-  for (let cols = startCols - 1; cols >= MIN_COLS && cols > startCols - 1 - WINDOW; cols--) consider(cols);
+  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--) consider(cols);
   if (best) return best;
 
-  for (let cols = Math.max(MIN_COLS, startCols - WINDOW); cols >= MIN_COLS; ) {
+  for (let cols = Math.max(floor, startCols - WINDOW); cols >= floor; ) {
     if (consider(cols)) return best;
-    if (cols === MIN_COLS) break;
-    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
+    if (cols === floor) break;
+    cols = Math.max(floor, Math.floor(cols * 0.85));
   }
   return best;
 }
 
 export interface RenderOptions {
   maxWidth?: number;
+  /**
+   * Rows the render may occupy. Narrowing cannot shrink a tall, narrow image —
+   * its width is already pinned by its own pixels — so this is the axis a
+   * caller with a byte budget has to be able to squeeze.
+   */
+  maxRows?: number;
   budget?: number | BudgetSpec;
   colorMode?: ColorMode;
   /** Quality rungs to try at each width, richest first. */
@@ -636,9 +656,10 @@ function widestBrailleRender(
   startCols: number,
   spec: BudgetSpec,
   options: BrailleOptions | undefined,
+  maxRows: number = MAX_ROWS,
 ): string[] {
   const at = (cols: number): string[] => {
-    const geometry = fitGeometry(img.width, img.height, cols, BASES['2x4']);
+    const geometry = fitGeometry(img.width, img.height, cols, BASES['2x4'], cellAspect(), maxRows);
     return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
   };
   let low = 1;
@@ -676,20 +697,38 @@ export function imageToAscii(
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
   const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === 'half';
-  let out: string[] = [];
   const initialCols = forceHalfBlocks
     ? Math.min(img.width, requestedMax)
     : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
 
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+
   if (mode === 'braille') {
-    return widestBrailleRender(img, sat, initialCols, spec, options.braille).join('\n');
+    return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join('\n');
   }
 
   const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
-  const render = (cols: number, attempt: (typeof ATTEMPTS)[number]): Render =>
-    forceHalfBlocks
-      ? renderHalfBlocks(img, sat, cols, attempt)
-      : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)));
+
+  // Every render is weighed on the way past, so whatever the search ends up
+  // rejecting still leaves the cheapest thing it saw behind. Handing back an
+  // over-budget render is what puts a hole in the middle of a picture: the
+  // caller's transport cuts it rather than the renderer shrinking it.
+  let out: string[] = [];
+  let cheapest = Infinity;
+  let lastRows = requestedRows;
+
+  const render = (cols: number, attempt: (typeof ATTEMPTS)[number], maxRows: number): Render => {
+    const result = forceHalfBlocks
+      ? renderHalfBlocks(img, sat, cols, attempt, maxRows)
+      : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)), maxRows);
+    const cost = costOf(result.lines, spec);
+    lastRows = result.lines.length;
+    if (cost < cheapest) {
+      cheapest = cost;
+      out = result.lines;
+    }
+    return result;
+  };
 
   // Quality is the outer loop and width the inner one, which is the opposite of
   // what it used to be. Trying every colour tier at a given width means taking
@@ -698,12 +737,21 @@ export function imageToAscii(
   // Measured across the fixtures, narrowing at full colour beats degrading
   // colour to stay wide by ~1.9 dB. The cheaper tiers are still reachable, but
   // only once even MIN_COLS cannot fit at a richer one.
-  for (const attempt of attempts) {
-    const fitted = bestFittingRender(Math.max(1, initialCols), spec, cols => render(cols, attempt));
-    if (fitted) return fitted.lines.join('\n');
-    out = render(MIN_COLS, attempt).lines;
+  //
+  // Around all of that sits the row cap, because width alone is not a search.
+  // A 40x4000 source is two columns wide however much room it is offered, and
+  // its cost is carried entirely by its hundred rows: every rung of the width
+  // ladder renders the identical grid at the identical price. Shrinking the cap
+  // to a fraction of what the last render actually produced is what moves it,
+  // and it resizes rather than crops — the whole picture survives, smaller.
+  for (let rows = requestedRows; rows >= MIN_ROWS; rows = Math.floor(lastRows * ROW_DECAY)) {
+    for (const attempt of attempts) {
+      const fitted = bestFittingRender(Math.max(1, initialCols), spec, cols => render(cols, attempt, rows));
+      if (fitted) return fitted.lines.join('\n');
+    }
+    if (lastRows <= MIN_ROWS) break;
   }
-    return out.join('\n');
+  return out.join('\n');
 }
 
 /**

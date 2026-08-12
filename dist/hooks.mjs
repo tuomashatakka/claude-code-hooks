@@ -7155,6 +7155,8 @@ function quantizeChannel(value, levels) {
   return Math.round(Math.min(steps, Math.max(0, index)) * 255 / steps);
 }
 var MIN_COLS = 24;
+var MIN_ROWS = 8;
+var ROW_DECAY = 0.7;
 var DEFAULT_TIERS = [256, 64, 32, "palette"];
 function toAttempt(tier) {
   return tier === "palette" ? { palette: true } : { levels: tier };
@@ -7295,12 +7297,12 @@ function fittedCell(fit) {
   if (glyph.area <= 0) return { char: " ", fg: KEEP, bg, area: 0 };
   return { char: glyph.char, fg, bg, area: glyph.area };
 }
-function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect()) {
+function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS) {
   let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis2.cols)));
   let rows = Math.max(1, Math.round(height * cols / (width * aspect)));
-  if (rows > MAX_ROWS) {
-    cols = Math.max(1, Math.floor(cols * MAX_ROWS / rows));
-    rows = Math.max(1, Math.min(MAX_ROWS, Math.round(height * cols / (width * aspect))));
+  if (rows > maxRows) {
+    cols = Math.max(1, Math.floor(cols * maxRows / rows));
+    rows = Math.max(1, Math.min(maxRows, Math.round(height * cols / (width * aspect))));
   }
   return { cols, rows };
 }
@@ -7369,8 +7371,8 @@ function emitCell(cell, pen, quantize, complement) {
   }
   return parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
 }
-function renderFitted(img, sat, requestedCols, attempt, ctx) {
-  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis);
+function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS) {
+  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis, cellAspect(), maxRows);
   const quantize = quantizer(attempt);
   const alphaPlane = ctx.samples.planes.get("2x3");
   const lines = [];
@@ -7400,9 +7402,9 @@ function renderFitted(img, sat, requestedCols, attempt, ctx) {
   }
   return { lines, score };
 }
-function renderHalfBlocks(img, sat, requestedCols, attempt) {
+function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS) {
   const aspect = cellAspect();
-  const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * MAX_ROWS * 2));
+  const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * maxRows * 2));
   const targetWidth = Math.max(1, Math.round(img.width / scale));
   const pxRows = Math.max(1, Math.round(img.height * 2 / (scale * aspect)));
   const quantize = quantizer(attempt);
@@ -7445,6 +7447,7 @@ function renderHalfBlocks(img, sat, requestedCols, attempt) {
 }
 function bestFittingRender(startCols, spec, render) {
   const WINDOW = 16;
+  const floor = Math.max(1, Math.min(MIN_COLS, startCols));
   let best = null;
   let bestScore = -Infinity;
   const consider = (cols) => {
@@ -7457,18 +7460,18 @@ function bestFittingRender(startCols, spec, render) {
     return true;
   };
   if (consider(startCols)) return best;
-  for (let cols = startCols - 1; cols >= MIN_COLS && cols > startCols - 1 - WINDOW; cols--) consider(cols);
+  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--) consider(cols);
   if (best) return best;
-  for (let cols = Math.max(MIN_COLS, startCols - WINDOW); cols >= MIN_COLS; ) {
+  for (let cols = Math.max(floor, startCols - WINDOW); cols >= floor; ) {
     if (consider(cols)) return best;
-    if (cols === MIN_COLS) break;
-    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
+    if (cols === floor) break;
+    cols = Math.max(floor, Math.floor(cols * 0.85));
   }
   return best;
 }
-function widestBrailleRender(img, sat, startCols, spec, options) {
+function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS) {
   const at = (cols) => {
-    const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"]);
+    const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"], cellAspect(), maxRows);
     return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
   };
   let low = 1;
@@ -7496,17 +7499,31 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
   const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === "half";
-  let out = [];
   const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
   if (mode === "braille") {
-    return widestBrailleRender(img, sat, initialCols, spec, options.braille).join("\n");
+    return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join("\n");
   }
   const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
-  const render = (cols, attempt) => forceHalfBlocks ? renderHalfBlocks(img, sat, cols, attempt) : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)));
-  for (const attempt of attempts) {
-    const fitted = bestFittingRender(Math.max(1, initialCols), spec, (cols) => render(cols, attempt));
-    if (fitted) return fitted.lines.join("\n");
-    out = render(MIN_COLS, attempt).lines;
+  let out = [];
+  let cheapest = Infinity;
+  let lastRows = requestedRows;
+  const render = (cols, attempt, maxRows) => {
+    const result = forceHalfBlocks ? renderHalfBlocks(img, sat, cols, attempt, maxRows) : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)), maxRows);
+    const cost = costOf(result.lines, spec);
+    lastRows = result.lines.length;
+    if (cost < cheapest) {
+      cheapest = cost;
+      out = result.lines;
+    }
+    return result;
+  };
+  for (let rows = requestedRows; rows >= MIN_ROWS; rows = Math.floor(lastRows * ROW_DECAY)) {
+    for (const attempt of attempts) {
+      const fitted = bestFittingRender(Math.max(1, initialCols), spec, (cols) => render(cols, attempt, rows));
+      if (fitted) return fitted.lines.join("\n");
+    }
+    if (lastRows <= MIN_ROWS) break;
   }
   return out.join("\n");
 }
@@ -7615,7 +7632,10 @@ function renderFilePreview(filePath, options = {}) {
   const maxWidth = options.maxWidth ?? getMaxContentWidth();
   if (isImageExtension(ext)) {
     try {
-      const ascii = imageToAscii(fs2.readFileSync(filePath), ext, maxWidth);
+      const ascii = imageToAscii(fs2.readFileSync(filePath), ext, {
+        maxWidth,
+        budget: imageBudget(options.budgetBytes ?? previewBudgetBytes())
+      });
       if (ascii) return { content: ascii, kind: "image" };
     } catch {
     }
@@ -7636,11 +7656,20 @@ function previewBudgetBytes() {
 function jsonBytes(text2) {
   return Buffer.byteLength(JSON.stringify(text2), "utf8");
 }
-function widthLadder(maxWidth) {
-  const rungs = [];
-  for (let width = maxWidth; width >= 16; width = Math.floor(width * 0.75)) rungs.push(width);
-  return rungs;
+var JSON_ESCAPE_SURCHARGE = 5;
+var CARD_CHROME = 1450;
+var CARD_PER_ROW = 150;
+function imageBudget(cardBytes) {
+  return {
+    total: Math.max(600, cardBytes),
+    bytes: true,
+    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    overhead: CARD_CHROME,
+    perRow: CARD_PER_ROW
+  };
 }
+var BUDGET_LADDER = [0.75, 0.5, 0.3, 0.15];
+var NO_ROOM = source_default.gray.italic("\u2026 image preview omitted \u2014 no room left in this message \u2026");
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
   const text2 = String(rawPath);
@@ -7662,13 +7691,15 @@ function renderFittedFileCard(path6, content, kind, details, budget, reRender) {
   const card = (body) => renderFileCard({ path: path6, content: body, details });
   if (kind === "image" && reRender) {
     let smallest = card(content);
-    for (const width of widthLadder(getMaxContentWidth())) {
-      const art = reRender(width);
+    if (jsonBytes(smallest) <= budget) return smallest;
+    for (const share of BUDGET_LADDER) {
+      const art = reRender(Math.floor(budget * share));
       if (!art) continue;
-      smallest = card(art);
-      if (jsonBytes(smallest) <= budget) return smallest;
+      const candidate = card(art);
+      if (jsonBytes(candidate) <= budget) return candidate;
+      if (jsonBytes(candidate) < jsonBytes(smallest)) smallest = candidate;
     }
-    return smallest;
+    return jsonBytes(smallest) <= budget ? smallest : card(NO_ROOM);
   }
   const full = card(collapsePreview(content));
   if (jsonBytes(full) <= budget) return full;
@@ -7692,7 +7723,8 @@ function renderFileResult(rawPath, options = {}) {
   const { action, range: rangeOverride, budgetBytes, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
-  const preview = renderFilePreview(filePath, previewOptions);
+  const cardBudget = budgetBytes ?? previewBudgetBytes();
+  const preview = renderFilePreview(filePath, { ...previewOptions, budgetBytes: cardBudget });
   if (!preview) return null;
   const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
   const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
@@ -7701,8 +7733,8 @@ function renderFileResult(rawPath, options = {}) {
     body,
     preview.kind,
     details || null,
-    budgetBytes ?? previewBudgetBytes(),
-    preview.kind === "image" ? (width) => renderFilePreview(filePath, { ...previewOptions, maxWidth: width })?.content ?? null : void 0
+    cardBudget,
+    preview.kind === "image" ? (bytes) => renderFilePreview(filePath, { ...previewOptions, budgetBytes: bytes })?.content ?? null : void 0
   );
 }
 function collapsePreview(content, options = {}) {
@@ -8340,7 +8372,7 @@ function renderToolSection({
 import fs4 from "node:fs";
 import path4 from "node:path";
 import { fileURLToPath } from "node:url";
-var JSON_ESCAPE_SURCHARGE = 5;
+var JSON_ESCAPE_SURCHARGE2 = 5;
 var JSON_NEWLINE_SURCHARGE = 1;
 var RESERVE = 8;
 var HOME2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
@@ -8379,7 +8411,7 @@ function jsonBudget(total) {
   return {
     total,
     bytes: true,
-    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    escapeSurcharge: JSON_ESCAPE_SURCHARGE2,
     perRow: JSON_NEWLINE_SURCHARGE
   };
 }

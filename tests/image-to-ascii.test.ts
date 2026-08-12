@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
 import {
+  costOf,
   imageToAscii,
   regularSextant,
   separatedSextant,
@@ -129,6 +130,31 @@ describe('imageToAscii', () => {
     const out = imageToAscii(pngBuffer(96, 96), 'png', 120);
     expect(out).toBeString();
     expect(out!.length).toBeLessThanOrEqual(9200);
+  });
+
+  // A source this shape is already at its narrowest the moment it is decoded:
+  // its width is 40 pixels, so no width the caller asks for changes the grid,
+  // and the whole cost sits in the rows. Before the search could cap those, it
+  // handed back the one oversized render it had and left the caller to cut a
+  // hole in the middle of it.
+  test('shrinks a tall, narrow image the width ladder cannot touch', () => {
+    const spec = { total: 4_000, bytes: true, escapeSurcharge: 5, perRow: 1 };
+    const art = imageToAscii(pngBuffer(40, 4_000), 'png', { maxWidth: 96, budget: spec })!;
+    expect(art).toBeString();
+    expect(costOf(art.split('\n'), spec)).toBeLessThanOrEqual(spec.total);
+    expect(art.split('\n').length).toBeGreaterThan(4);   // resized, never cropped
+  });
+
+  test('a row cap resizes the whole picture rather than cropping it', () => {
+    const tall = (maxRows: number) =>
+      imageToAscii(pngBuffer(200, 1_200), 'png', { maxWidth: 80, maxRows })!.split('\n');
+    const full = tall(120);
+    const capped = tall(20);
+    expect(capped.length).toBeLessThanOrEqual(20);
+    expect(capped.length).toBeLessThan(full.length);
+    // Narrower as well as shorter: the aspect ratio survives the cap.
+    const visible = (lines: string[]) => lines[0]!.replace(ANSI_RE, '').length;
+    expect(visible(capped)).toBeLessThan(visible(full));
   });
 });
 
