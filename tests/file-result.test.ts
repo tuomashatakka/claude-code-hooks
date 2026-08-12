@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PNG } from 'pngjs';
-import { previewBudgetBytes, renderFileResult, stripLineRange } from '../src/render/file-preview.ts';
+import { previewBudgetChars, renderFileResult, stripLineRange } from '../src/render/file-preview.ts';
 import { stripAnsi } from '../src/render/primitives.ts';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-result-'));
@@ -81,7 +81,7 @@ describe('renderFileResult', () => {
     fs.writeFileSync(image, PNG.sync.write(png));
 
     const card = renderFileResult(image, { action: 'read' })!;
-    expect(Buffer.byteLength(JSON.stringify(card), 'utf8')).toBeLessThanOrEqual(previewBudgetBytes());
+    expect(card.length).toBeLessThanOrEqual(previewBudgetChars());
     // A card that fits by giving up on the picture is not a fit worth having.
     expect(stripAnsi(card)).not.toContain('image preview omitted');
   }, 20_000);

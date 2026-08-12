@@ -13,15 +13,15 @@ import { debugLog } from '../runtime/debug.ts';
 /**
  * The art is the elastic part of the session banner: everything else — the
  * heading, the badges, the system prompt handed back as `additionalContext` —
- * is fixed, and whatever room they leave inside the hook response is what the
- * picture gets. So `renderWelcome` is handed a byte headroom measured on the
- * serialized response rather than left to guess at a character count.
+ * is fixed, and whatever room they leave in the message is what the picture
+ * gets. So `renderWelcome` is handed a headroom measured off the response
+ * rather than left to guess at one.
  *
- * Those bytes are JSON bytes, which is why the budget below is declared the way
- * it is: one ESC costs six of them, one newline two, and a sextant three.
+ * That headroom is counted in the unit Claude Code enforces the limit in —
+ * UTF-16 code units of the message itself — so the budget below declares no
+ * surcharges at all. The JSON encoding it used to charge for is not something
+ * the limit ever looked at.
  */
-const JSON_ESCAPE_SURCHARGE = 5;   // `\u001b` in place of one ESC
-const JSON_NEWLINE_SURCHARGE = 1;  // `\n` in place of one newline
 
 /** Room left for the blank lines this module puts around the art. */
 const RESERVE = 8;
@@ -69,14 +69,9 @@ export function welcomeImagePath(): string | null {
   return findAsset();
 }
 
-/** How the caller's JSON encoding charges for a block of art. */
-function jsonBudget(total: number): BudgetSpec {
-  return {
-    total,
-    bytes: true,
-    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
-    perRow: JSON_NEWLINE_SURCHARGE,
-  };
+/** What a block of art costs the message it ships in: its own characters. */
+function charBudget(total: number): BudgetSpec {
+  return { total };
 }
 
 function fits(art: string, spec: BudgetSpec): boolean {
@@ -138,11 +133,11 @@ function loadAsciiArt(spec: BudgetSpec): string | null {
  * The session banner's art block, already padded with the blank lines that
  * separate it from the heading below — or an empty string when nothing fits.
  *
- * @param headroom bytes the rest of the serialized hook response has left over.
+ * @param headroom characters the rest of the hook's message has left over.
  */
 export function renderWelcome(headroom: number): string {
   if (headroom <= RESERVE) return '';
-  const spec = jsonBudget(headroom - RESERVE);
+  const spec = charBudget(headroom - RESERVE);
   const art = renderWelcomeImage(spec) ?? loadAsciiArt(spec);
   return art ? `\n${art}\n` : '';
 }

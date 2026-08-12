@@ -1,4 +1,6 @@
 import chalk from 'chalk';
+import fs from 'node:fs';
+import tty from 'node:tty';
 import { truncateAnsi, visibleWidth } from '../render/primitives.ts';
 import { Badge, renderBadges, type BadgeLike } from './badge.ts';
 import { TUI_TOKENS } from './tokens.ts';
@@ -35,8 +37,40 @@ export interface CardProps extends BoxProps {
   footer?: BadgeLike | readonly BadgeLike[];
 }
 
+/**
+ * Columns the terminal actually has, cached for the life of the process.
+ *
+ * A hook's stdout is a pipe — Claude Code reads the response JSON off it — so
+ * `process.stdout.columns` is undefined in precisely the situation that matters,
+ * and stderr is captured the same way. The fallback that used to stand in for it
+ * sized every card and every picture to 96 columns however wide the window was.
+ *
+ * The controlling terminal is still reachable under its own name, so ask it
+ * directly. Everything here is best-effort: a hook running detached, in CI or
+ * under a test runner has no `/dev/tty` to open, and falls back rather than
+ * failing.
+ */
+let cachedColumns: number | null = null;
+
+function terminalColumns(): number {
+  if (cachedColumns !== null) return cachedColumns;
+
+  const declared = process.stdout.columns || process.stderr.columns || Number(process.env.COLUMNS) || 0;
+  if (declared > 0) return (cachedColumns = declared);
+
+  try {
+    const fd = fs.openSync('/dev/tty', 'r+');
+    const stream = new tty.WriteStream(fd);
+    const columns = stream.columns || 0;
+    stream.destroy();
+    return (cachedColumns = columns);
+  } catch {
+    return (cachedColumns = 0);
+  }
+}
+
 export function getMaxLayoutWidth(): number {
-  const columns = process.stdout.columns || Number(process.env.COLUMNS) || 0;
+  const columns = terminalColumns();
   const { fallbackContent, outerIndentMargin } = TUI_TOKENS.width;
   return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin);
 }

@@ -4,7 +4,7 @@ import { imageToAscii, type BudgetSpec } from '@tuomashatakka/image-to-ascii';
 import { formatJSON, isJSON, simpleHighlight, langFromPath, detectContentLanguage } from './highlight.ts';
 import { softCollapse, type SoftCollapseOptions } from './primitives.ts';
 import { getMaxContentWidth, renderFileCard } from '../tui/index.ts';
-import { HOOK_RESPONSE_BYTE_BUDGET } from '../runtime/output-transport.ts';
+import { HOOK_RESPONSE_CHAR_BUDGET } from '../runtime/output-transport.ts';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 
@@ -19,8 +19,8 @@ export interface FilePreviewOptions {
   fallbackText?: string | null;
   readText?: boolean;
   maxWidth?: number;
-  /** JSON bytes the finished *card* may cost. Images are sized to it. */
-  budgetBytes?: number;
+  /** Characters the finished *card* may cost. Images are sized to it. */
+  budgetChars?: number;
   /** Reshape the raw text before highlighting — e.g. drop a bulky trailer. */
   transform?: ((raw: string) => string) | null;
 }
@@ -52,7 +52,7 @@ export function renderFilePreview(filePath: string, options: FilePreviewOptions 
     try {
       const ascii = imageToAscii(fs.readFileSync(filePath), ext, {
         maxWidth,
-        budget: imageBudget(options.budgetBytes ?? previewBudgetBytes()),
+        budget: imageBudget(options.budgetChars ?? previewBudgetChars()),
       });
       if (ascii) return { content: ascii, kind: 'image' };
     } catch {}
@@ -80,43 +80,41 @@ export function renderFilePreview(filePath: string, options: FilePreviewOptions 
  *
  * Being wrong is expensive. The transport's answer to an oversized message is
  * to cut its middle out, so a mis-sized picture arrives with a hole in it. So
- * the card is rendered, weighed on the scale that actually decides — JSON bytes
- * of the finished card — and rendered again smaller until it fits.
+ * the card is rendered, weighed on the scale that actually decides — the
+ * character count Claude Code itself applies the 10,000 limit to — and rendered
+ * again smaller until it fits.
  */
 
 /** Badges, duration line and the rest of the response around the card. */
-const SECTION_RESERVE = 1_400;
+const SECTION_RESERVE = 700;
 
-/** Bytes one card may spend, unless the caller is drawing several. */
-export function previewBudgetBytes(): number {
-  return Math.max(1_200, HOOK_RESPONSE_BYTE_BUDGET - SECTION_RESERVE);
+/** Characters one card may spend, unless the caller is drawing several. */
+export function previewBudgetChars(): number {
+  return Math.max(1_200, HOOK_RESPONSE_CHAR_BUDGET - SECTION_RESERVE);
 }
 
-function jsonBytes(text: string): number {
-  return Buffer.byteLength(JSON.stringify(text), 'utf8');
+function charCost(text: string): number {
+  return text.length;
 }
 
 /**
  * What the picture inside a card is really charged, so the renderer can size
  * itself once instead of being re-measured into place.
  *
- * The three surcharges are the three ways the naive count — characters the
- * renderer emitted — comes out low: the response is JSON, where one ESC costs
- * six bytes; the glyphs are astral, where one character costs four; and the
- * card pads every row out to its own width in a background fill and closes it
- * with an SGR pair. The constants below are measured off rendered cards rather
- * than derived, because deriving them means predicting how chalk rewrites
- * nested styles, and every attempt at that came out low by a factor of three.
+ * Only the card is charged for here, and that is the whole correction: the
+ * limit is applied to the parsed string, so neither JSON's six bytes per ESC
+ * nor UTF-8's three-to-four per glyph is a cost anybody pays. What is left is
+ * the wrapper — the card pads every row out to its own width in a background
+ * fill and closes it with an SGR pair — and the two constants below are
+ * measured off rendered cards rather than derived, because deriving them means
+ * predicting how chalk rewrites nested styles inside a fill.
  */
-const JSON_ESCAPE_SURCHARGE = 5;  // the five extra bytes of a JSON-escaped ESC
-const CARD_CHROME = 1_450;        // title badge, both edges, footer, shadow
-const CARD_PER_ROW = 150;         // background fill, its SGR pair, the newline
+const CARD_CHROME = 520;   // title badge, both edges, footer, shadow
+const CARD_PER_ROW = 105;  // background fill, its SGR pair, the newline
 
-function imageBudget(cardBytes: number): BudgetSpec {
+function imageBudget(cardChars: number): BudgetSpec {
   return {
-    total: Math.max(600, cardBytes),
-    bytes: true,
-    escapeSurcharge: JSON_ESCAPE_SURCHARGE,
+    total: Math.max(600, cardChars),
     overhead: CARD_CHROME,
     perRow: CARD_PER_ROW,
   };
@@ -130,6 +128,23 @@ function imageBudget(cardBytes: number): BudgetSpec {
  * a 40x4000 source renders two columns wide however much room it is given.
  */
 const BUDGET_LADDER = [0.75, 0.5, 0.3, 0.15];
+
+/**
+ * Re-aims a picture that fitted with room to spare, and it is the other half of
+ * the same idea as the ladder above.
+ *
+ * The wrapper model is deliberately pessimistic, and the renderer can only
+ * choose whole cells — widening by one column costs a proportional band of rows
+ * — so the largest size that clears the modelled budget routinely clears the
+ * real one by a quarter. Tuning the constants down to close that gap trades a
+ * reliable underestimate for an occasional overrun, which is the expensive
+ * direction. Measuring the overshoot and aiming again spends the slack without
+ * giving up the guarantee: every candidate is still weighed before it ships.
+ */
+const GROWTH_ATTEMPTS = 3;
+
+/** Slack worth another render, as a share of the budget. */
+const GROWTH_THRESHOLD = 0.94;
 
 /** Stands in for a picture that no budget could fit. */
 const NO_ROOM = chalk.gray.italic('… image preview omitted — no room left in this message …');
@@ -169,6 +184,39 @@ export interface FileResultOptions extends FilePreviewOptions {
 }
 
 /**
+ * Spends what the first fitting render left over, by scaling the budget it was
+ * aimed at in proportion to how far under the limit it actually landed.
+ *
+ * Growth stops at the first candidate that overruns, or that fails to beat the
+ * one before it — a picture whose aspect ratio has no larger step available will
+ * come back the same size however much room it is offered. Either way the
+ * return value is the largest card that was weighed and found to fit.
+ */
+function growImageCard(
+  card: (body: string) => string,
+  reRender: (budgetChars: number) => string | null,
+  fitted: string,
+  budget: number,
+): string {
+  let best = fitted;
+  let cost = charCost(best);
+  let aim = budget;
+
+  for (let attempt = 0; attempt < GROWTH_ATTEMPTS && cost < budget * GROWTH_THRESHOLD; attempt++) {
+    aim = Math.floor(aim * (budget / cost));
+    const art = reRender(aim);
+    if (!art) break;
+    const candidate = card(art);
+    const candidateCost = charCost(candidate);
+    if (candidateCost > budget || candidateCost <= cost) break;
+    best = candidate;
+    cost = candidateCost;
+  }
+
+  return best;
+}
+
+/**
  * The tallest card that fits: text loses lines off the bottom, pictures are
  * re-rendered against a smaller budget so the whole of the image survives.
  */
@@ -178,31 +226,31 @@ export function renderFittedFileCard(
   kind: FilePreviewKind,
   details: string | null,
   budget: number,
-  reRender?: (budgetBytes: number) => string | null,
+  reRender?: (budgetChars: number) => string | null,
 ): string {
   const card = (body: string) => renderFileCard({ path, content: body, details });
 
   if (kind === 'image' && reRender) {
     let smallest = card(content);
-    if (jsonBytes(smallest) <= budget) return smallest;
+    if (charCost(smallest) <= budget) return growImageCard(card, reRender, smallest, budget);
 
     for (const share of BUDGET_LADDER) {
       const art = reRender(Math.floor(budget * share));
       if (!art) continue;
       const candidate = card(art);
-      if (jsonBytes(candidate) <= budget) return candidate;
-      if (jsonBytes(candidate) < jsonBytes(smallest)) smallest = candidate;
+      if (charCost(candidate) <= budget) return candidate;
+      if (charCost(candidate) < charCost(smallest)) smallest = candidate;
     }
 
     // Nothing rendered small enough. Shipping the smallest anyway is the one
     // outcome worth avoiding: the transport answers an oversized message by
     // cutting its middle out, and half a picture with a hole in it says less
     // than a line admitting there was no room for one.
-    return jsonBytes(smallest) <= budget ? smallest : card(NO_ROOM);
+    return charCost(smallest) <= budget ? smallest : card(NO_ROOM);
   }
 
   const full = card(collapsePreview(content));
-  if (jsonBytes(full) <= budget) return full;
+  if (charCost(full) <= budget) return full;
 
   const total = content.split('\n').length;
   let low = 0;
@@ -211,7 +259,7 @@ export function renderFittedFileCard(
   while (low <= high) {
     const retained = Math.floor((low + high) / 2);
     const candidate = card(collapsePreview(content, { maxLines: retained }));
-    if (jsonBytes(candidate) <= budget) {
+    if (charCost(candidate) <= budget) {
       best = candidate;
       low = retained + 1;
     } else {
@@ -224,12 +272,12 @@ export function renderFittedFileCard(
 // File output is always composed through renderFileCard, which makes the source
 // path a title badge instead of relying on each caller to remember it.
 export function renderFileResult(rawPath: string, options: FileResultOptions = {}): string | null {
-  const { action, range: rangeOverride, budgetBytes, ...previewOptions } = options;
+  const { action, range: rangeOverride, budgetChars, ...previewOptions } = options;
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
   const range = rangeOverride ?? pathRange;
 
-  const cardBudget = budgetBytes ?? previewBudgetBytes();
-  const preview = renderFilePreview(filePath, { ...previewOptions, budgetBytes: cardBudget });
+  const cardBudget = budgetChars ?? previewBudgetChars();
+  const preview = renderFilePreview(filePath, { ...previewOptions, budgetChars: cardBudget });
   if (!preview) return null;
 
   const body = range && preview.kind === 'text'
@@ -245,11 +293,48 @@ export function renderFileResult(rawPath: string, options: FileResultOptions = {
     details || null,
     cardBudget,
     preview.kind === 'image'
-      ? bytes => renderFilePreview(filePath, { ...previewOptions, budgetBytes: bytes })?.content ?? null
+      ? bytes => renderFilePreview(filePath, { ...previewOptions, budgetChars: bytes })?.content ?? null
       : undefined,
   );
 }
 
 export function collapsePreview(content: string, options: SoftCollapseOptions = {}): string {
   return softCollapse(content, { label: 'lines', ...options });
+}
+
+export interface InlineImageOptions {
+  /** Detail badge verb, as for a file card. */
+  action?: string | null;
+  budgetChars?: number;
+}
+
+/**
+ * A picture that arrived in the tool result itself rather than on disk — a
+ * screenshot returned as base64 — drawn through the same fitter as a file card.
+ *
+ * `label` only names the card; nothing reads it off the filesystem. That is the
+ * whole reason this exists next to `renderFileResult` instead of routing through
+ * it: the bytes have no path to give the title badge, and inventing a temporary
+ * one would put a cache directory in the corner of the box.
+ */
+export function renderInlineImageResult(
+  data: Buffer,
+  ext: string,
+  label: string,
+  options: InlineImageOptions = {},
+): string | null {
+  const cardBudget = options.budgetChars ?? previewBudgetChars();
+  const maxWidth = getMaxContentWidth();
+  const render = (budgetChars: number): string | null => {
+    try {
+      return imageToAscii(data, ext, { maxWidth, budget: imageBudget(budgetChars) }) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const art = render(cardBudget);
+  if (!art) return null;
+
+  return renderFittedFileCard(label, art, 'image', options.action ?? null, cardBudget, render);
 }

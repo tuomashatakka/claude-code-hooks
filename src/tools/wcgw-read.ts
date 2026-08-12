@@ -9,7 +9,7 @@ import {
 } from '../tui/index.ts';
 import {
   collapsePreview,
-  previewBudgetBytes,
+  previewBudgetChars,
   renderFilePreview,
   renderFileResult,
   stripLineRange,
@@ -66,10 +66,10 @@ defineTool<WcgwReadFilesInput, RawToolResult>({
     // Several files share one response, so they share one budget — otherwise
     // each card sizes itself to the whole of it and the transport trims the
     // message they add up to.
-    const budgetBytes = Math.floor(previewBudgetBytes() / Math.max(1, paths.length));
+    const budgetChars = Math.floor(previewBudgetChars() / Math.max(1, paths.length));
     let missed = 0;
     for (const rawPath of paths) {
-      const box = renderFileResult(rawPath, { action: 'read', budgetBytes });
+      const box = renderFileResult(rawPath, { action: 'read', budgetChars });
       if (box) lines.push(box);
       else {
         missed += 1;

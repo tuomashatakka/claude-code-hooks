@@ -88,7 +88,7 @@ describe('codex-compatible tool hook output', () => {
     });
     const systemMessage = stripAnsi(result.output.systemMessage);
 
-    expect(Buffer.byteLength(result.stdout, 'utf8')).toBeLessThan(10_000);
+    expect(String(result.output.systemMessage).length).toBeLessThan(10_000);
     expect(systemMessage).toContain('000 ');
     expect(systemMessage).toContain('239 ');
     expect(systemMessage).toContain('lines omitted');
@@ -96,11 +96,44 @@ describe('codex-compatible tool hook output', () => {
     expect(systemMessage).not.toContain('Claude Code limits hook output transport');
   });
 
+  // The limit Claude Code applies is `value.length <= 1e4` on the parsed string,
+  // so an ESC costs one and the JSON envelope around it costs nothing. Measuring
+  // the encoded form instead cut messages at roughly a fifth of the real limit,
+  // which is what made every picture small and put "lines omitted" on almost
+  // every card. A colourful message is the case that tells the two apart.
+  test('measures the message in characters, not bytes of its encoding', () => {
+    // One colour change per cell, as a rendered picture has: 12 characters a
+    // cell, but 19 bytes once JSON has spent six on the ESC and UTF-8 three on
+    // the block.
+    const row = Array.from({ length: 40 }, (_, i) => `\x1b[38;5;${100 + (i % 100)}m█`).join('');
+    const message = Array.from({ length: 20 }, () => row).join('\n');
+    expect(message.length).toBeLessThan(10_000);
+    expect(Buffer.byteLength(JSON.stringify(message), 'utf8')).toBeGreaterThan(10_000);
+
+    const result = serializeHookResponse({ systemMessage: message });
+    const output = JSON.parse(result.json) as { systemMessage: string };
+
+    expect(output.systemMessage.length).toBeLessThan(10_000);
+    expect(stripAnsi(output.systemMessage)).not.toContain('omitted');
+  });
+
+  test('a long additionalContext does not shrink the message beside it', () => {
+    const message = 'm'.repeat(9_000);
+    const withContext = serializeHookResponse({
+      systemMessage: message,
+      hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'c'.repeat(9_000) },
+    });
+    const alone = serializeHookResponse({ systemMessage: message });
+
+    expect(withContext.systemMessage).toBe(alone.systemMessage);
+    expect(stripAnsi(withContext.systemMessage ?? '')).not.toContain('omitted');
+  });
+
   test('limits one oversized line without emitting invalid JSON', () => {
     const result = serializeHookResponse({ systemMessage: 'x'.repeat(20_000) });
     const output = JSON.parse(result.json) as { systemMessage: string };
 
-    expect(Buffer.byteLength(result.json, 'utf8')).toBeLessThan(10_000);
+    expect(output.systemMessage.length).toBeLessThan(10_000);
     expect(stripAnsi(output.systemMessage)).toContain('characters omitted');
   });
 
