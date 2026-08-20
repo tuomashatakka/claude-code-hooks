@@ -1,12 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  imageToAscii,
-  costOf
-
-
-} from '@tuomashatakka/image-to-ascii'
+import { imageToAsciiSimple, imageToAscii, costOf } from '@tuomashatakka/image-to-ascii'
 import type { BrailleOptions, BudgetSpec } from '@tuomashatakka/image-to-ascii'
 import { getMaxLayoutWidth } from '../tui/index.ts'
 import { debugLog } from '../runtime/debug.ts'
@@ -109,12 +104,14 @@ function renderWelcomeImage (spec: BudgetSpec): string | null {
   if (!file)
     return null
   try {
-    const art = imageToAscii(fs.readFileSync(file), path.extname(file), {
-      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
-      mode:     'braille',
-      braille:  BANNER,
-      budget:   spec,
-    })
+    const art = imageToAsciiSimple(fs.readFileSync(file), path.extname(file), Math.min(MAX_COLS, getMaxLayoutWidth()))
+    // const art = imageToAscii(fs.readFileSync(file), path.extname(file), {
+    //   maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
+    //   mode:     'braille',
+    //   braille:  BANNER,
+    //   budget:   spec,
+    // })
+
     // Below about 3KB of headroom even the narrowest render overruns, and
     // imageToAscii hands that back rather than nothing. Printing it would only
     // buy a picture with its middle omitted by the transport.
