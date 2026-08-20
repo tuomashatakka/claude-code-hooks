@@ -94,7 +94,7 @@ share the same large block-weight checkbox: newly queued or active tasks stay
 empty, completed tasks show a checkmark, and descriptions sit directly beneath
 the task-state caption.
 
-`SessionStart` prints `assets/welcome.png` as braille. The banner is sized
+`SessionStart` prints `assets/welcome.png` as colored half-block art. The banner is sized
 against what is actually left of the message's character budget once the
 heading and the badges have taken their share, so it arrives whole rather than
 with its middle omitted.
@@ -105,9 +105,10 @@ is used instead, skipping any that would not fit.
 `imageToMonochromeAscii()` is included as an opt-in literal text renderer using
 the ramp ` .:-=+*#%@`. It detects either light or dark dominant backgrounds,
 flips polarity accordingly, emits no colour SGR, and spends far fewer tokens
-than a photographic ANSI preview. Hooks continue to call the original
-`imageToAscii()` renderer for now; `CLAUDE_HOOKS_IMAGE_MODE=ascii` explicitly
-selects the new path.
+than a photographic ANSI preview. File and screenshot previews continue to use
+the full `imageToAscii()` renderer, while the session banner temporarily uses
+the simpler colored half-block renderer. `CLAUDE_HOOKS_IMAGE_MODE=ascii`
+explicitly selects the monochrome path for the full renderer.
 
 Braille is a mode of its own (`CLAUDE_HOOKS_IMAGE_MODE=braille`, or
 `mode: 'braille'`): 2x4 dots per cell in the terminal's own foreground, with no

@@ -14,8 +14,8 @@ import {
 import { renderWelcome, welcomeImagePath } from '../src/render/welcome.ts'
 import { stripAnsi } from '../src/render/primitives.ts'
 
-// The banner renders in braille; the fallback text art is braille too.
-const GLYPH_ROW = /[\u2801-\u28ff]/u
+// The bundled image uses half blocks; a local fallback may be braille text art.
+const GLYPH_ROW = /[▀▄█\u2801-\u28ff]/u
 
 describe('welcome art', () => {
   test('ships the bundled image the banner is rendered from', () => {
@@ -34,7 +34,7 @@ describe('welcome art', () => {
       expect(renderWelcome(headroom).length).toBeLessThanOrEqual(headroom)
     })
 
-  test('renders the image once there is room for it', () => {
+  test('renders complete art once there is room for it', () => {
     expect(renderWelcome(6_000)).toMatch(GLYPH_ROW)
   })
 

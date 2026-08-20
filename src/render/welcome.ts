@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { imageToAsciiSimple, imageToAscii, costOf } from '@tuomashatakka/image-to-ascii'
-import type { BrailleOptions, BudgetSpec } from '@tuomashatakka/image-to-ascii'
+import { imageToAsciiSimple, costOf } from '@tuomashatakka/image-to-ascii'
+import type { BudgetSpec } from '@tuomashatakka/image-to-ascii'
 import { getMaxLayoutWidth } from '../tui/index.ts'
 import { debugLog } from '../runtime/debug.ts'
 
@@ -85,17 +85,6 @@ function fits (art: string, spec: BudgetSpec): boolean {
   return costOf(art.split('\n'), spec) <= spec.total
 }
 
-/**
- * Braille, not the colour blocks the file previews use.
- *
- * The banner is line art, so there is no colour to lose — and losing it is what
- * makes the picture large: a block render spends four fifths of its bytes on
- * SGR sequences and fits about 26 columns into this budget, where braille spends
- * none and fits the whole terminal. Dithering is off for the same reason: on
- * strokes it only frays the edges it is meant to smooth.
- */
-const BANNER: BrailleOptions = { dither: false, threshold: 0.35 }
-
 /** Past this the art stops being a greeting and starts being the screen. */
 const MAX_COLS = 100
 
@@ -105,15 +94,9 @@ function renderWelcomeImage (spec: BudgetSpec): string | null {
     return null
   try {
     const art = imageToAsciiSimple(fs.readFileSync(file), path.extname(file), Math.min(MAX_COLS, getMaxLayoutWidth()))
-    // const art = imageToAscii(fs.readFileSync(file), path.extname(file), {
-    //   maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
-    //   mode:     'braille',
-    //   braille:  BANNER,
-    //   budget:   spec,
-    // })
 
-    // Below about 3KB of headroom even the narrowest render overruns, and
-    // imageToAscii hands that back rather than nothing. Printing it would only
+    // Below about 3KB of headroom even the narrowest render overruns, and the
+    // simple renderer hands that back rather than nothing. Printing it would only
     // buy a picture with its middle omitted by the transport.
     return art && fits(art, spec) ? art : null
   }

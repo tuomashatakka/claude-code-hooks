@@ -6297,10 +6297,14 @@ function decodeImage(buffer, ext) {
   const normalizedExt = ext.toLowerCase().replace(/^\./, "");
   let img;
   try {
-    if (normalizedExt === "png") img = import_pngjs.PNG.sync.read(buffer);
-    else if (normalizedExt === "jpg" || normalizedExt === "jpeg") img = import_jpeg_js.default.decode(buffer, { useTArray: true });
-    else if (normalizedExt === "webp") img = decodeWebp(buffer);
-    else return null;
+    if (normalizedExt === "png")
+      img = import_pngjs.PNG.sync.read(buffer);
+    else if (normalizedExt === "jpg" || normalizedExt === "jpeg")
+      img = import_jpeg_js.default.decode(buffer, { useTArray: true });
+    else if (normalizedExt === "webp")
+      img = decodeWebp(buffer);
+    else
+      return null;
   } catch {
     return null;
   }
@@ -7256,16 +7260,106 @@ function renderBraille(sat, cols, rows, options = {}) {
   return lines;
 }
 
-// packages/image-to-ascii/src/index.ts
+// packages/image-to-ascii/src/imageToTerm.ts
 var MAX_ROWS = 120;
 var ALPHA_OPAQUE = 128;
+var BYTE_BUDGET = 9200;
+var ATTEMPTS = [
+  { mask: 255 },
+  { mask: 252 },
+  { mask: 248 },
+  { palette: true }
+];
+var MIN_COLS = 24;
+var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
+function to256(r, g, b) {
+  if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
+    if (r < 8)
+      return 16;
+    if (r > 238)
+      return 231;
+    return 232 + Math.min(23, Math.round((r - 8) / 10));
+  }
+  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
+}
+var FG_RESET = "\x1B[39m";
+var BG_RESET2 = "\x1B[49m";
+function imageToAsciiSimple(buffer, ext, maxWidth = 80) {
+  const img = decodeImage(buffer, ext);
+  if (!img)
+    return null;
+  const { width, height, data } = img;
+  if (!width || !height)
+    return null;
+  const render = (cols, attempt) => {
+    const scale = Math.max(1, width / cols, height / (MAX_ROWS * 2));
+    const targetWidth = Math.max(1, Math.round(width / scale));
+    const pxRows = Math.max(1, Math.round(height / scale));
+    const sgrTail = attempt.palette ? (r, g, b) => `5;${to256(r, g, b)}` : (r, g, b) => `2;${r & attempt.mask};${g & attempt.mask};${b & attempt.mask}`;
+    const px = (col, row) => {
+      const idx = (Math.min(height - 1, Math.floor(row * scale)) * width + Math.min(width - 1, Math.floor(col * scale))) * 4;
+      if ((data[idx + 3] ?? 255) < ALPHA_OPAQUE)
+        return null;
+      return sgrTail(data[idx] ?? 0, data[idx + 1] ?? 0, data[idx + 2] ?? 0);
+    };
+    const lines = [];
+    for (let y = 0; y < pxRows; y += 2) {
+      let line = "";
+      let fg = null;
+      let bg = null;
+      const put = (char, wantFg, wantBg) => {
+        const parts = [];
+        if (wantFg !== null && wantFg !== fg) {
+          parts.push(`38;${wantFg}`);
+          fg = wantFg;
+        }
+        if (wantBg !== bg) {
+          parts.push(wantBg === null ? "49" : `48;${wantBg}`);
+          bg = wantBg;
+        }
+        line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
+      };
+      for (let x = 0; x < targetWidth; x++) {
+        const top = px(x, y);
+        const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
+        const byte = Number(top !== null) * 1 + Number(bottom !== null) * 2 + Number(bottom === top) * 1;
+        const symbol = ["\u3000", "\u2580", "\u2584", "\u2588", "\u2580"];
+        put(symbol[byte], top || bottom, top && bottom);
+      }
+      if (fg !== null)
+        line += FG_RESET;
+      if (bg !== null)
+        line += BG_RESET2;
+      lines.push(line);
+    }
+    return lines.join("\n");
+  };
+  let out = "";
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  for (let cols = Math.min(width, requestedMax); ; ) {
+    for (const attempt of ATTEMPTS) {
+      out = render(cols, attempt);
+      if (out.length <= BYTE_BUDGET)
+        return out;
+    }
+    if (cols <= MIN_COLS)
+      break;
+    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
+  }
+  return out;
+}
+
+// packages/image-to-ascii/src/index.ts
+var MAX_ROWS2 = 120;
+var ALPHA_OPAQUE2 = 128;
 function quantizeChannel(value, levels) {
-  if (levels >= 256) return value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
+  if (levels >= 256)
+    return value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
   const steps = levels - 1;
   const index = Math.round(value * steps / 255);
   return Math.round(Math.min(steps, Math.max(0, index)) * 255 / steps);
 }
-var MIN_COLS = 24;
+var MIN_COLS2 = 24;
 var MIN_ROWS = 8;
 var ROW_DECAY = 0.7;
 var DEFAULT_TIERS = [256, 64, 32, "palette"];
@@ -7274,32 +7368,37 @@ function toAttempt(tier) {
 }
 function attemptsFor(mode, tiers) {
   const kept = tiers.filter((tier) => {
-    if (mode === "truecolor") return tier !== "palette";
-    if (mode === "palette") return tier === "palette";
+    if (mode === "truecolor")
+      return tier !== "palette";
+    if (mode === "palette")
+      return tier === "palette";
     return true;
   });
   return (kept.length ? kept : tiers).map(toAttempt);
 }
 function resolveColorMode(requested) {
   const env2 = process.env.CLAUDE_HOOKS_IMAGE_COLOR;
-  if (env2 === "truecolor" || env2 === "palette" || env2 === "auto") return env2;
+  if (env2 === "truecolor" || env2 === "palette" || env2 === "auto")
+    return env2;
   return requested ?? "auto";
 }
 function cellAspect() {
   const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_CELL_ASPECT);
   return Number.isFinite(raw) && raw > 0 ? raw : 2;
 }
-var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
-function to256(r, g, b) {
+var cubeIdx2 = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
+function to2562(r, g, b) {
   if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
-    if (r < 8) return 16;
-    if (r > 238) return 231;
+    if (r < 8)
+      return 16;
+    if (r > 238)
+      return 231;
     return 232 + Math.min(23, Math.round((r - 8) / 10));
   }
-  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
+  return 16 + 36 * cubeIdx2(r) + 6 * cubeIdx2(g) + cubeIdx2(b);
 }
-var FG_RESET = "\x1B[39m";
-var BG_RESET2 = "\x1B[49m";
+var FG_RESET2 = "\x1B[39m";
+var BG_RESET3 = "\x1B[49m";
 var PALETTE_256 = (() => {
   const levels = [0, 95, 135, 175, 215, 255];
   const out = [];
@@ -7323,14 +7422,18 @@ function environmentGlyphMode() {
 }
 function drawsItsOwnGlyphs() {
   const program = (process.env.TERM_PROGRAM ?? "").toLowerCase();
-  if (program === "ghostty" || program === "wezterm") return true;
+  if (program === "ghostty" || program === "wezterm")
+    return true;
   return Boolean(process.env.KITTY_WINDOW_ID) || process.env.TERM === "xterm-kitty";
 }
 function resolveGlyphMode() {
   const env2 = environmentGlyphMode();
-  if (env2) return env2;
-  if (process.env.TERM === "dumb") return "half";
-  if (drawsItsOwnGlyphs() && cellAspect() >= 1.75) return "octant";
+  if (env2)
+    return env2;
+  if (process.env.TERM === "dumb")
+    return "half";
+  if (drawsItsOwnGlyphs() && cellAspect() >= 1.75)
+    return "octant";
   return "sextant";
 }
 var MONOCHROME_CHROMA_TOLERANCE = 18;
@@ -7345,7 +7448,8 @@ function analyzeMonochrome(img) {
   let luminance = 0;
   for (let pixel = 0; pixel < pixels; pixel += step) {
     const at = pixel * 4;
-    if ((img.data[at + 3] ?? 255) < 16) continue;
+    if ((img.data[at + 3] ?? 255) < 16)
+      continue;
     const r = img.data[at] ?? 0;
     const g = img.data[at + 1] ?? 0;
     const b = img.data[at + 2] ?? 0;
@@ -7387,7 +7491,8 @@ function widestAsciiRender(img, sat, startCols, spec, maxRows, lightBackground) 
   for (let requested = startCols; requested >= 1; requested--) {
     const geometry = fitGeometry(img.width, img.height, requested, BASES["1x1"], cellAspect(), maxRows);
     const key = `${geometry.cols}x${geometry.rows}`;
-    if (key === previousGeometry) continue;
+    if (key === previousGeometry)
+      continue;
     previousGeometry = key;
     const lines = renderAsciiLines(sat, geometry.cols, geometry.rows, lightBackground);
     smallest = lines;
@@ -7400,15 +7505,18 @@ var CONTEXTS = /* @__PURE__ */ new Map();
 function contextFor(mode, palette) {
   const key = `${mode}|${palette ? "shade" : "plain"}`;
   const cached = CONTEXTS.get(key);
-  if (cached) return cached;
+  if (cached)
+    return cached;
   const primary = mode === "octant" ? "octant" : "sextant";
   const families = [primary, "separated", "eighth-v", "eighth-h"];
-  if (palette) families.push("shade");
+  if (palette)
+    families.push("shade");
   const table = buildTable(families);
   const complement = /* @__PURE__ */ new Map();
   for (let i = 0; i < table.glyphs.length; i++) {
     const j = table.complement[i];
-    if (j >= 0) complement.set(table.glyphs[i].char, table.glyphs[j].char);
+    if (j >= 0)
+      complement.set(table.glyphs[i].char, table.glyphs[j].char);
   }
   const compiled = compileTable(table);
   const context = {
@@ -7438,8 +7546,11 @@ function fitMargin() {
 }
 function classify(alpha) {
   let opaque = 0;
-  for (let i = 0; i < alpha.length; i++) if (alpha[i] >= ALPHA_OPAQUE) opaque++;
-  if (opaque === alpha.length) return 0 /* Opaque */;
+  for (let i = 0; i < alpha.length; i++)
+    if (alpha[i] >= ALPHA_OPAQUE2)
+      opaque++;
+  if (opaque === alpha.length)
+    return 0 /* Opaque */;
   return opaque === 0 ? 1 /* Clear */ : 2 /* Mixed */;
 }
 function transparentCell(alpha, plane) {
@@ -7449,7 +7560,8 @@ function transparentCell(alpha, plane) {
   let b = 0;
   let count = 0;
   for (let i = 0; i < alpha.length; i++) {
-    if (alpha[i] < ALPHA_OPAQUE) continue;
+    if (alpha[i] < ALPHA_OPAQUE2)
+      continue;
     mask |= 1 << i;
     const at = i * 3;
     r += plane[at];
@@ -7457,7 +7569,8 @@ function transparentCell(alpha, plane) {
     b += plane[at + 2];
     count++;
   }
-  if (!count) return { char: " ", fg: KEEP, bg: null, area: 0 };
+  if (!count)
+    return { char: " ", fg: KEEP, bg: null, area: 0 };
   return {
     // Separated cells keep the terminal background visible between isolated
     // transparent-edge samples.
@@ -7470,12 +7583,14 @@ function transparentCell(alpha, plane) {
 function fittedCell(fit) {
   const glyph = fit.glyph;
   const fg = { r: fit.fg[0], g: fit.fg[1], b: fit.fg[2] };
-  if (glyph === null || glyph.area >= 1) return { char: "\u2588", fg, bg: KEEP, area: 1 };
+  if (glyph === null || glyph.area >= 1)
+    return { char: "\u2588", fg, bg: KEEP, area: 1 };
   const bg = { r: fit.bg[0], g: fit.bg[1], b: fit.bg[2] };
-  if (glyph.area <= 0) return { char: " ", fg: KEEP, bg, area: 0 };
+  if (glyph.area <= 0)
+    return { char: " ", fg: KEEP, bg, area: 0 };
   return { char: glyph.char, fg, bg, area: glyph.area };
 }
-function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS) {
+function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS2) {
   let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis2.cols)));
   let rows = Math.max(1, Math.round(height * cols / (width * aspect)));
   if (rows > maxRows) {
@@ -7492,16 +7607,15 @@ function imageSample(sat, sampleX, sampleY, sampleCols, sampleRows) {
     r: Math.round(scratch2.r),
     g: Math.round(scratch2.g),
     b: Math.round(scratch2.b),
-    opaque: scratch2.a >= ALPHA_OPAQUE
+    opaque: scratch2.a >= ALPHA_OPAQUE2
   };
 }
 function quantizer(attempt) {
-  if (attempt.palette) {
+  if (attempt.palette)
     return (color) => {
-      const index = to256(color.r, color.g, color.b);
+      const index = to2562(color.r, color.g, color.b);
       return { tail: `5;${index}`, color: PALETTE_256[index] };
     };
-  }
   const levels = attempt.levels;
   return (color) => {
     const r = quantizeChannel(color.r, levels);
@@ -7511,11 +7625,12 @@ function quantizer(attempt) {
   };
 }
 function resolveSlot(slot, penTail, penColor, weight, quantize) {
-  if (slot === KEEP) return { tail: penTail, color: penColor };
-  if (slot === null) return { tail: null, color: null };
-  if (penTail !== null && penColor !== null && weight * dist2(slot, penColor) <= SNAP_TOLERANCE) {
+  if (slot === KEEP)
     return { tail: penTail, color: penColor };
-  }
+  if (slot === null)
+    return { tail: null, color: null };
+  if (penTail !== null && penColor !== null && weight * dist2(slot, penColor) <= SNAP_TOLERANCE)
+    return { tail: penTail, color: penColor };
   const q = quantize(slot);
   return { tail: q.tail, color: q.color };
 }
@@ -7549,7 +7664,7 @@ function emitCell(cell, pen, quantize, complement) {
   }
   return parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
 }
-function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS) {
+function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS2) {
   const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis, cellAspect(), maxRows);
   const quantize = quantizer(attempt);
   const alphaPlane = ctx.samples.planes.get("2x3");
@@ -7574,13 +7689,15 @@ function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS)
       }
       line += emitCell(cell, pen, quantize, ctx.complement);
     }
-    if (pen.fgTail !== null) line += FG_RESET;
-    if (pen.bgTail !== null) line += BG_RESET2;
+    if (pen.fgTail !== null)
+      line += FG_RESET2;
+    if (pen.bgTail !== null)
+      line += BG_RESET3;
     lines.push(line);
   }
   return { lines, score };
 }
-function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS) {
+function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS2) {
   const aspect = cellAspect();
   const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * maxRows * 2));
   const targetWidth = Math.max(1, Math.round(img.width / scale));
@@ -7611,38 +7728,51 @@ function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS) 
     for (let x = 0; x < targetWidth; x++) {
       const top = px(x, y);
       const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
-      if (top === null && bottom === null) put(" ", null, null);
-      else if (top !== null && bottom === null) put("\u2580", top, null);
-      else if (top === null && bottom !== null) put("\u2584", bottom, null);
-      else if (top === bottom) put("\u2588", top, bg);
-      else put("\u2580", top, bottom);
+      if (top === null && bottom === null)
+        put(" ", null, null);
+      else if (top !== null && bottom === null)
+        put("\u2580", top, null);
+      else if (top === null && bottom !== null)
+        put("\u2584", bottom, null);
+      else if (top === bottom)
+        put("\u2588", top, bg);
+      else
+        put("\u2580", top, bottom);
     }
-    if (fg !== null) line += FG_RESET;
-    if (bg !== null) line += BG_RESET2;
+    if (fg !== null)
+      line += FG_RESET2;
+    if (bg !== null)
+      line += BG_RESET3;
     lines.push(line);
   }
   return { lines, score: 0 };
 }
 function bestFittingRender(startCols, spec, render) {
   const WINDOW = 16;
-  const floor = Math.max(1, Math.min(MIN_COLS, startCols));
+  const floor = Math.max(1, Math.min(MIN_COLS2, startCols));
   let best = null;
   let bestScore = -Infinity;
   const consider = (cols) => {
     const attempt = render(cols);
-    if (costOf(attempt.lines, spec) > spec.total) return false;
+    if (costOf(attempt.lines, spec) > spec.total)
+      return false;
     if (attempt.score > bestScore) {
       best = attempt;
       bestScore = attempt.score;
     }
     return true;
   };
-  if (consider(startCols)) return best;
-  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--) consider(cols);
-  if (best) return best;
+  if (consider(startCols))
+    return best;
+  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--)
+    consider(cols);
+  if (best)
+    return best;
   for (let cols = Math.max(floor, startCols - WINDOW); cols >= floor; ) {
-    if (consider(cols)) return best;
-    if (cols === floor) break;
+    if (consider(cols))
+      return best;
+    if (cols === floor)
+      break;
     cols = Math.max(floor, Math.floor(cols * 0.85));
   }
   return best;
@@ -7650,10 +7780,11 @@ function bestFittingRender(startCols, spec, render) {
 function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
   const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
   const img = decodeImage(buffer, ext);
-  if (!img) return null;
+  if (!img)
+    return null;
   const maxWidth = options.maxWidth ?? 80;
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS2));
   const analysis = analyzeMonochrome(img);
   const lines = widestAsciiRender(
     img,
@@ -7666,7 +7797,7 @@ function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
   const output = lines.join("\n");
   return output.length > 0 ? output : " ";
 }
-function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS) {
+function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS2) {
   const at = (cols) => {
     const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"], cellAspect(), maxRows);
     return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
@@ -7680,16 +7811,16 @@ function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_R
     if (costOf(lines, spec) <= spec.total) {
       best = lines;
       low = cols + 1;
-    } else {
+    } else
       high = cols - 1;
-    }
   }
   return best;
 }
 function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
   const img = decodeImage(buffer, ext);
-  if (!img) return null;
+  if (!img)
+    return null;
   const sat = buildSAT(img);
   const spec = normalizeBudget(options.budget);
   const maxWidth = options.maxWidth ?? 80;
@@ -7697,13 +7828,11 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === "half";
   const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
-  if (mode === "ascii") {
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS2));
+  if (mode === "ascii")
     return imageToMonochromeAscii(buffer, ext, options);
-  }
-  if (mode === "braille") {
+  if (mode === "braille")
     return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join("\n");
-  }
   const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
   let out = [];
   let cheapest = Infinity;
@@ -7721,9 +7850,11 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   for (let rows = requestedRows; rows >= MIN_ROWS; rows = Math.floor(lastRows * ROW_DECAY)) {
     for (const attempt of attempts) {
       const fitted = bestFittingRender(Math.max(1, initialCols), spec, (cols) => render(cols, attempt, rows));
-      if (fitted) return fitted.lines.join("\n");
+      if (fitted)
+        return fitted.lines.join("\n");
     }
-    if (lastRows <= MIN_ROWS) break;
+    if (lastRows <= MIN_ROWS)
+      break;
   }
   return out.join("\n");
 }
@@ -9323,19 +9454,13 @@ function charBudget(total) {
 function fits2(art, spec) {
   return costOf(art.split("\n"), spec) <= spec.total;
 }
-var BANNER = { dither: false, threshold: 0.35 };
 var MAX_COLS = 100;
 function renderWelcomeImage(spec) {
   const file = welcomeImagePath();
   if (!file)
     return null;
   try {
-    const art = imageToAscii(fs7.readFileSync(file), path6.extname(file), {
-      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
-      mode: "braille",
-      braille: BANNER,
-      budget: spec
-    });
+    const art = imageToAsciiSimple(fs7.readFileSync(file), path6.extname(file), Math.min(MAX_COLS, getMaxLayoutWidth()));
     return art && fits2(art, spec) ? art : null;
   } catch (e) {
     debugLog("SessionStart", "render-welcome-image", e.message);
