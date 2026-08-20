@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "hooks",
   "displayName": "Claude Code Hooks",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "Beautified terminal output for every Claude Code hook event — block-letter headings, colored badges, syntax-highlighted diffs and ASCII image previews.",
   "author": {
     "name": "tuomashatakka",
