@@ -11,10 +11,7 @@
   "plugins": [
     {
       "name": "hooks",
-      "source": {
-        "source": "github",
-        "repo": "tuomashatakka/claude-code-hooks"
-      },
+      "source": ".",
       "description": "Beautified terminal output for every Claude Code hook event — block-letter headings, colored badges, syntax-highlighted diffs and ASCII image previews.",
       "author": {
         "name": "tuomashatakka",
