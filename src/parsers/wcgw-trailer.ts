@@ -1,52 +1,52 @@
 // Parses the "--- status = N\ncwd = ...\n..." trailer that wcgw BashCommand
 // appends to stdout. Returns clean stdout + structured metadata.
 
-const TRAILER_SEP = /\n---\s*\n/;
+const TRAILER_SEP = /\n---\s*\n/
 
 export interface ParsedTrailer {
   stdout: string;
   status: string | null;
-  cwd: string | null;
-  extra: Record<string, string>;
+  cwd:    string | null;
+  extra:  Record<string, string>;
 }
 
-export function parseWcgwTrailer(rawOutput: unknown): ParsedTrailer {
-  if (typeof rawOutput !== 'string') {
-    return { stdout: String(rawOutput ?? ''), status: null, cwd: null, extra: {} };
-  }
+export function parseWcgwTrailer (rawOutput: unknown): ParsedTrailer {
+  if (typeof rawOutput !== 'string')
+    return { stdout: String(rawOutput ?? ''), status: null, cwd: null, extra: {}}
 
-  const sepMatch = TRAILER_SEP.exec(rawOutput);
-  if (!sepMatch) {
-    return { stdout: rawOutput, status: null, cwd: null, extra: {} };
-  }
+  const sepMatch = TRAILER_SEP.exec(rawOutput)
+  if (!sepMatch)
+    return { stdout: rawOutput, status: null, cwd: null, extra: {}}
 
-  const stdout = rawOutput.slice(0, sepMatch.index);
-  const trailerRaw = rawOutput.slice(sepMatch.index + sepMatch[0].length);
+  const stdout     = rawOutput.slice(0, sepMatch.index)
+  const trailerRaw = rawOutput.slice(sepMatch.index + sepMatch[0].length)
 
-  const status = extractField(trailerRaw, 'status');
-  const cwd    = extractField(trailerRaw, 'cwd');
+  const status = extractField(trailerRaw, 'status')
+  const cwd    = extractField(trailerRaw, 'cwd')
 
-  const knownKeys = new Set(['status', 'cwd']);
-  const extra: Record<string, string> = {};
+  const knownKeys                     = new Set([ 'status', 'cwd' ])
+  const extra: Record<string, string> = {}
   for (const line of trailerRaw.split('\n')) {
-    const m = /^([a-z_][a-z0-9_ ]*?)\s*=\s*(.*)$/.exec(line.trim());
-    if (m && !knownKeys.has(m[1]!.trim())) {
-      extra[m[1]!.trim()] = m[2]!.trim();
-    }
+    const m = (/^([a-z_][a-z0-9_ ]*?)\s*=\s*(.*)$/).exec(line.trim())
+    if (m && !knownKeys.has(m[1]!.trim()))
+      extra[m[1]!.trim()] = m[2]!.trim()
   }
 
-  return { stdout, status, cwd, extra };
+  return { stdout, status, cwd, extra }
 }
 
-function extractField(text: string, key: string): string | null {
-  const re = new RegExp(`(?:^|\\n)${key}\\s*=\\s*([^\\n]*)`, 'i');
-  const m = re.exec(text);
-  return m ? m[1]!.trim() : null;
+function extractField (text: string, key: string): string | null {
+  const re = new RegExp(`(?:^|\\n)${key}\\s*=\\s*([^\\n]*)`, 'i')
+  const m  = re.exec(text)
+  return m ? m[1]!.trim() : null
 }
 
-export function shortenPath(p: string | null | undefined, home?: string): string {
-  if (!p) return String(p ?? '');
-  const h = home ?? process.env.HOME ?? process.env.USERPROFILE ?? '';
-  if (h && p.startsWith(h)) return '~' + p.slice(h.length);
-  return p;
+export function shortenPath (p: string | null | undefined, home?: string): string {
+  if (!p)
+    return String(p ?? '')
+
+  const h = home ?? process.env.HOME ?? process.env.USERPROFILE ?? ''
+  if (h && p.startsWith(h))
+    return '~' + p.slice(h.length)
+  return p
 }

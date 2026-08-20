@@ -3,4 +3,4 @@ export {
   renderHeading,
   type CheckboxHeadingArgs,
   type HeadingArgs,
-} from '@tuomashatakka/ansi-headings';
+} from '@tuomashatakka/ansi-headings'

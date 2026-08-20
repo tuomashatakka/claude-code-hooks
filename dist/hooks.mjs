@@ -4780,15 +4780,18 @@ function defineGenericTool(def) {
   GENERIC = { matches: () => true, ...def };
 }
 function matches(matcher, rawName) {
-  if (typeof matcher === "function") return matcher(rawName);
-  if (Array.isArray(matcher)) return matcher.includes(rawName);
+  if (typeof matcher === "function")
+    return matcher(rawName);
+  if (Array.isArray(matcher))
+    return matcher.includes(rawName);
   return matcher === rawName;
 }
 function getToolDefinition(rawName) {
-  for (const def of REGISTRY) {
-    if (matches(def.matches, rawName)) return def;
-  }
-  if (GENERIC) return GENERIC;
+  for (const def of REGISTRY)
+    if (matches(def.matches, rawName))
+      return def;
+  if (GENERIC)
+    return GENERIC;
   throw new Error(`No tool strategy registered (and no generic fallback) for ${rawName}`);
 }
 
@@ -4797,7 +4800,8 @@ import { readFileSync } from "node:fs";
 source_default.level = 3;
 var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
 function expandPersistedOutput(text2) {
-  if (typeof text2 !== "string" || !text2.includes("<persisted-output>")) return text2;
+  if (typeof text2 !== "string" || !text2.includes("<persisted-output>"))
+    return text2;
   return text2.replace(PERSISTED_RE, (match, path7) => {
     try {
       return readFileSync(path7, "utf8");
@@ -4806,11 +4810,65 @@ function expandPersistedOutput(text2) {
     }
   });
 }
+var OSC_SEQUENCE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
+var CSI_SEQUENCE = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]/g;
+var SGR_SEQUENCE = /\x1b\[([0-9;]*)m/g;
 function stripAnsi(str) {
-  return String(str).replace(/\x1b\[[0-9;]*m/g, "");
+  return String(str).replace(OSC_SEQUENCE, "").replace(CSI_SEQUENCE, "");
+}
+function expandTabs(text2, tabSize = 4) {
+  let column = 0;
+  let output = "";
+  const input = String(text2);
+  for (let index = 0; index < input.length; ) {
+    CSI_SEQUENCE.lastIndex = index;
+    const sequence = CSI_SEQUENCE.exec(input);
+    if (sequence?.index === index) {
+      output += sequence[0];
+      index += sequence[0].length;
+      continue;
+    }
+    const char = input[index];
+    if (char === "	") {
+      const count = tabSize - column % tabSize;
+      output += " ".repeat(count);
+      column += count;
+    } else {
+      output += char;
+      column += 1;
+    }
+    index += 1;
+  }
+  return output;
+}
+function withoutBackgroundSgr(text2) {
+  SGR_SEQUENCE.lastIndex = 0;
+  return text2.replace(SGR_SEQUENCE, (sequence, raw) => {
+    const values = (raw || "0").split(";").map((value) => Number(value || 0));
+    const kept = [];
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index];
+      if (value === 49 || value >= 40 && value <= 47 || value >= 100 && value <= 107)
+        continue;
+      if (value === 48) {
+        const mode = values[index + 1];
+        index += mode === 2 ? 4 : mode === 5 ? 2 : 0;
+        continue;
+      }
+      kept.push(value);
+    }
+    return kept.length ? `\x1B[${kept.join(";")}m` : "";
+  });
+}
+function normalizeCardLine(line) {
+  const withoutOsc = String(line).replace(OSC_SEQUENCE, "");
+  const withoutCursorControls = withoutOsc.replace(CSI_SEQUENCE, (sequence) => sequence.endsWith("m") ? sequence : "");
+  const withoutBackground = withoutBackgroundSgr(withoutCursorControls);
+  const withoutControls = withoutBackground.replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g, "").replace(/\r/g, "");
+  return expandTabs(withoutControls);
 }
 function visibleWidth(str) {
-  return Array.from(stripAnsi(str)).length;
+  return Array.from(expandTabs(stripAnsi(str))).length;
 }
 function truncateAnsi(text2, maxVisibleLen, ellipsis = "\u2026") {
   const csi = /\x1b\[[0-9;]*m/y;
@@ -4836,12 +4894,15 @@ function firstLine(value, maxLength) {
   return maxLength == null ? line : line.slice(0, maxLength);
 }
 function pickResultText(result, keys = ["text", "result", "output"]) {
-  if (typeof result === "string") return result;
-  if (!result || typeof result !== "object") return null;
-  const record = result;
+  if (typeof result === "string")
+    return result;
+  if (!result || typeof result !== "object")
+    return null;
+  const record3 = result;
   for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string") return value;
+    const value = record3[key];
+    if (typeof value === "string")
+      return value;
   }
   return null;
 }
@@ -4849,23 +4910,26 @@ var SAFETY_MAX_LINES = 2e3;
 function softCollapse(content, { maxLines = SAFETY_MAX_LINES, label = "lines" } = {}) {
   const text2 = String(content);
   const lines = text2.split("\n");
-  if (lines.length <= maxLines) return text2;
+  if (lines.length <= maxLines)
+    return text2;
   const head = lines.slice(0, maxLines).join("\n");
   return head + "\n" + source_default.gray.italic(`  \u2026 +${lines.length - maxLines} more ${label}`);
 }
 function wrapText(text2, width) {
-  if (width <= 0) return text2;
+  if (width <= 0)
+    return text2;
   return String(text2).split("\n").map((line) => {
     const out = [];
     let current = "";
-    for (const word of line.split(/ +/)) {
-      if (!current) current = word;
-      else if (current.length + 1 + word.length <= width) current += " " + word;
+    for (const word of line.split(/ +/))
+      if (!current)
+        current = word;
+      else if (current.length + 1 + word.length <= width)
+        current += " " + word;
       else {
         out.push(current);
         current = word;
       }
-    }
     out.push(current);
     return out.join("\n");
   }).join("\n");
@@ -4875,54 +4939,74 @@ function extractResultText(toolResponse) {
   return raw === null ? null : expandPersistedOutput(raw);
 }
 function extractResultTextRaw(toolResponse) {
-  if (typeof toolResponse === "string") return toolResponse;
-  if (!toolResponse || typeof toolResponse !== "object") return null;
-  if (Array.isArray(toolResponse)) {
-    return toolResponse.filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => b.text).join("\n") || null;
-  }
+  if (typeof toolResponse === "string")
+    return toolResponse;
+  if (!toolResponse || typeof toolResponse !== "object")
+    return null;
+  if (Array.isArray(toolResponse))
+    return textBlocks(toolResponse);
   const indexed = toolResponse;
-  if (indexed["0"]?.type === "text") {
-    return Object.values(indexed).filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => b.text).join("\n") || null;
-  }
+  if (indexed["0"]?.type === "text")
+    return textBlocks(Object.values(indexed));
   const o = toolResponse;
   const candidate = o.stdout ?? o.output ?? o.text ?? o.content;
-  if (typeof candidate === "string") return candidate;
-  if (candidate && typeof candidate === "object" && candidate !== toolResponse) {
+  if (typeof candidate === "string")
+    return candidate;
+  if (candidate && typeof candidate === "object" && candidate !== toolResponse)
     return extractResultTextRaw(candidate);
-  }
   return null;
+}
+function textBlocks(blocks) {
+  const text2 = blocks.filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => b.text).join("\n");
+  return text2 || null;
 }
 
 // src/tui/theme.ts
 source_default.level = 3;
 var TOOL_ICONS = {
-  Bash: "\u276F",
-  Write: "\u2295",
-  Edit: "\u0394",
-  Read: "\u25A4",
-  Glob: "\u2315",
-  Grep: "\u2315",
-  Task: "\u{F0495}",
-  Agent: "\u{F0495}",
-  WebFetch: "\u21CC",
-  WebSearch: "\u2315",
-  TaskCreate: "\u2713",
-  TaskUpdate: "\u2713",
-  TaskList: "\u2713",
-  ToolSearch: "\u2315",
-  ExitPlanMode: "\u23FB",
-  mcp__wcgw__BashCommand: "\u276F",
-  mcp__wcgw__FileWriteOrEdit: "\u2295",
-  mcp__wcgw__FileEdit: "\u0394",
-  mcp__wcgw__ReadFiles: "\u25A4",
-  mcp__wcgw__ReadImage: "\u25A9",
-  mcp__wcgw__Initialize: "\u23FB",
-  mcp__wcgw__ContextSave: "\u29FA",
+  "Bash": "\u276F",
+  "Write": "\u2295",
+  "Edit": "\u0394",
+  "Read": "\u25A4",
+  "Glob": "\u2315",
+  "Grep": "\u2315",
+  "Task": "\u{F0495}",
+  "Agent": "\u{F0495}",
+  "WebFetch": "\u21CC",
+  "WebSearch": "\u2315",
+  "TaskCreate": "\u2713",
+  "TaskUpdate": "\u2713",
+  "TaskList": "\u2713",
+  "TaskStop": "\u25A0",
+  "apply_patch": "\u0394",
+  "ApplyPatch": "\u0394",
+  "ToolSearch": "\u2315",
+  "AskUserQuestion": "?",
+  "view_image": "\u25A9",
+  "ViewImage": "\u25A9",
+  "update_plan": "\u224B",
+  "UpdatePlan": "\u224B",
+  "TodoWrite": "\u224B",
+  "TodoRead": "\u224B",
+  "ExitPlanMode": "\u23FB",
+  "mcp__wcgw__BashCommand": "\u276F",
+  "mcp__wcgw__FileWriteOrEdit": "\u2295",
+  "mcp__wcgw__FileEdit": "\u0394",
+  "mcp__wcgw__ReadFiles": "\u25A4",
+  "mcp__wcgw__ReadImage": "\u25A9",
+  "mcp__wcgw__Initialize": "\u23FB",
+  "mcp__wcgw__ContextSave": "\u29FA",
   "mcp__context7__query-docs": "\u21CC",
   "mcp__context7__resolve-library-id": "\u21CC",
   "mcp__claude-in-chrome__navigate": "\u21CC",
   "mcp__claude-in-chrome__read_page": "\u25A4",
-  default: "\u{F0320}"
+  "spawn_agent": "\u2B21",
+  "wait_agent": "\u25F7",
+  "followup_task": "\u21BB",
+  "send_message": "\u2192",
+  "interrupt_agent": "\u25A0",
+  "list_agents": "\u224B",
+  "default": "\u{F0320}"
 };
 var TOOL_COLORS = {
   Bash: "magenta",
@@ -4935,6 +5019,17 @@ var TOOL_COLORS = {
   Grep: "red",
   WebFetch: "cyan",
   WebSearch: "cyan",
+  TaskStop: "red",
+  ToolSearch: "cyan",
+  AskUserQuestion: "brightGreen",
+  view_image: "blue",
+  ViewImage: "blue",
+  update_plan: "cyan",
+  UpdatePlan: "cyan",
+  TodoWrite: "cyan",
+  TodoRead: "cyan",
+  apply_patch: "green",
+  ApplyPatch: "green",
   mcp__wcgw__BashCommand: "magenta",
   mcp__wcgw__FileWriteOrEdit: "green",
   mcp__wcgw__FileEdit: "green",
@@ -4942,11 +5037,21 @@ var TOOL_COLORS = {
   mcp__wcgw__ReadImage: "blue",
   mcp__wcgw__Initialize: "cyan",
   mcp__wcgw__ContextSave: "cyan",
+  spawn_agent: "green",
+  wait_agent: "gray",
+  followup_task: "cyan",
+  send_message: "cyan",
+  interrupt_agent: "red",
+  list_agents: "blue",
   default: "blue"
 };
 function parseToolName(rawName) {
-  if (!rawName || typeof rawName !== "string") {
+  if (!rawName || typeof rawName !== "string")
     return { server: null, tool: "Unknown", pretty: "Unknown" };
+  const collaboration = rawName.match(/^collaboration(?:__|[._-])?(spawn_agent|wait_agent|followup_task|send_message|interrupt_agent|list_agents)$/i);
+  if (collaboration) {
+    const tool = collaboration[1].toLowerCase();
+    return { server: "collaboration", tool, pretty: `collaboration \u25B8 ${tool.replace(/_/g, " ")}` };
   }
   if (rawName.startsWith("mcp__")) {
     const rest = rawName.slice(5);
@@ -4961,23 +5066,35 @@ function parseToolName(rawName) {
   return { server: null, tool: rawName, pretty: rawName };
 }
 function getToolIcon(rawName) {
-  if (TOOL_ICONS[rawName]) return TOOL_ICONS[rawName];
+  if (TOOL_ICONS[rawName])
+    return TOOL_ICONS[rawName];
   const { tool } = parseToolName(rawName);
-  if (TOOL_ICONS[tool]) return TOOL_ICONS[tool];
-  if (/bash|command|exec|shell/i.test(tool)) return TOOL_ICONS.Bash;
-  if (/write|edit|create/i.test(tool)) return TOOL_ICONS.Write;
-  if (/read|get|fetch|load/i.test(tool)) return TOOL_ICONS.Read;
-  if (/search|find|grep|query|glob/i.test(tool)) return TOOL_ICONS.Grep;
+  if (TOOL_ICONS[tool])
+    return TOOL_ICONS[tool];
+  if (/bash|command|exec|shell/i.test(tool))
+    return TOOL_ICONS.Bash;
+  if (/write|edit|create/i.test(tool))
+    return TOOL_ICONS.Write;
+  if (/read|get|fetch|load/i.test(tool))
+    return TOOL_ICONS.Read;
+  if (/search|find|grep|query|glob/i.test(tool))
+    return TOOL_ICONS.Grep;
   return TOOL_ICONS.default;
 }
 function getToolColor(rawName) {
-  if (TOOL_COLORS[rawName]) return TOOL_COLORS[rawName];
+  if (TOOL_COLORS[rawName])
+    return TOOL_COLORS[rawName];
   const { tool } = parseToolName(rawName);
-  if (TOOL_COLORS[tool]) return TOOL_COLORS[tool];
-  if (/bash|command|exec|shell/i.test(tool)) return "magenta";
-  if (/write|edit|create/i.test(tool)) return "green";
-  if (/read|get|fetch|load/i.test(tool)) return "blue";
-  if (/search|find|grep|query|glob/i.test(tool)) return "red";
+  if (TOOL_COLORS[tool])
+    return TOOL_COLORS[tool];
+  if (/bash|command|exec|shell/i.test(tool))
+    return "magenta";
+  if (/write|edit|create/i.test(tool))
+    return "green";
+  if (/read|get|fetch|load/i.test(tool))
+    return "blue";
+  if (/search|find|grep|query|glob/i.test(tool))
+    return "red";
   return TOOL_COLORS.default;
 }
 var BACKGROUND_COLOR_MAP = {
@@ -5027,13 +5144,12 @@ function getBadgeTextColor(name) {
 
 // src/tui/badge.ts
 function resolveBadge(props) {
-  if (props.toolName) {
+  if (props.toolName)
     return {
       text: parseToolName(props.toolName).pretty,
       color: props.color ?? getToolColor(props.toolName),
       icon: props.icon ?? getToolIcon(props.toolName)
     };
-  }
   return {
     text: props.label ?? "",
     color: props.color ?? "cyan",
@@ -5077,21 +5193,13 @@ var TUI_TOKENS = {
   },
   card: {
     background: "#302f32",
+    commandBackground: "#272629",
     ruleFallback: "#4a4a4a",
     border: "#5a595c",
-    shadow: "#1b1a1c",
     horizontalPadding: 2,
     minimumHairline: 4,
-    /**
-     * Columns a card spends on chrome rather than content: `▏` + `▕`, plus the
-     * one `░` column a shadowed card hangs off its right edge. Reserved for
-     * every card so a shadow can be switched on without reflowing the layout.
-     */
-    chromeColumns: 3
-  },
-  columns: {
-    gap: 3,
-    comfortMargin: 4
+    // Cards keep only their top rule. Content spans the whole measured width.
+    chromeColumns: 0
   }
 };
 
@@ -5099,9 +5207,11 @@ var TUI_TOKENS = {
 source_default.level = 3;
 var cachedColumns = null;
 function terminalColumns() {
-  if (cachedColumns !== null) return cachedColumns;
+  if (cachedColumns !== null)
+    return cachedColumns;
   const declared = process.stdout.columns || process.stderr.columns || Number(process.env.COLUMNS) || 0;
-  if (declared > 0) return cachedColumns = declared;
+  if (declared > 0)
+    return cachedColumns = declared;
   try {
     const fd = fs.openSync("/dev/tty", "r+");
     const stream = new tty2.WriteStream(fd);
@@ -5121,43 +5231,50 @@ function getMaxContentWidth() {
   const { horizontalPadding, chromeColumns } = TUI_TOKENS.card;
   return Math.max(20, getMaxLayoutWidth() - horizontalPadding * 2 - chromeColumns);
 }
-var EDGE_LEFT = "\u258F";
-var EDGE_RIGHT = "\u2595";
-var EDGE_BOTTOM = "\u2594";
 var EDGE_TOP = "\u2581";
-var SHADOW = "\u2591";
 function borderInk(text2) {
   return source_default.hex(TUI_TOKENS.card.border)(text2);
-}
-function shadowInk(text2) {
-  return source_default.hex(TUI_TOKENS.card.shadow)(text2);
 }
 function renderBoxTopEdge(width) {
   return borderInk(EDGE_TOP.repeat(Math.max(0, width)));
 }
-function prepareBox({ content, minimumWidth = 0, shadow = false, footerText = "" }) {
+function regionList(content) {
+  return typeof content === "string" ? [{ content }] : [...content];
+}
+function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
   const maxWidth = getMaxContentWidth();
   const { background, horizontalPadding } = TUI_TOKENS.card;
-  const lines = String(content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
-  const contentWidth = Math.min(Math.max(...lines.map(visibleWidth), 0), maxWidth);
-  const innerWidth = Math.max(contentWidth + horizontalPadding * 2, minimumWidth - 2);
-  const width = innerWidth + 2;
-  const fill = source_default.bgHex(background);
-  const left = borderInk(EDGE_LEFT);
-  const right = borderInk(EDGE_RIGHT);
-  const shade = shadow ? shadowInk(SHADOW) : "";
-  const frame = (row) => left + fill(row) + right + shade;
-  const padding = frame(" ".repeat(innerWidth));
-  const body = lines.map(
-    (line) => frame(
-      " ".repeat(horizontalPadding) + line + " ".repeat(Math.max(0, innerWidth - horizontalPadding - visibleWidth(line)))
-    )
-  );
+  const regions = regionList(content).map((region) => {
+    const headingList = region.heading === void 0 ? [] : Array.isArray(region.heading) ? region.heading : [region.heading];
+    const heading = renderBadges(...headingList);
+    const lines = String(region.content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map(normalizeCardLine).map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
+    return { background: region.background ?? background, heading, lines };
+  });
+  const contentWidth = Math.min(Math.max(
+    ...regions.flatMap((region) => [visibleWidth(region.heading), ...region.lines.map(visibleWidth)]),
+    0
+  ), maxWidth);
+  const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
   const footerWidth = visibleWidth(footerText);
-  const bottom = footerWidth > 0 && footerWidth < width ? borderInk(EDGE_BOTTOM.repeat(width - footerWidth)) + footerText + shade : borderInk(EDGE_BOTTOM.repeat(width)) + shade;
-  const cast = shadow ? " " + shadowInk(SHADOW.repeat(width)) : null;
+  const rows = [];
+  for (const region of regions) {
+    const fill = source_default.bgHex(region.background);
+    const frame = (line, leftPadding = horizontalPadding) => fill(
+      " ".repeat(leftPadding) + line + " ".repeat(Math.max(0, width - leftPadding - visibleWidth(line)))
+    );
+    rows.push(fill(" ".repeat(width)));
+    if (region.heading)
+      rows.push(frame(region.heading, 0));
+    rows.push(...region.lines.map((line) => frame(line)));
+  }
+  const lastBackground = regions.at(-1)?.background ?? background;
+  const fillLast = source_default.bgHex(lastBackground);
+  if (footerWidth > 0 && footerWidth <= width)
+    rows.push(fillLast(" ".repeat(width - footerWidth) + footerText));
+  else
+    rows.push(fillLast(" ".repeat(width)));
   return {
-    lines: [padding, ...body, padding, bottom, ...cast ? [cast] : []],
+    lines: rows,
     width
   };
 }
@@ -5165,17 +5282,21 @@ function renderBox(props) {
   const box = prepareBox(props);
   return ["", renderBoxTopEdge(box.width), ...box.lines, ""].join("\n");
 }
-function renderCard({ badges, content, minimumWidth = 0, shadow = false, footer }) {
+function renderCard({ badges, content, minimumWidth = 0, footer }) {
   const badgeList = Array.isArray(badges) ? badges : [badges];
   const footerList = footer === void 0 ? [] : Array.isArray(footer) ? footer : [footer];
   const footerText = renderBadges(...footerList);
   const title = renderBadges(...badgeList);
-  if (!title) return renderBox({ content, minimumWidth, shadow, footerText });
+  if (!title)
+    return renderBox({
+      content,
+      footerText,
+      minimumWidth: Math.max(minimumWidth, visibleWidth(footerText) + TUI_TOKENS.card.minimumHairline)
+    });
   const badgeWidth = visibleWidth(title);
   const { minimumHairline } = TUI_TOKENS.card;
   const box = prepareBox({
     content,
-    shadow,
     footerText,
     minimumWidth: Math.max(
       minimumWidth,
@@ -5190,32 +5311,8 @@ function renderCard({ badges, content, minimumWidth = 0, shadow = false, footer 
 }
 
 // src/tui/columns.ts
-function prepareColumn(item) {
-  const lines = item.replace(/^\n+|\n+$/g, "").split("\n");
-  return {
-    lines,
-    width: Math.max(...lines.map(visibleWidth), 0)
-  };
-}
-function renderColumns({
-  items,
-  gap = TUI_TOKENS.columns.gap,
-  maximumWidth = getMaxLayoutWidth() - TUI_TOKENS.columns.comfortMargin
-}) {
-  const visibleItems = items.filter(Boolean);
-  if (visibleItems.length < 2) return visibleItems[0] ?? "";
-  const columns = visibleItems.map(prepareColumn);
-  const combinedWidth = columns.reduce((total, column) => total + column.width, 0) + gap * (columns.length - 1);
-  if (combinedWidth > maximumWidth) return visibleItems.join("\n");
-  const height = Math.max(...columns.map((column) => column.lines.length));
-  const rows = Array.from(
-    { length: height },
-    (_, row) => columns.map((column) => {
-      const line = column.lines[row] ?? "";
-      return line + " ".repeat(Math.max(0, column.width - visibleWidth(line)));
-    }).join(" ".repeat(gap)).trimEnd()
-  );
-  return "\n" + rows.join("\n") + "\n";
+function renderColumns({ items }) {
+  return items.filter(Boolean).map((item) => item.replace(/^\n+|\n+$/g, "")).join("\n\n");
 }
 
 // src/tui/duration.ts
@@ -5225,7 +5322,8 @@ function renderDuration(durationMs) {
 }
 function pushDurationLine(lines, durationMs) {
   const duration = renderDuration(durationMs);
-  if (duration) lines.push(duration);
+  if (duration)
+    lines.push(duration);
 }
 
 // src/tui/file-card.ts
@@ -5235,8 +5333,10 @@ function displayPath(filePath) {
   const cwd = process.cwd();
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
   const candidates = [text2];
-  if (text2.startsWith(cwd + nodePath.sep)) candidates.push(text2.slice(cwd.length + 1));
-  if (home && text2.startsWith(home + nodePath.sep)) candidates.push("~" + text2.slice(home.length));
+  if (text2.startsWith(cwd + nodePath.sep))
+    candidates.push(text2.slice(cwd.length + 1));
+  if (home && text2.startsWith(home + nodePath.sep))
+    candidates.push("~" + text2.slice(home.length));
   return candidates.reduce((best, c) => c.length < best.length ? c : best);
 }
 function renderFileCard({
@@ -5250,14 +5350,10 @@ function renderFileCard({
       new Badge({ label: displayPath(path7), color: "cyan", icon: "\u25A4" }),
       ...badges
     ],
-    // The action and line range describe the content, not the file, so they
-    // close the box off at the bottom right instead of trailing the path.
+    // The action and line range describe the content, not the file, so they sit
+    // inside the bottom-right corner instead of trailing the path.
     footer: details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : void 0,
-    content,
-    // The one card that earns the extra glyph column: a file preview is the
-    // tallest thing a tool renders, and the shadow keeps it from reading as
-    // part of the surrounding scrollback.
-    shadow: true
+    content
   });
 }
 
@@ -5568,24 +5664,43 @@ function renderCheckboxHeading(value, legacyColor = "green") {
 
 // src/tui/output-limit.ts
 source_default.level = 3;
-function renderOutputLimit({ omitted, unit }) {
-  const label = omitted === 1 ? unit.slice(0, -1) : unit;
-  return source_default.gray.italic(`  \u2026 ${omitted.toLocaleString("en-US")} ${label} omitted \u2026`);
-}
 
 // src/tui/ruler.ts
 source_default.level = 3;
 function renderRuler(line) {
   const plain = stripAnsi(line).trim();
   const match = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
-  if (!match) return null;
+  if (!match)
+    return null;
   const character = match[1][0] === "=" || match[1][0] === "\u2550" ? "\u2550" : "\u2500";
   const text2 = match[2].replace(/[-=─═]{3,}\s*$/, "").trim();
-  if (!text2) return source_default.gray(character.repeat(TUI_TOKENS.width.divider));
+  if (!text2)
+    return source_default.gray(character.repeat(TUI_TOKENS.width.divider));
   const label = ` ${text2} `;
   const remaining = Math.max(6, TUI_TOKENS.width.divider - label.length);
   const left = Math.floor(remaining / 2);
   return source_default.gray(character.repeat(left)) + source_default.bold(label) + source_default.gray(character.repeat(remaining - left));
+}
+function splitRulerSections(text2) {
+  const sections = [];
+  let lines = [];
+  let beginsWithRuler = false;
+  const flush = () => {
+    if (!lines.length)
+      return;
+    sections.push({ content: lines.join("\n"), beginsWithRuler });
+    lines = [];
+  };
+  for (const line of String(text2).split("\n")) {
+    if (renderRuler(line) !== null) {
+      flush();
+      beginsWithRuler = true;
+    } else if (!lines.length)
+      beginsWithRuler = false;
+    lines.push(line);
+  }
+  flush();
+  return sections;
 }
 
 // src/tui/section.ts
@@ -5593,16 +5708,19 @@ function renderSection({ badges, lines = [] }) {
   const badgeList = Array.isArray(badges) ? badges : [badges];
   let output = renderBadges(...badgeList);
   const body = lines.filter((line) => Boolean(line));
-  if (body.length) output += "\n\n" + body.join("\n");
+  if (body.length)
+    output += "\n\n" + body.join("\n");
   return output;
 }
 
 // src/render/highlight.ts
 source_default.level = 3;
 function isJSON(str) {
-  if (typeof str !== "string") return false;
+  if (typeof str !== "string")
+    return false;
   const t = str.trim();
-  if (!t || t[0] !== "{" && t[0] !== "[") return false;
+  if (!t || t[0] !== "{" && t[0] !== "[")
+    return false;
   try {
     JSON.parse(t);
     return true;
@@ -5611,7 +5729,8 @@ function isJSON(str) {
   }
 }
 function isCode(str) {
-  if (typeof str !== "string") return false;
+  if (typeof str !== "string")
+    return false;
   const codePatterns = [
     /^(function|const|let|var|class|import|export|if|for|while|return)\s/m,
     /^(def|class|import|from|if|for|while|return)\s/m,
@@ -5669,30 +5788,48 @@ var EXT_TO_LANG = {
   env: "bash"
 };
 function langFromPath(filePath) {
-  if (!filePath) return null;
+  if (!filePath)
+    return null;
   const m = String(filePath).match(/\.([^./\s]+)$/);
   return m ? EXT_TO_LANG[m[1].toLowerCase()] ?? null : null;
 }
 function detectContentLanguage(content) {
-  if (isJSON(String(content))) return "json";
-  if (/^diff --git /m.test(content) || /^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/m.test(content) || /^--- \S/m.test(content) && /^\+\+\+ \S/m.test(content)) return "diff";
-  const shebang = content.match(/^#!\s*\S*?\/(?:env\s+)?([\w.-]+)/);
-  if (shebang) {
-    const interp = shebang[1];
-    if (/^(ba|z|da|k|)sh$/.test(interp)) return "bash";
-    if (/^python/.test(interp)) return "python";
-    if (/^(node|bun|deno)/.test(interp)) return "javascript";
-  }
+  const early = detectStructuredLanguage(content);
+  if (early)
+    return early;
   const t = content.trimStart();
-  if (/^<!DOCTYPE html/i.test(t) || /^<(html|head|body)\b/i.test(t)) return "html";
-  if (/^<\?xml/.test(t)) return "xml";
-  if (/^\s*(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE (TABLE|INDEX|VIEW)|ALTER TABLE)\b/im.test(content)) return "sql";
-  if (/^\s*(def|class)\s+\w+.*:\s*$/m.test(content) || /^(from \w[\w.]* import|import \w+)\s*$/m.test(content)) return "python";
-  if (/^\s*(export\s+)?(interface|type|enum)\s+\w+/m.test(content) || /:\s*(string|number|boolean|void|unknown|never)\b/.test(content)) return "typescript";
-  if (/^(import|export)\s.*from\s+['"]/m.test(content) || /^\s*(const|let|var|function)\s+\w/m.test(content) || /=>\s*[{(]/.test(content)) return "javascript";
-  if (/^#{1,6}\s+\S/m.test(content) && (/^\s*[-*+]\s+\S/m.test(content) || /```/.test(content))) return "markdown";
+  const checks = [
+    ["html", /^<!DOCTYPE html/i.test(t) || /^<(html|head|body)\b/i.test(t)],
+    ["xml", /^<\?xml/.test(t)],
+    ["sql", /^\s*(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE (TABLE|INDEX|VIEW)|ALTER TABLE)\b/im.test(content)],
+    ["python", /^\s*(def|class)\s+\w+.*:\s*$/m.test(content) || /^(from \w[\w.]* import|import \w+)\s*$/m.test(content)],
+    ["typescript", /^\s*(export\s+)?(interface|type|enum)\s+\w+/m.test(content) || /:\s*(string|number|boolean|void|unknown|never)\b/.test(content)],
+    ["javascript", /^(import|export)\s.*from\s+['"]/m.test(content) || /^\s*(const|let|var|function)\s+\w/m.test(content) || /=>\s*[{(]/.test(content)],
+    ["markdown", /^#{1,6}\s+\S/m.test(content) && (/^\s*[-*+]\s+\S/m.test(content) || /```/.test(content))]
+  ];
+  const match = checks.find(([, matched]) => matched);
+  if (match)
+    return match[0];
   const yamlKeys = content.match(/^[\w."'-]+:(\s+\S|$)/gm);
-  if (yamlKeys && yamlKeys.length >= 2 && !/[{};]/.test(content)) return "yaml";
+  if (yamlKeys && yamlKeys.length >= 2 && !/[{};]/.test(content))
+    return "yaml";
+  return null;
+}
+function detectStructuredLanguage(content) {
+  if (isJSON(String(content)))
+    return "json";
+  if (/^diff --git /m.test(content) || /^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/m.test(content) || /^--- \S/m.test(content) && /^\+\+\+ \S/m.test(content))
+    return "diff";
+  const shebang = content.match(/^#!\s*\S*?\/(?:env\s+)?([\w.-]+)/);
+  if (!shebang)
+    return null;
+  const interp = shebang[1];
+  if (/^(ba|z|da|k|)sh$/.test(interp))
+    return "bash";
+  if (/^python/.test(interp))
+    return "python";
+  if (/^(node|bun|deno)/.test(interp))
+    return "javascript";
   return null;
 }
 function detectOutputLanguage(text2) {
@@ -5703,9 +5840,11 @@ function detectLanguage(content, toolName) {
   if (tool === "Read" || tool === "ReadFiles") {
     const extMatch = content.match(/\.([a-z0-9]+)$/m);
     const byExt = extMatch ? EXT_TO_LANG[extMatch[1].toLowerCase()] : null;
-    if (byExt) return byExt;
+    if (byExt)
+      return byExt;
   }
-  if (tool === "Bash" || tool === "BashCommand") return "bash";
+  if (tool === "Bash" || tool === "BashCommand")
+    return "bash";
   return detectContentLanguage(content) ?? "text";
 }
 var HIGHLIGHTERS = {
@@ -5729,7 +5868,8 @@ function simpleHighlight(code, language) {
 }
 var ANSI_SEQ = /\x1b\[[0-9;]*[a-zA-Z]/g;
 function replaceOutsideAnsi(input, pattern, replacer) {
-  if (!input.includes("\x1B")) return input.replace(pattern, replacer);
+  if (!input.includes("\x1B"))
+    return input.replace(pattern, replacer);
   let out = "";
   let last = 0;
   ANSI_SEQ.lastIndex = 0;
@@ -5749,35 +5889,38 @@ function highlightJSON(code) {
   return result;
 }
 function highlightJS(code) {
-  let result = code;
-  result = result.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/)/gm, (m) => source_default.gray(m));
-  result = result.replace(/(["'`])(?:(?!\1)[^\\]|\\.)*\1/g, (m) => source_default.green(m));
-  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
-  result = result.replace(
-    /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|static|interface|type|enum|extends|implements|typeof|instanceof|in|of|yield|switch|case|default|break|continue|do|void|delete)\b/g,
-    (m) => source_default.cyan(m)
-  );
-  result = result.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()/g, (m) => source_default.magenta(m));
-  return result;
+  const tokens = /(?<comment>\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(?<string>(?<quote>["'`])(?:(?!\k<quote>)[^\\]|\\.)*\k<quote>)|(?<number>\b\d+\.?\d*\b)|(?<keyword>\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|static|interface|type|enum|extends|implements|typeof|instanceof|in|of|yield|switch|case|default|break|continue|do|void|delete)\b)|(?<call>\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\())/g;
+  return code.replace(tokens, (token, ...args) => {
+    const groups = args.at(-1);
+    if (groups.comment)
+      return source_default.gray(token);
+    if (groups.string)
+      return source_default.green(token);
+    if (groups.number)
+      return source_default.yellow(token);
+    if (groups.keyword)
+      return source_default.cyan(token);
+    return source_default.magenta(token);
+  });
 }
 function highlightBash(code) {
-  let result = code;
-  result = result.replace(/(^|\n)(\s*#.*)/g, (_, p1, p2) => p1 + source_default.gray(p2));
-  result = result.replace(/"([^"\\]|\\.)*"/g, (m) => source_default.green(m));
-  result = result.replace(/'([^'\\]|\\.)*'/g, (m) => source_default.green(m));
-  result = result.replace(/\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@#?*!\$]/g, (m) => source_default.yellow(m));
-  result = result.replace(/(^|\s)(--?[\w][\w-]*)/g, (_, p1, p2) => p1 + source_default.hex("#e0af68")(p2));
-  result = result.replace(
-    /\b(if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|export|local|readonly|declare|set|unset|source|exit|break|continue)\b/g,
-    (m) => source_default.cyan(m)
-  );
-  result = result.replace(
-    /\b(echo|printf|cd|pwd|ls|cat|grep|rg|sed|awk|jq|curl|wget|git|gh|npm|npx|bun|bunx|node|deno|python|python3|pip|pip3|uv|docker|kubectl|make|cargo|go|rustc|tsc|find|xargs|tar|zip|unzip|chmod|chown|mkdir|rm|mv|cp|ln|touch|env|which|head|tail|sort|uniq|wc|tee|read|diff|patch|ssh|scp|rsync|kill|ps|open|brew|apt|yarn|pnpm)\b/g,
-    (m) => source_default.magenta(m)
-  );
-  result = result.replace(/(\||>>?|<|2>&1|&&|\|\|)/g, (m) => source_default.gray(m));
-  result = replaceOutsideAnsi(result, /\b\d+\b/g, (m) => source_default.yellow(m));
-  return result;
+  const tokens = /(?<string>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(?<variable>\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@#?*!$])|(?<flag>(?<!\S)--?[\w][\w-]*)|(?<keyword>\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|export|local|readonly|declare|set|unset|source|exit|break|continue)\b)|(?<command>\b(?:echo|printf|cd|pwd|ls|cat|grep|rg|sed|awk|jq|curl|wget|git|gh|npm|npx|bun|bunx|node|deno|python|python3|pip|pip3|uv|docker|kubectl|make|cargo|go|rustc|tsc|find|xargs|tar|zip|unzip|chmod|chown|mkdir|rm|mv|cp|ln|touch|env|which|head|tail|sort|uniq|wc|tee|read|diff|patch|ssh|scp|rsync|kill|ps|open|brew|apt|yarn|pnpm)\b)|(?<operator>2>&1|&&|\|\||>>?|[|<])|(?<number>\b\d+\b)/g;
+  return code.split("\n").map((line) => {
+    if (/^\s*#/.test(line))
+      return source_default.gray(line);
+    return line.replace(tokens, (token, ...args) => {
+      const groups = args.at(-1);
+      if (groups.string)
+        return source_default.green(token);
+      if (groups.variable || groups.flag || groups.number)
+        return source_default.yellow(token);
+      if (groups.keyword)
+        return source_default.cyan(token);
+      if (groups.command)
+        return source_default.magenta(token);
+      return source_default.gray(token);
+    });
+  }).join("\n");
 }
 function highlightPython(code) {
   let result = code;
@@ -5796,7 +5939,8 @@ function highlightPython(code) {
 }
 function highlightYaml(code) {
   return code.split("\n").map((line) => {
-    if (/^\s*#/.test(line)) return source_default.gray(line);
+    if (/^\s*#/.test(line))
+      return source_default.gray(line);
     let out = line;
     out = out.replace(
       /^(\s*-?\s*)([\w."'-]+)(:)(\s|$)/,
@@ -5811,11 +5955,16 @@ function highlightYaml(code) {
 }
 function highlightDiff(code) {
   return code.split("\n").map((line) => {
-    if (/^(diff --git|index |new file|deleted file|similarity|rename )/.test(line)) return source_default.gray.bold(line);
-    if (/^(--- |\+\+\+ )/.test(line)) return source_default.bold(line);
-    if (/^@@ /.test(line)) return source_default.cyan(line);
-    if (line.startsWith("+")) return source_default.green(line);
-    if (line.startsWith("-")) return source_default.red(line);
+    if (/^(diff --git|index |new file|deleted file|similarity|rename )/.test(line))
+      return source_default.gray.bold(line);
+    if (/^(--- |\+\+\+ )/.test(line))
+      return source_default.bold(line);
+    if (/^@@ /.test(line))
+      return source_default.cyan(line);
+    if (line.startsWith("+"))
+      return source_default.green(line);
+    if (line.startsWith("-"))
+      return source_default.red(line);
     return line;
   }).join("\n");
 }
@@ -5858,12 +6007,15 @@ var OUTPUT_PATH_RE = /(^|[\s('"=])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+(?::
 var OUTPUT_METRIC_RE = /\b\d+(?:[.,]\d+)?\s?(?:ms|s|m|h|[KMGT]i?B|kb|mb|gb|%)\b/g;
 function highlightOutput(code) {
   return code.split("\n").map((line) => {
-    if (/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i.test(line)) return source_default.red(line);
-    if (/\b(warn|warning|deprecated)\b/i.test(line)) return source_default.yellow(line);
-    if (/\b(success|succeeded|passed|completed?)\b/i.test(line) || /[✓✔]/.test(line)) return source_default.green(line);
+    if (/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i.test(line))
+      return source_default.red(line);
+    if (/\b(warn|warning|deprecated)\b/i.test(line))
+      return source_default.yellow(line);
+    if (/\b(success|succeeded|passed|completed?)\b/i.test(line) || /[✓✔]/.test(line))
+      return source_default.green(line);
     let out = line;
     out = out.replace(OUTPUT_METRIC_RE, (m) => source_default.yellow(m));
-    out = out.replace(OUTPUT_URL_RE, (m) => source_default.cyan.underline(m));
+    out = out.replace(OUTPUT_URL_RE, (m) => source_default.cyan(m));
     out = out.replace(OUTPUT_PATH_RE, (_m, pre, p) => pre + source_default.cyan(p));
     return out;
   }).join("\n");
@@ -5892,15 +6044,15 @@ function highlightMarkdown(code) {
   result = result.replace(/__([^_]+)__/g, (_m, t) => source_default.bold(t));
   result = result.replace(/(?<![*_])\*([^*\n]+)\*(?!\*)/g, (_m, t) => source_default.italic(t));
   result = result.replace(/(?<![*_])_([^_\n]+)_(?!_)/g, (_m, t) => source_default.italic(t));
-  result = result.replace(/`([^`\n]+)`/g, (_m, t) => source_default.bgHex("#1e1e1e").white(t));
+  result = result.replace(/`([^`\n]+)`/g, (_m, t) => source_default.inverse(t));
   result = result.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
     (_m, text2, url) => source_default.cyan(text2) + source_default.gray(" (") + source_default.gray.underline(url) + source_default.gray(")")
   );
   return result;
 }
-var META_KEY = source_default.hex("#7aa2f7");
-var META_STR = source_default.hex("#9ece6a");
+var META_KEY = source_default.cyan;
+var META_STR = source_default.green;
 var META_NUM = source_default.yellow;
 var META_PUNCT = source_default.gray;
 var META_STR_MAX = 200;
@@ -5909,34 +6061,45 @@ function flattenString(s) {
   return collapsed.length > META_STR_MAX ? collapsed.slice(0, META_STR_MAX - 1) + "\u2026" : collapsed;
 }
 function formatMetaValue(val, depth) {
-  if (val === null) return META_NUM("null");
-  if (val === void 0) return META_NUM("undefined");
-  if (typeof val === "boolean") return META_NUM(String(val));
-  if (typeof val === "number") return META_NUM(String(val));
-  if (typeof val === "string") return META_STR(flattenString(val));
+  if (val === null)
+    return META_NUM("null");
+  if (val === void 0)
+    return META_NUM("undefined");
+  if (typeof val === "boolean")
+    return META_NUM(String(val));
+  if (typeof val === "number")
+    return META_NUM(String(val));
+  if (typeof val === "string")
+    return META_STR(flattenString(val));
   const pad = "  ".repeat(depth + 1);
   const cpad = "  ".repeat(depth);
   if (Array.isArray(val)) {
-    if (val.length === 0) return META_PUNCT("[ ]");
+    if (val.length === 0)
+      return META_PUNCT("[ ]");
     const items = val.map((v) => formatMetaValue(v, depth + 1));
     const inline = META_PUNCT("[ ") + items.join(META_PUNCT(", ")) + META_PUNCT(" ]");
-    if (stripAnsi(inline).length <= 50) return inline;
+    if (stripAnsi(inline).length <= 50)
+      return inline;
     return META_PUNCT("[\n") + items.map((i) => pad + i).join(META_PUNCT(",\n")) + "\n" + cpad + META_PUNCT("]");
   }
   if (typeof val === "object") {
     const entries = Object.entries(val);
-    if (entries.length === 0) return META_PUNCT("{ }");
+    if (entries.length === 0)
+      return META_PUNCT("{ }");
     const pairs = entries.map(([k, v]) => META_KEY(k) + META_PUNCT(": ") + formatMetaValue(v, depth + 1));
     const inline = META_PUNCT("{ ") + pairs.join(META_PUNCT(", ")) + META_PUNCT(" }");
-    if (stripAnsi(inline).length <= 50) return inline;
+    if (stripAnsi(inline).length <= 50)
+      return inline;
     return META_PUNCT("{\n") + pairs.map((p) => pad + p).join(META_PUNCT(",\n")) + "\n" + cpad + META_PUNCT("}");
   }
   return String(val);
 }
 function formatMetadataCustom(obj) {
-  if (!obj || typeof obj !== "object") return String(obj);
+  if (!obj || typeof obj !== "object")
+    return String(obj);
   const entries = Object.entries(obj);
-  if (!entries.length) return "";
+  if (!entries.length)
+    return "";
   const keyWidth = Math.max(...entries.map(([k]) => k.length));
   return entries.map(([k, v]) => {
     const gap = " ".repeat(keyWidth - k.length);
@@ -5947,13 +6110,11 @@ function formatMetadataCustom(obj) {
 // src/parsers/wcgw-trailer.ts
 var TRAILER_SEP = /\n---\s*\n/;
 function parseWcgwTrailer(rawOutput) {
-  if (typeof rawOutput !== "string") {
+  if (typeof rawOutput !== "string")
     return { stdout: String(rawOutput ?? ""), status: null, cwd: null, extra: {} };
-  }
   const sepMatch = TRAILER_SEP.exec(rawOutput);
-  if (!sepMatch) {
+  if (!sepMatch)
     return { stdout: rawOutput, status: null, cwd: null, extra: {} };
-  }
   const stdout = rawOutput.slice(0, sepMatch.index);
   const trailerRaw = rawOutput.slice(sepMatch.index + sepMatch[0].length);
   const status = extractField(trailerRaw, "status");
@@ -5962,9 +6123,8 @@ function parseWcgwTrailer(rawOutput) {
   const extra = {};
   for (const line of trailerRaw.split("\n")) {
     const m = /^([a-z_][a-z0-9_ ]*?)\s*=\s*(.*)$/.exec(line.trim());
-    if (m && !knownKeys.has(m[1].trim())) {
+    if (m && !knownKeys.has(m[1].trim()))
       extra[m[1].trim()] = m[2].trim();
-    }
   }
   return { stdout, status, cwd, extra };
 }
@@ -5974,9 +6134,11 @@ function extractField(text2, key) {
   return m ? m[1].trim() : null;
 }
 function shortenPath(p, home) {
-  if (!p) return String(p ?? "");
+  if (!p)
+    return String(p ?? "");
   const h = home ?? process.env.HOME ?? process.env.USERPROFILE ?? "";
-  if (h && p.startsWith(h)) return "~" + p.slice(h.length);
+  if (h && p.startsWith(h))
+    return "~" + p.slice(h.length);
   return p;
 }
 
@@ -6020,9 +6182,12 @@ function shellWords(command) {
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
     if (quote) {
-      if (quote === '"' && ch === "\\" && i + 1 < command.length) current += command[++i];
-      else if (ch === quote) quote = null;
-      else current += ch;
+      if (quote === '"' && ch === "\\" && i + 1 < command.length)
+        current += command[++i];
+      else if (ch === quote)
+        quote = null;
+      else
+        current += ch;
       continue;
     }
     if (ch === '"' || ch === "'") {
@@ -6030,14 +6195,18 @@ function shellWords(command) {
       continue;
     }
     if (/\s/.test(ch)) {
-      if (current) words.push(current);
+      if (current)
+        words.push(current);
       current = "";
       continue;
     }
-    if (ch === "\\" && i + 1 < command.length) current += command[++i];
-    else current += ch;
+    if (ch === "\\" && i + 1 < command.length)
+      current += command[++i];
+    else
+      current += ch;
   }
-  if (current) words.push(current);
+  if (current)
+    words.push(current);
   return words;
 }
 function executableName(token) {
@@ -6046,13 +6215,17 @@ function executableName(token) {
 function operationFromAgentBrowserSegment(segment) {
   const words = shellWords(segment);
   const executableIndex = words.findIndex((word) => executableName(word) === "agent-browser");
-  if (executableIndex < 0) return null;
+  if (executableIndex < 0)
+    return null;
   for (let i = executableIndex + 1; i < words.length; i++) {
     const word = words[i];
-    if (word === "--") return words[i + 1] ?? null;
-    if (!word.startsWith("-")) return word;
+    if (word === "--")
+      return words[i + 1] ?? null;
+    if (!word.startsWith("-"))
+      return word;
     const option = word.includes("=") ? word.slice(0, word.indexOf("=")) : word;
-    if (!word.includes("=") && VALUE_OPTIONS.has(option)) i++;
+    if (!word.includes("=") && VALUE_OPTIONS.has(option))
+      i++;
   }
   return null;
 }
@@ -6060,7 +6233,8 @@ function agentBrowserOperations(segments) {
   const operations = [];
   for (const segment of segments) {
     const operation = operationFromAgentBrowserSegment(segment);
-    if (operation && !operations.includes(operation)) operations.push(operation);
+    if (operation && !operations.includes(operation))
+      operations.push(operation);
   }
   return operations;
 }
@@ -7458,8 +7632,7 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
 // src/runtime/output-transport.ts
 var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
 var HOOK_FIELD_CHAR_LIMIT = 1e4;
-var SAFETY_MARGIN = 200;
-var HOOK_RESPONSE_CHAR_BUDGET = HOOK_FIELD_CHAR_LIMIT - SAFETY_MARGIN;
+var HOOK_RESPONSE_CHAR_BUDGET = HOOK_FIELD_CHAR_LIMIT;
 function responseWithMessage(data, systemMessage) {
   return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
 }
@@ -7473,63 +7646,15 @@ function systemMessageHeadroom(data) {
   const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
   return Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - messageCost(current));
 }
-function findLargestCandidate(maximum, render, accepts) {
-  let low = 0;
-  let high = maximum;
-  let best = { text: render(0), retained: 0 };
-  while (low <= high) {
-    const retained = Math.floor((low + high) / 2);
-    const text2 = render(retained);
-    if (accepts(text2)) {
-      best = { text: text2, retained };
-      low = retained + 1;
-    } else {
-      high = retained - 1;
-    }
-  }
-  return best;
-}
-function splitRetained(total) {
-  const head = Math.ceil(total * 0.6);
-  return { head, tail: total - head };
-}
-function limitByLines(systemMessage) {
-  const lines = systemMessage.split("\n");
-  return findLargestCandidate(
-    Math.max(0, lines.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        ...lines.slice(0, head),
-        renderOutputLimit({ omitted: lines.length - retained, unit: "lines" }),
-        ...tail > 0 ? lines.slice(-tail) : []
-      ].join("\n");
-    },
-    fits
-  );
-}
-function limitByCharacters(systemMessage) {
-  const characters = Array.from(stripAnsi(systemMessage));
-  return findLargestCandidate(
-    Math.max(0, characters.length - 1),
-    (retained) => {
-      const { head, tail } = splitRetained(retained);
-      return [
-        characters.slice(0, head).join(""),
-        renderOutputLimit({ omitted: characters.length - retained, unit: "characters" }),
-        tail > 0 ? characters.slice(-tail).join("") : ""
-      ].filter(Boolean).join("\n");
-    },
-    fits
-  ).text;
-}
-function limitSystemMessage(systemMessage) {
-  const lineCandidate = limitByLines(systemMessage);
-  return lineCandidate.retained > 0 ? lineCandidate.text : limitByCharacters(systemMessage);
+function smallestCompleteMessage(systemMessage) {
+  if (fits(systemMessage))
+    return systemMessage;
+  const plain = stripAnsi(systemMessage);
+  return fits(plain) ? plain : systemMessage;
 }
 function serializeHookResponse(data) {
   const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  const message = systemMessage && !fits(systemMessage) ? limitSystemMessage(systemMessage) : systemMessage;
+  const message = systemMessage ? smallestCompleteMessage(systemMessage) : systemMessage;
   const output = message === null ? { ...data } : responseWithMessage(data, message);
   return {
     json: JSON.stringify(output, null, 2),
@@ -7548,29 +7673,29 @@ function isImageExtension(ext) {
 }
 function renderTextPreview(content, filePath) {
   const lang = langFromPath(filePath) ?? detectContentLanguage(content);
-  if (isJSON(content)) return simpleHighlight(formatJSON(content), "json");
+  if (isJSON(content))
+    return simpleHighlight(formatJSON(content), "json");
   return lang ? simpleHighlight(content, lang) : content;
 }
 function renderFilePreview(filePath, options = {}) {
   const ext = extensionFromPath(filePath);
   const maxWidth = options.maxWidth ?? getMaxContentWidth();
-  if (isImageExtension(ext)) {
+  if (isImageExtension(ext))
     try {
       const ascii = imageToAscii(fs3.readFileSync(filePath), ext, {
         maxWidth,
         budget: imageBudget(options.budgetChars ?? previewBudgetChars())
       });
-      if (ascii) return { content: ascii, kind: "image" };
+      if (ascii)
+        return { content: ascii, kind: "image" };
     } catch {
     }
-  }
   const shape = (raw) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
-  if (options.readText !== false) {
+  if (options.readText !== false)
     try {
       return { content: shape(fs3.readFileSync(filePath, "utf8")), kind: "text" };
     } catch {
     }
-  }
   return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
 }
 var SECTION_RESERVE = 700;
@@ -7580,7 +7705,7 @@ function previewBudgetChars() {
 function charCost(text2) {
   return text2.length;
 }
-var CARD_CHROME = 520;
+var CARD_CHROME = 280;
 var CARD_PER_ROW = 105;
 function imageBudget(cardChars) {
   return {
@@ -7597,7 +7722,8 @@ var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
   const text2 = String(rawPath);
   const match = LINE_RANGE_RE.exec(text2);
-  if (!match) return { path: text2, range: null };
+  if (!match)
+    return { path: text2, range: null };
   return {
     path: text2.slice(0, match.index),
     range: { start: Number(match[1]), end: match[2] ? Number(match[2]) : null }
@@ -7617,10 +7743,12 @@ function growImageCard(card, reRender, fitted, budget) {
   for (let attempt = 0; attempt < GROWTH_ATTEMPTS && cost < budget * GROWTH_THRESHOLD; attempt++) {
     aim = Math.floor(aim * (budget / cost));
     const art = reRender(aim);
-    if (!art) break;
+    if (!art)
+      break;
     const candidate = card(art);
     const candidateCost = charCost(candidate);
-    if (candidateCost > budget || candidateCost <= cost) break;
+    if (candidateCost > budget || candidateCost <= cost)
+      break;
     best = candidate;
     cost = candidateCost;
   }
@@ -7630,18 +7758,23 @@ function renderFittedFileCard(path7, content, kind, details, budget, reRender) {
   const card = (body) => renderFileCard({ path: path7, content: body, details });
   if (kind === "image" && reRender) {
     let smallest = card(content);
-    if (charCost(smallest) <= budget) return growImageCard(card, reRender, smallest, budget);
+    if (charCost(smallest) <= budget)
+      return growImageCard(card, reRender, smallest, budget);
     for (const share of BUDGET_LADDER) {
       const art = reRender(Math.floor(budget * share));
-      if (!art) continue;
+      if (!art)
+        continue;
       const candidate = card(art);
-      if (charCost(candidate) <= budget) return candidate;
-      if (charCost(candidate) < charCost(smallest)) smallest = candidate;
+      if (charCost(candidate) <= budget)
+        return candidate;
+      if (charCost(candidate) < charCost(smallest))
+        smallest = candidate;
     }
     return charCost(smallest) <= budget ? smallest : card(NO_ROOM);
   }
   const full = card(collapsePreview(content));
-  if (charCost(full) <= budget) return full;
+  if (charCost(full) <= budget)
+    return full;
   const total = content.split("\n").length;
   let low = 0;
   let high = total;
@@ -7652,9 +7785,8 @@ function renderFittedFileCard(path7, content, kind, details, budget, reRender) {
     if (charCost(candidate) <= budget) {
       best = candidate;
       low = retained + 1;
-    } else {
+    } else
       high = retained - 1;
-    }
   }
   return best;
 }
@@ -7664,7 +7796,8 @@ function renderFileResult(rawPath, options = {}) {
   const range = rangeOverride ?? pathRange;
   const cardBudget = budgetChars ?? previewBudgetChars();
   const preview = renderFilePreview(filePath, { ...previewOptions, budgetChars: cardBudget });
-  if (!preview) return null;
+  if (!preview)
+    return null;
   const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
   const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
   return renderFittedFileCard(
@@ -7690,7 +7823,8 @@ function renderInlineImageResult(data, ext, label, options = {}) {
     }
   };
   const art = render(cardBudget);
-  if (!art) return null;
+  if (!art)
+    return null;
   return renderFittedFileCard(label, art, "image", options.action ?? null, cardBudget, render);
 }
 
@@ -7705,12 +7839,15 @@ function isReadableFile(candidate) {
   }
 }
 function findImagePath(text2, cwd = process.cwd()) {
-  if (!text2) return null;
+  if (!text2)
+    return null;
   for (const match of String(text2).matchAll(CANDIDATE_RE)) {
     const candidate = match[0].replace(TRAILING_PUNCTUATION, "");
-    if (!isImageExtension(extensionFromPath(candidate))) continue;
+    if (!isImageExtension(extensionFromPath(candidate)))
+      continue;
     const resolved = path2.isAbsolute(candidate) ? candidate : path2.resolve(cwd, candidate);
-    if (isReadableFile(resolved)) return resolved;
+    if (isReadableFile(resolved))
+      return resolved;
   }
   return null;
 }
@@ -7720,93 +7857,139 @@ var MIME_EXTENSIONS = {
   jpg: ".jpg",
   webp: ".webp"
 };
-function inlineImageFrom(value) {
-  if (!value || typeof value !== "object") return null;
+function imageBlock(value) {
+  if (!value || typeof value !== "object")
+    return null;
   const block = value;
-  if (block.type !== "image" || typeof block.data !== "string" || !block.data) return null;
-  const subtype = String(block.mimeType ?? "image/png").split("/")[1]?.toLowerCase() ?? "png";
+  if (block.type !== "image" && block.type !== "input_image")
+    return null;
+  return block;
+}
+function encodedInlineImage(block) {
+  const dataUrl = typeof block.image_url === "string" ? /^data:image\/([^;,]+);base64,(.+)$/s.exec(block.image_url) : null;
+  const encoded = typeof block.data === "string" ? block.data : dataUrl?.[2];
+  if (!encoded)
+    return null;
+  const subtype = String(block.mimeType ?? `image/${dataUrl?.[1] ?? "png"}`).split("/")[1]?.toLowerCase() ?? "png";
+  return { encoded, subtype };
+}
+function decodeInlineImage({ encoded, subtype }) {
   const ext = MIME_EXTENSIONS[subtype];
-  if (!ext) return null;
+  if (!ext)
+    return null;
   try {
-    return { data: Buffer.from(block.data, "base64"), ext };
+    return { data: Buffer.from(encoded, "base64"), ext };
   } catch {
     return null;
   }
 }
+function inlineImageFrom(value) {
+  const block = imageBlock(value);
+  if (!block)
+    return null;
+  const encoded = encodedInlineImage(block);
+  return encoded ? decodeInlineImage(encoded) : null;
+}
 function findInlineImage(result) {
-  if (!result || typeof result !== "object") return null;
+  if (!result || typeof result !== "object")
+    return null;
   const direct = inlineImageFrom(result);
-  if (direct) return direct;
+  if (direct)
+    return direct;
   const content = result.content;
-  if (!Array.isArray(content)) return null;
+  if (!Array.isArray(content))
+    return null;
   for (const block of content) {
     const image = inlineImageFrom(block);
-    if (image) return image;
+    if (image)
+      return image;
   }
   return null;
 }
 function renderScreenshot(result, text2, action = "screenshot") {
   const file = findImagePath(text2);
-  if (file) return renderFileResult(file, { action });
+  if (file)
+    return renderFileResult(file, { action });
   const inline = findInlineImage(result);
-  if (inline) return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action });
+  if (inline)
+    return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action });
   return null;
 }
 
 // src/tools/bash.ts
 source_default.level = 3;
-function splitCommandRows(cmd) {
-  const rows = [];
-  let current = "";
-  let quote = null;
-  let heredoc = null;
-  const push = (sep) => {
-    rows.push({ text: current.replace(/^\s+|\s+$/g, ""), sep });
-    current = "";
-  };
-  const lines = cmd.split("\n");
-  for (let li = 0; li < lines.length; li++) {
-    const line = lines[li];
-    if (heredoc !== null) {
-      current += (current ? "\n" : "") + line;
-      if (line.trim() === heredoc) heredoc = null;
+function pushCommandRow(state, sep) {
+  state.rows.push({ text: state.current.replace(/^\s+|\s+$/g, ""), sep });
+  state.current = "";
+}
+function appendHeredocLine(state, line) {
+  if (state.heredoc === null)
+    return false;
+  state.current += (state.current ? "\n" : "") + line;
+  if (line.trim() === state.heredoc)
+    state.heredoc = null;
+  return true;
+}
+function consumeQuotedCharacter(state, line, index) {
+  if (!state.quote)
+    return null;
+  const character = line[index];
+  state.current += character;
+  if (state.quote === '"' && character === "\\" && index + 1 < line.length) {
+    state.current += line[index + 1];
+    return index + 1;
+  }
+  if (character === state.quote)
+    state.quote = null;
+  return index;
+}
+function consumeCommandSyntax(state, line, index) {
+  const character = line[index];
+  if (character === '"' || character === "'") {
+    state.quote = character;
+    state.current += character;
+    return index;
+  }
+  const here = line.slice(index).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
+  if (here) {
+    state.current += here[0];
+    state.heredoc = here[2];
+    return index + here[0].length - 1;
+  }
+  if (character === ";") {
+    pushCommandRow(state, ";");
+    return index;
+  }
+  if ((character === "&" || character === "|") && line[index + 1] === character) {
+    pushCommandRow(state, character + character);
+    return index + 1;
+  }
+  return null;
+}
+function consumeCommandLine(state, line, lineIndex) {
+  if (appendHeredocLine(state, line))
+    return;
+  if (lineIndex > 0)
+    state.current += "\n";
+  for (let index = 0; index < line.length; index++) {
+    const quotedAt = consumeQuotedCharacter(state, line, index);
+    if (quotedAt !== null) {
+      index = quotedAt;
       continue;
     }
-    if (li > 0) current += "\n";
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (quote) {
-        current += ch;
-        if (quote === '"' && ch === "\\" && i + 1 < line.length) current += line[++i];
-        else if (ch === quote) quote = null;
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        quote = ch;
-        current += ch;
-        continue;
-      }
-      const here = line.slice(i).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-      if (here) {
-        current += here[0];
-        i += here[0].length - 1;
-        heredoc = here[2];
-        continue;
-      }
-      if (ch === ";") {
-        push(";");
-        continue;
-      }
-      if ((ch === "&" || ch === "|") && line[i + 1] === ch) {
-        push(ch + ch);
-        i++;
-        continue;
-      }
-      current += ch;
+    const syntaxAt = consumeCommandSyntax(state, line, index);
+    if (syntaxAt !== null) {
+      index = syntaxAt;
+      continue;
     }
+    state.current += line[index];
   }
-  push("");
-  return rows.filter((r) => r.text.length > 0);
+}
+function splitCommandRows(cmd) {
+  const state = { rows: [], current: "", quote: null, heredoc: null };
+  cmd.split("\n").forEach((line, index) => consumeCommandLine(state, line, index));
+  pushCommandRow(state, "");
+  return state.rows.filter((row) => row.text.length > 0);
 }
 function commandOf(input) {
   const raw = input.command ?? input.action_json;
@@ -7818,35 +8001,84 @@ function renderCommand(cmd) {
     return i === 0 ? source_default.gray("$ ") + body : body;
   }).join("\n");
 }
+function metadataBadges(status, cwd, extra) {
+  const badges = [];
+  if (status !== null) {
+    const ok = /^(?:0|process exited|completed|success)$/i.test(status.trim());
+    badges.push(new Badge({ label: `exit ${status}`, color: ok ? "brightGreen" : "brightRed", icon: ok ? "\u2713" : "\u2A02" }));
+  }
+  if (cwd)
+    badges.push(new Badge({ label: shortenPath(cwd), color: "brightBlue", icon: "\u2302" }));
+  for (const [key, value] of Object.entries(extra))
+    badges.push(new Badge({ label: `${key} ${value}`, color: "brightCyan" }));
+  return badges;
+}
+function renderOutputSection(text2, language) {
+  const highlighted = simpleHighlight(language === "json" ? formatJSON(text2) : text2, language);
+  return softCollapse(
+    language === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n")
+  );
+}
+function outputSections(stdout, language) {
+  if (!stdout.trim())
+    return [];
+  return language === "diff" ? [{ content: stdout, beginsWithRuler: false }] : splitRulerSections(stdout);
+}
+function attachFooter(specs, footer) {
+  if (!footer.length)
+    return;
+  if (specs.length)
+    specs.at(-1).footer = footer;
+  else
+    specs.push({ badges: OUTPUT_BADGE, content: "", footer });
+}
+function screenshotSpecs(cmd, footer) {
+  const specs = [];
+  if (cmd)
+    specs.push({ badges: RUNNING_BADGE, content: renderCommand(cmd) });
+  attachFooter(specs, footer);
+  return specs;
+}
+function outputSpecs(cmd, sections, language, footer) {
+  const specs = [];
+  let nextSection = 0;
+  if (cmd) {
+    const regions = [{
+      content: renderCommand(cmd),
+      background: TUI_TOKENS.card.commandBackground
+    }];
+    const first = sections[0];
+    if (first && !first.beginsWithRuler) {
+      regions.push({ heading: OUTPUT_BADGE, content: renderOutputSection(first.content, language) });
+      nextSection = 1;
+    }
+    specs.push({ badges: RUNNING_BADGE, content: regions });
+  }
+  for (const section of sections.slice(nextSection))
+    specs.push({ badges: OUTPUT_BADGE, content: renderOutputSection(section.content, language) });
+  attachFooter(specs, footer);
+  return specs;
+}
+function renderBashCards(cmd, stdout, footer, screenshot) {
+  if (screenshot)
+    return [...screenshotSpecs(cmd, footer).map(renderCard), screenshot];
+  const language = detectOutputLanguage(stdout);
+  return outputSpecs(cmd, outputSections(stdout, language), language, footer).map(renderCard);
+}
 defineTool({
   matches: ["Bash", "mcp__wcgw__BashCommand"],
   post(_input, result, durationMs) {
     const raw = extractResultText(result) ?? "";
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const cards = [];
     const cmd = commandOf(_input);
-    if (cmd) cards.push(renderCard({ badges: RUNNING_BADGE, content: renderCommand(cmd) }));
     const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
+    const footer = metadataBadges(status, cwd, extra);
     const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
     const shot = operations.length ? renderScreenshot(result, stdout) : null;
-    if (shot) cards.push(shot);
-    else if (stdout.trim()) {
-      const lang = detectOutputLanguage(stdout);
-      const highlighted = simpleHighlight(lang === "json" ? formatJSON(stdout) : stdout, lang);
-      const processedStdout = lang === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
-      cards.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(processedStdout) }));
-    }
-    if (cards.length) lines.push(renderColumns({ items: cards }));
-    const trailerParts = [];
-    if (status !== null) {
-      trailerParts.push(status === "0" ? source_default.green(`exit:${status}`) : source_default.red(`exit:${status}`));
-    }
-    if (cwd) trailerParts.push(source_default.gray("cwd:") + source_default.cyan(shortenPath(cwd)));
-    for (const [k, v] of Object.entries(extra)) {
-      trailerParts.push(source_default.gray(`${k}:`) + v);
-    }
-    if (trailerParts.length) lines.push("  " + trailerParts.join("  "));
+    const cards = renderBashCards(cmd, stdout, footer, shot);
+    if (cards.length)
+      lines.push(renderColumns({ items: cards }));
     return { lines, extraBadges: operationBadges(operations) };
   }
 });
@@ -7860,7 +8092,8 @@ defineTool({
     const filePath = input.file_path;
     const fallbackText = extractResultText(result);
     const rendered = filePath ? renderFileResult(filePath, { action: "read", fallbackText }) : fallbackText ? renderTextPreview(fallbackText) : null;
-    if (rendered) lines.push(rendered);
+    if (rendered)
+      lines.push(rendered);
     return { lines };
   }
 });
@@ -7870,17 +8103,20 @@ source_default.level = 3;
 var CONTEXT_LINES = 3;
 function editedSpan(result) {
   const hunks = result?.structuredPatch;
-  if (!Array.isArray(hunks) || !hunks.length) return null;
+  if (!Array.isArray(hunks) || !hunks.length)
+    return null;
   let start = Infinity;
   let end = 0;
   for (const hunk of hunks) {
     const at = Number(hunk?.newStart);
-    if (!Number.isFinite(at)) continue;
+    if (!Number.isFinite(at))
+      continue;
     const span = Number.isFinite(Number(hunk?.newLines)) ? Number(hunk.newLines) : 1;
     start = Math.min(start, at);
     end = Math.max(end, at + Math.max(span, 1) - 1);
   }
-  if (!Number.isFinite(start) || end < start) return null;
+  if (!Number.isFinite(start) || end < start)
+    return null;
   return { start: Math.max(1, start - CONTEXT_LINES), end: end + CONTEXT_LINES };
 }
 defineTool({
@@ -7893,24 +8129,338 @@ defineTool({
       action: ctx.toolName === "MultiEdit" ? "multi-edit" : "edit",
       range: editedSpan(result)
     }) : null;
-    if (box) lines.push(box);
+    if (box)
+      lines.push(box);
     else {
       const text2 = pickResultText(result);
-      if (text2) lines.push(source_default.green("\u2713 ") + firstLine(text2, 120));
+      if (text2)
+        lines.push(source_default.green("\u2713 ") + firstLine(text2, 120));
     }
     return { lines };
   }
 });
 
+// src/tools/apply-patch.ts
+var SUCCESS_RESULT = /(?:^done!?$|success\.\s+updated the following files:|success\.\s+(?:added|deleted) the following files:)/im;
+defineTool({
+  matches: ["apply_patch", "ApplyPatch"],
+  post(_input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const text2 = extractResultText(result)?.trim() ?? "";
+    if (text2 && !SUCCESS_RESULT.test(text2)) {
+      const language = detectOutputLanguage(text2);
+      lines.push(renderCard({
+        badges: OUTPUT_BADGE,
+        content: softCollapse(simpleHighlight(text2, language))
+      }));
+    }
+    return { lines };
+  }
+});
+
+// src/tools/ask-user-question.ts
+function structuredAnswers(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    return [];
+  const answers = result.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers))
+    return [];
+  return Object.entries(answers).map(([question, value]) => ({
+    question,
+    answer: Array.isArray(value) ? value.map(String).join(", ") : String(value)
+  }));
+}
+function nativeAnswers(input, result) {
+  const text2 = extractResultText(result) ?? "";
+  return (input.questions ?? []).flatMap(({ question }) => {
+    if (!question)
+      return [];
+    const marker = `"${question}"="`;
+    const start = text2.indexOf(marker);
+    if (start < 0)
+      return [];
+    const valueStart = start + marker.length;
+    const end = text2.indexOf('"', valueStart);
+    return [{ question, answer: text2.slice(valueStart, end < 0 ? void 0 : end) }];
+  });
+}
+defineTool({
+  matches: "AskUserQuestion",
+  post(input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const answers = structuredAnswers(result);
+    if (!answers.length)
+      answers.push(...nativeAnswers(input, result));
+    if (!answers.length)
+      lines.push(source_default.green("\u2713 Answers recorded"));
+    for (const { question, answer } of answers) {
+      lines.push(source_default.gray("\xB7 ") + wrapText(question, getMaxContentWidth() - 2));
+      lines.push(source_default.green("\u2192 ") + wrapText(answer, getMaxContentWidth() - 2));
+    }
+    return {
+      lines,
+      extraBadges: [new Badge({
+        label: `${answers.length || (input.questions?.length ?? 0)} answer${answers.length === 1 ? "" : "s"}`,
+        color: "brightGreen",
+        icon: "\u2713"
+      })]
+    };
+  }
+});
+
+// src/tools/plan-update.ts
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function resultRecord(result) {
+  const direct = record(result);
+  if (direct)
+    return direct;
+  const text2 = extractResultText(result)?.trim();
+  if (!text2?.startsWith("{"))
+    return null;
+  try {
+    return record(JSON.parse(text2));
+  } catch {
+    return null;
+  }
+}
+function itemsFrom(value) {
+  if (!Array.isArray(value))
+    return [];
+  return value.flatMap((item) => {
+    const data = record(item);
+    const text2 = data?.step ?? data?.content ?? data?.activeForm;
+    if (typeof text2 !== "string" || !text2.trim())
+      return [];
+    return [{
+      text: text2.trim(),
+      status: String(data?.status ?? "pending").toLowerCase().replace(/-/g, "_")
+    }];
+  });
+}
+function appearance(status) {
+  if (status === "completed")
+    return { glyph: "\u2713", paint: source_default.green };
+  if (status === "in_progress")
+    return { glyph: "\u25B6", paint: source_default.yellow };
+  if (status === "blocked")
+    return { glyph: "\xD7", paint: source_default.red };
+  return { glyph: "\u25CB", paint: source_default.cyan };
+}
+defineTool({
+  matches: ["update_plan", "UpdatePlan", "TodoWrite", "TodoRead"],
+  post(input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const resolved = resultRecord(result);
+    const inputItems = itemsFrom(input.plan ?? input.todos);
+    const plan = inputItems.length ? inputItems : itemsFrom(resolved?.plan ?? resolved?.todos);
+    const explanation = input.explanation ?? (typeof resolved?.explanation === "string" ? resolved.explanation : null);
+    if (explanation)
+      lines.push(source_default.gray(wrapText(explanation, getMaxContentWidth())));
+    for (const item of plan) {
+      const { glyph, paint } = appearance(item.status);
+      lines.push(paint(`${glyph} `) + wrapText(item.text, getMaxContentWidth() - 2));
+    }
+    if (!plan.length)
+      lines.push(source_default.gray("Plan updated"));
+    const completed = plan.filter((item) => item.status === "completed").length;
+    return {
+      lines,
+      extraBadges: plan.length ? [new Badge({
+        label: `${completed}/${plan.length} complete`,
+        color: completed === plan.length ? "brightGreen" : "brightYellow"
+      })] : []
+    };
+  }
+});
+
+// src/tools/tool-search.ts
+function record2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function parsedResult(result) {
+  if (typeof result !== "string")
+    return result;
+  const text2 = extractResultText(result)?.trim() ?? "";
+  if (!text2.startsWith("{") && !text2.startsWith("["))
+    return result;
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return result;
+  }
+}
+function namesFrom(result, query) {
+  const parsed = parsedResult(result);
+  const data = record2(parsed);
+  const candidates = Array.isArray(parsed) ? parsed : Array.isArray(data?.matches) ? data.matches : Array.isArray(data?.content) ? data.content : [];
+  const names = candidates.flatMap((candidate) => {
+    if (typeof candidate === "string")
+      return [candidate];
+    const item = record2(candidate);
+    const name = item?.tool_name ?? item?.toolName ?? item?.name;
+    return typeof name === "string" ? [name] : [];
+  });
+  const fallback = query.startsWith("select:") ? query.slice("select:".length).split(",").map((value) => value.trim()).filter(Boolean) : [];
+  const deferred = typeof data?.total_deferred_tools === "number" ? data.total_deferred_tools : null;
+  return { names: [...new Set(names.length ? names : fallback)], deferred };
+}
+defineTool({
+  matches: "ToolSearch",
+  post(input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const { names, deferred } = namesFrom(result, input.query ?? "");
+    for (const name of names)
+      lines.push(source_default.green("\u2713 ") + parseToolName(name).pretty);
+    if (!names.length)
+      lines.push(source_default.gray("No tools loaded"));
+    return {
+      lines,
+      extraBadges: [
+        new Badge({ label: `${names.length} loaded`, color: names.length ? "brightGreen" : "gray" }),
+        deferred == null ? null : new Badge({ label: `${deferred} deferred`, color: "gray" })
+      ].filter((badge) => badge !== null)
+    };
+  }
+});
+
+// src/tools/view-image.ts
+defineTool({
+  matches: ["view_image", "ViewImage"],
+  post(input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const filePath = input.path ?? input.file_path;
+    const rendered = (filePath ? renderFileResult(filePath, { action: "view", readText: false }) : null) ?? renderScreenshot(result, extractResultText(result), "view");
+    if (rendered)
+      lines.push(rendered);
+    return { lines };
+  }
+});
+
+// src/tools/collaboration.ts
+var OPERATIONS = [
+  "spawn_agent",
+  "wait_agent",
+  "followup_task",
+  "send_message",
+  "interrupt_agent",
+  "list_agents"
+];
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function operationOf(rawName) {
+  const normalized = rawName.replace(/^collaboration(?:__|[._-])?/i, "").toLowerCase();
+  return OPERATIONS.find((operation) => operation === normalized) ?? null;
+}
+function parsedResult2(result) {
+  const direct = asRecord(result);
+  if (direct)
+    return direct;
+  const text2 = extractResultText(result)?.trim();
+  if (!text2?.startsWith("{"))
+    return null;
+  try {
+    return asRecord(JSON.parse(text2));
+  } catch {
+    return null;
+  }
+}
+function stringField(record3, ...keys) {
+  for (const key of keys) {
+    const value = record3?.[key];
+    if (typeof value === "string" && value.trim())
+      return value.trim();
+  }
+  return null;
+}
+function targetOf(input, result) {
+  return stringField(result, "task_name", "agent_name", "target") ?? stringField(input, "task_name", "target", "agent_name");
+}
+function statusBadge(label, color = "gray") {
+  return label ? new Badge({ label: label.replace(/_/g, " "), color }) : null;
+}
+function spawnView(input, result) {
+  const target = targetOf(input, result) ?? "agent";
+  return {
+    lines: [source_default.green("\u2713 ") + `started ${target}`],
+    badges: [
+      statusBadge(stringField(input, "agent_type"), "green"),
+      statusBadge(stringField(input, "model"), "gray")
+    ].filter((badge) => badge !== null)
+  };
+}
+function waitView(result) {
+  const timedOut = result?.timed_out === true;
+  const message = stringField(result, "message") ?? (timedOut ? "No agents completed yet" : "Agent update received");
+  return {
+    lines: [timedOut ? source_default.gray(message) : source_default.green("\u2713 ") + message],
+    badges: [new Badge({ label: timedOut ? "timed out" : "update", color: timedOut ? "gray" : "green" })]
+  };
+}
+function interactionView(operation, input, result) {
+  const target = targetOf(input, result) ?? "agent";
+  if (operation === "interrupt_agent") {
+    const previous = stringField(result, "previous_status", "status");
+    return {
+      lines: [source_default.red("\u25A0 ") + `interrupted ${target}`],
+      badges: [statusBadge(previous, "gray")].filter((badge) => badge !== null)
+    };
+  }
+  return {
+    lines: [source_default.cyan("\u2192 ") + `${operation === "followup_task" ? "follow-up" : "message"} sent to ${target}`],
+    badges: []
+  };
+}
+function agentListView(result) {
+  const agents = Array.isArray(result?.agents) ? result.agents : [];
+  const lines = agents.flatMap((agent) => {
+    const data = asRecord(agent);
+    const name = stringField(data, "agent_name", "task_name", "name");
+    const status = stringField(data, "agent_status", "status");
+    return name ? [`${source_default.cyan("\xB7 ")}${name}${status ? source_default.gray(` \u2014 ${status.replace(/_/g, " ")}`) : ""}`] : [];
+  });
+  return {
+    lines: lines.length ? lines : [source_default.gray("No active agents")],
+    badges: [new Badge({ label: `${lines.length} agent${lines.length === 1 ? "" : "s"}`, color: lines.length ? "blue" : "gray" })]
+  };
+}
+function collaborationView(operation, input, result) {
+  if (operation === "spawn_agent")
+    return spawnView(input, result);
+  if (operation === "wait_agent")
+    return waitView(result);
+  if (operation === "list_agents")
+    return agentListView(result);
+  return interactionView(operation, input, result);
+}
+defineTool({
+  matches: (rawName) => operationOf(rawName) !== null,
+  post(input, result, durationMs, context) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    const operation = operationOf(context.toolName) ?? "list_agents";
+    const view = collaborationView(operation, input, parsedResult2(result));
+    lines.push(...view.lines.map((line) => wrapText(line, getMaxContentWidth())));
+    return { lines, extraBadges: view.badges };
+  }
+});
+
 // src/parsers/search-replace.ts
 function parseSearchReplaceBlocks(content) {
-  if (typeof content !== "string") return [];
+  if (typeof content !== "string")
+    return [];
   const blocks = [];
   const re = /<<<<<<< SEARCH\r?\n([\s\S]*?)=======\r?\n([\s\S]*?)>>>>>>> REPLACE/g;
   let m;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = re.exec(content)) !== null)
     blocks.push({ search: m[1] ?? "", replace: m[2] ?? "" });
-  }
   return blocks;
 }
 
@@ -7927,13 +8477,14 @@ defineTool({
     const text2 = extractResultText(result);
     const status = text2 ? firstLine(text2, 200) : null;
     const failed = status ? FAILURE_RE.test(status) : false;
-    if (status) lines.push((failed ? source_default.red("\u2A02 ") : source_default.green("\u2713 ")) + status);
+    if (status)
+      lines.push((failed ? source_default.red("\u2A02 ") : source_default.green("\u2713 ")) + status);
     const action = parseSearchReplaceBlocks(input.text_or_search_replace_blocks).length ? "edit" : "write";
     const box = input.file_path ? renderFileResult(input.file_path, { action }) : null;
-    if (box) lines.push(box);
-    else if (!status && text2) {
+    if (box)
+      lines.push(box);
+    else if (!status && text2)
       lines.push(renderCard({ badges: OUTPUT_BADGE, content: text2 }));
-    }
     return { lines };
   }
 });
@@ -7946,22 +8497,28 @@ function toPathList(input) {
   return list.map((p) => String(p)).filter(Boolean);
 }
 function renderInlineContents(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return [];
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    return [];
   const res = result;
-  const fileContents = res["file-contents-numbered"] ?? res["file_contets_numbered"] ?? res["file-contents"] ?? res["output"];
+  const fileContents = res["file-contents-numbered"] ?? res.file_contets_numbered ?? res["file-contents"] ?? res.output;
   const lines = [];
-  if (fileContents && typeof fileContents === "object") {
-    for (const [filePath, content] of Object.entries(fileContents)) {
-      if (typeof content !== "string") continue;
-      const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
-      const rendered = preview?.content ?? content;
-      lines.push(renderFileCard({
-        path: filePath,
-        content: collapsePreview(rendered)
-      }));
-    }
-  } else if (typeof fileContents === "string" && fileContents.length) {
-    lines.push(collapsePreview(fileContents));
+  if (fileContents && typeof fileContents === "object")
+    return renderInlineFiles(fileContents);
+  if (typeof fileContents === "string" && fileContents.length)
+    return [collapsePreview(fileContents)];
+  return [];
+}
+function renderInlineFiles(files) {
+  const lines = [];
+  for (const [filePath, content] of Object.entries(files)) {
+    if (typeof content !== "string")
+      continue;
+    const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
+    const rendered = preview?.content ?? content;
+    lines.push(renderFileCard({
+      path: filePath,
+      content: collapsePreview(rendered)
+    }));
   }
   return lines;
 }
@@ -7978,7 +8535,8 @@ defineTool({
     let missed = 0;
     for (const rawPath of paths) {
       const box = renderFileResult(rawPath, { action: "read", budgetChars });
-      if (box) lines.push(box);
+      if (box)
+        lines.push(box);
       else {
         missed += 1;
         lines.push(source_default.red("\u2A02 ") + source_default.bold("Path: ") + stripLineRange(rawPath).path);
@@ -7986,12 +8544,12 @@ defineTool({
     }
     if (!paths.length || missed === paths.length) {
       const inline = renderInlineContents(result);
-      if (inline.length) lines.push(...inline);
+      if (inline.length)
+        lines.push(...inline);
       else {
         const text2 = extractResultText(result);
-        if (text2) {
+        if (text2)
           lines.push(renderCard({ badges: OUTPUT_BADGE, content: collapsePreview(text2) }));
-        }
       }
     }
     return { lines };
@@ -8020,15 +8578,18 @@ source_default.level = 3;
 var SAVED_PATH_RE = /(\/[^\s"']*\.txt)/;
 function savedContextPath(input, resultText) {
   const fromResult = resultText ? SAVED_PATH_RE.exec(resultText)?.[1] : null;
-  if (fromResult) return fromResult;
-  if (!input.id) return null;
+  if (fromResult)
+    return fromResult;
+  if (!input.id)
+    return null;
   const dataHome = process.env.XDG_DATA_HOME || path3.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
   return path3.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
 }
 var RELEVANT_FILES_MARKER = "\n# Relevant Files:";
 function dropInlinedFiles(raw) {
   const at = raw.indexOf(RELEVANT_FILES_MARKER);
-  if (at === -1) return raw;
+  if (at === -1)
+    return raw;
   const omitted = raw.slice(at + RELEVANT_FILES_MARKER.length).split("\n").length;
   return raw.slice(0, at) + `
 # Relevant Files: ${omitted} lines of inlined file content`;
@@ -8046,31 +8607,61 @@ defineTool({
       lines.push((failed ? source_default.yellow("\u26A0 ") : source_default.green("\u29FA ")) + prose2);
     }
     const box = saved ? renderFileResult(saved, { action: "context save", transform: dropInlinedFiles }) : null;
-    if (box) lines.push(box);
-    else if (text2 && !prose2) lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
+    if (box)
+      lines.push(box);
+    else if (text2 && !prose2)
+      lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
     return { lines };
   }
 });
 
 // src/tools/agent.ts
+function resultRecord2(result) {
+  if (result && typeof result === "object" && !Array.isArray(result))
+    return result;
+  const text2 = extractResultText(result)?.trim();
+  if (!text2?.startsWith("{"))
+    return null;
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return null;
+  }
+}
+function agentBadges(status, model, id) {
+  return [
+    status ? new Badge({ label: status.replace(/_/g, " "), color: /fail|error|stop/.test(status) ? "red" : "green" }) : null,
+    model ? new Badge({ label: model, color: "blue" }) : null,
+    id == null ? null : new Badge({ label: String(id), color: "gray" })
+  ].filter((badge) => badge !== null);
+}
+function stringValue(record3, key) {
+  const value = record3?.[key];
+  return typeof value === "string" ? value : null;
+}
+function agentView(result) {
+  const record3 = resultRecord2(result);
+  return {
+    status: stringValue(record3, "status"),
+    model: stringValue(record3, "resolvedModel"),
+    id: record3?.agentId ?? record3?.agent_id ?? record3?.taskId ?? record3?.task_id,
+    outputFile: stringValue(record3, "outputFile")
+  };
+}
 defineTool({
   matches: ["Agent", "Task"],
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const prompt = input.prompt || result && typeof result === "object" && result.prompt || "";
-    if (prompt) {
-      lines.push(simpleHighlight(prompt, "markdown"));
-    }
-    if (result && typeof result === "object") {
-      const metadata = { ...result };
-      delete metadata.prompt;
-      delete metadata.description;
-      if (Object.keys(metadata).length > 0) {
-        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
-      }
-    }
-    return { lines };
+    if (input.description)
+      lines.push(wrapText(input.description, getMaxContentWidth()));
+    const view = agentView(result);
+    if (view.outputFile)
+      lines.push(shortenPath(view.outputFile));
+    return {
+      lines,
+      extraBadges: agentBadges(view.status, view.model, view.id)
+    };
   }
 });
 
@@ -8091,14 +8682,16 @@ defineTool({
 
 // src/tools/task-shared.ts
 source_default.level = 3;
-function asRecord(value) {
+function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
-function text(record, ...keys) {
-  if (!record) return void 0;
+function text(record3, ...keys) {
+  if (!record3)
+    return void 0;
   for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+    const value = record3[key];
+    if (typeof value === "string" && value.trim())
+      return value.trim();
   }
   return void 0;
 }
@@ -8107,31 +8700,31 @@ function normalizeStatus(value, fallback = "pending") {
   return normalized || fallback;
 }
 function normalizeTask(value, fallback = {}, fallbackStatus = "pending") {
-  const task = asRecord(value);
-  const subject = text(task, "subject", "title", "name") ?? text(fallback, "subject", "title", "name");
-  if (!subject) return null;
+  const task = asRecord2(value);
+  const subject = taskSubject(task, fallback);
+  if (!subject)
+    return null;
+  return buildTask(task, fallback, subject, fallbackStatus);
+}
+function buildTask(task, fallback, subject, fallbackStatus) {
   const id = task?.id ?? task?.taskId ?? fallback.id ?? fallback.task_id;
   const description = text(task, "description", "details") ?? text(fallback, "description", "details");
-  const status = normalizeStatus(
-    task?.status ?? fallback.status,
-    fallbackStatus
-  );
-  return {
-    ...typeof id === "string" || typeof id === "number" ? { id } : {},
-    subject,
-    ...description ? { description } : {},
-    status
-  };
+  return { ...typeof id === "string" || typeof id === "number" ? { id } : {}, subject, ...description ? { description } : {}, status: normalizeStatus(task?.status ?? fallback.status, fallbackStatus) };
+}
+function taskSubject(task, fallback) {
+  return text(task, "subject", "title", "name") ?? text(fallback, "subject", "title", "name");
 }
 function taskFromResult(input, result, fallbackStatus) {
-  const record = asRecord(result);
-  const nested = record?.task ?? record?.item ?? result;
+  const record3 = asRecord2(result);
+  const nested = record3?.task ?? record3?.item ?? result;
   return normalizeTask(nested, input, fallbackStatus);
 }
 function parseMaybeJson(value) {
-  if (typeof value !== "string") return value;
+  if (typeof value !== "string")
+    return value;
   const trimmed = value.trim();
-  if (!trimmed || !trimmed.startsWith("[") && !trimmed.startsWith("{")) return value;
+  if (!trimmed || !trimmed.startsWith("[") && !trimmed.startsWith("{"))
+    return value;
   try {
     return JSON.parse(trimmed);
   } catch {
@@ -8140,13 +8733,13 @@ function parseMaybeJson(value) {
 }
 function tasksFromResult(result) {
   let candidate = parseMaybeJson(result);
-  const record = asRecord(candidate);
-  if (record) {
+  const record3 = asRecord2(candidate);
+  if (record3)
     candidate = parseMaybeJson(
-      record.tasks ?? record.items ?? record.result ?? record.output ?? record.content
+      record3.tasks ?? record3.items ?? record3.result ?? record3.output ?? record3.content
     );
-  }
-  if (!Array.isArray(candidate)) return [];
+  if (!Array.isArray(candidate))
+    return [];
   return candidate.map((item) => normalizeTask(item)).filter((task) => task !== null);
 }
 function taskAppearance(status) {
@@ -8168,19 +8761,19 @@ function taskAppearance(status) {
   }
 }
 function renderTask(task, captionOverride) {
-  const appearance = taskAppearance(task.status);
-  const caption = captionOverride ?? appearance.caption;
+  const appearance2 = taskAppearance(task.status);
+  const caption = captionOverride ?? appearance2.caption;
   const heading = renderCheckboxHeading({
     caption,
-    checked: appearance.checked,
-    color: appearance.color,
+    checked: appearance2.checked,
+    color: appearance2.color,
     description: task.description
   });
   const subjectLabel = task.id == null ? task.subject : `#${task.id}  ${task.subject}`;
   return [
     ...heading.split("\n"),
     "",
-    renderBadges(new Badge({ label: subjectLabel, color: appearance.color }))
+    renderBadges(new Badge({ label: subjectLabel, color: appearance2.color }))
   ];
 }
 
@@ -8191,24 +8784,37 @@ defineTool({
     const lines = [];
     pushDurationLine(lines, durationMs);
     const task = taskFromResult(input, result, "pending");
-    if (task) lines.push(...renderTask(task, "ADDED TASK"));
+    if (task)
+      lines.push(...renderTask(task, "ADDED TASK"));
     return { lines };
   }
 });
 
 // src/tools/task-update.ts
+function statusFrom(input, result) {
+  const resultRecord4 = result && typeof result === "object" ? result : null;
+  const inputRecord = input && typeof input === "object" ? input : null;
+  const change = resultRecord4?.statusChange;
+  const to = change && typeof change === "object" ? change.to : void 0;
+  return to ?? resultRecord4?.status ?? inputRecord?.status ?? "";
+}
 defineTool({
   matches: "TaskUpdate",
   post(input, result, durationMs) {
     const lines = [];
     pushDurationLine(lines, durationMs);
-    const statusChangeTo = result && typeof result === "object" && result.statusChange?.to;
-    const status = statusChangeTo || result && typeof result === "object" && result.status || input && typeof input === "object" && input.status || "";
-    const normalizedStatus = normalizeStatus(status, "updated");
+    const normalizedStatus = normalizeStatus(statusFrom(input, result), "updated");
     const task = taskFromResult(input, result, normalizedStatus);
-    if (task) lines.push(...renderTask({ ...task, status: normalizedStatus }));
-    else if (result && typeof result === "object") {
-      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
+    if (task)
+      lines.push(...renderTask({ ...task, status: normalizedStatus }));
+    else {
+      const record3 = result && typeof result === "object" && !Array.isArray(result) ? result : null;
+      const id = record3?.taskId ?? record3?.task_id ?? input.taskId ?? input.task_id ?? input.id;
+      const appearance2 = taskAppearance(normalizedStatus);
+      lines.push(renderBadges(
+        new Badge({ label: appearance2.caption, color: appearance2.color, icon: appearance2.checked ? "\u2713" : "\u21BB" }),
+        id == null ? null : new Badge({ label: `#${String(id)}`, color: "gray" })
+      ));
     }
     return { lines };
   }
@@ -8222,13 +8828,45 @@ defineTool({
     pushDurationLine(lines, durationMs);
     const tasks = tasksFromResult(result);
     for (const [index, task] of tasks.entries()) {
-      if (index > 0) lines.push("");
+      if (index > 0)
+        lines.push("");
       lines.push(...renderTask(task));
     }
-    if (!tasks.length && result && typeof result === "object") {
-      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
-    }
-    return { lines, isJson: !tasks.length };
+    if (!tasks.length)
+      lines.push(source_default.gray("No tasks"));
+    return { lines };
+  }
+});
+
+// src/tools/task-stop.ts
+function resultRecord3(result) {
+  if (result && typeof result === "object" && !Array.isArray(result))
+    return result;
+  const text2 = extractResultText(result)?.trim();
+  if (!text2?.startsWith("{"))
+    return null;
+  try {
+    return JSON.parse(text2);
+  } catch {
+    return null;
+  }
+}
+defineTool({
+  matches: "TaskStop",
+  post(input, result, durationMs) {
+    const lines = [];
+    pushDurationLine(lines, durationMs);
+    lines.push(source_default.red("\u25A0 ") + source_default.bold.red("TASK STOPPED"));
+    const data = resultRecord3(result);
+    const id = data?.task_id ?? data?.taskId ?? input.task_id ?? input.taskId;
+    const type = typeof data?.task_type === "string" ? data.task_type : null;
+    return {
+      lines,
+      extraBadges: [
+        id == null ? null : new Badge({ label: String(id), color: "brightRed" }),
+        type ? new Badge({ label: type, color: "gray" }) : null
+      ].filter((badge) => badge !== null)
+    };
   }
 });
 
@@ -8256,9 +8894,8 @@ defineTool({
         badges: OUTPUT_BADGE,
         content: softCollapse(simpleHighlight(formatted, language))
       }));
-    } else if (result && typeof result === "object") {
+    } else if (result && typeof result === "object")
       lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
-    }
     return {
       lines,
       isJson: !text2?.trim(),
@@ -8291,26 +8928,48 @@ var TOOL_PRIMARY_OUTPUT_KEYS = {
   NotebookRead: ["output", "content"],
   NotebookEdit: ["result", "output"]
 };
-function deconstructToolResult(toolName, result) {
-  if (!result || typeof result !== "object") {
-    return { primary: typeof result === "string" ? result : null, metadata: null };
+function renderArrayLike(res) {
+  const isArrayLike = Array.isArray(res) || res["0"]?.type;
+  if (!isArrayLike)
+    return null;
+  const parts = [];
+  for (const block of Array.isArray(res) ? res : Object.values(res)) {
+    const b = block;
+    if (b.type === "text" && b.text)
+      parts.push(b.text);
+    else if (b.type === "image" || b.type === "base64")
+      parts.push(source_default.yellow("[Image Data]"));
+    else if (typeof block === "string")
+      parts.push(block);
+    else if (b.output)
+      parts.push(b.output);
   }
+  return parts.length ? parts.join("\n\n") : null;
+}
+function renderContentParts(res, primary) {
+  const keys = ["stdout", "output", "content", "text", "message", "error", "stderr", "file-contents-numbered", "file_contets_numbered", "file-contents", "filePath", "type"];
+  return keys.filter((key) => res[key] != null).flatMap((key) => {
+    let value = res[key];
+    if (primary && primary.includes(String(value).slice(0, 20)))
+      return [];
+    if (value && typeof value === "object") {
+      const object = value;
+      value = object.text ?? object.output ?? object.content ?? JSON.stringify(object, null, 2);
+    }
+    const rendered = key === "stderr" || key === "error" ? source_default.red(`\u2A02 ${key.toUpperCase()}:`) + "\n" + value : key === "filePath" ? source_default.cyan("\u{F021A} ") + source_default.bold("Path: ") + value : key === "type" ? source_default.cyan("\u29D6 ") + source_default.bold("Action: ") + value : String(value);
+    delete res[key];
+    return [rendered];
+  });
+}
+function deconstructToolResult(toolName, result) {
+  if (!result || typeof result !== "object")
+    return { primary: typeof result === "string" ? result : null, metadata: null };
   const res = JSON.parse(JSON.stringify(result));
   const { tool } = parseToolName(toolName);
   let primary = "";
-  const isArrayLike = Array.isArray(res) || typeof res === "object" && res["0"]?.type;
-  if (isArrayLike) {
-    const blocks = Array.isArray(res) ? res : Object.values(res);
-    const parts2 = [];
-    for (const block of blocks) {
-      const b = block;
-      if (b.type === "text" && b.text) parts2.push(b.text);
-      else if (b.type === "image" || b.type === "base64") parts2.push(source_default.yellow("[Image Data]"));
-      else if (typeof block === "string") parts2.push(block);
-      else if (b.output) parts2.push(b.output);
-    }
-    if (parts2.length) return { primary: parts2.join("\n\n"), metadata: null };
-  }
+  const arrayPrimary = renderArrayLike(res);
+  if (arrayPrimary)
+    return { primary: arrayPrimary, metadata: null };
   const toolKeys = TOOL_PRIMARY_OUTPUT_KEYS[tool] ?? [];
   for (const key of toolKeys) {
     const v = res[key];
@@ -8320,39 +8979,7 @@ function deconstructToolResult(toolName, result) {
       break;
     }
   }
-  const contentKeys = [
-    "stdout",
-    "output",
-    "content",
-    "text",
-    "message",
-    "error",
-    "stderr",
-    "file-contents-numbered",
-    "file_contets_numbered",
-    "file-contents",
-    "filePath",
-    "type"
-  ];
-  const parts = primary ? [primary] : [];
-  for (const key of contentKeys.filter((k) => res[k] != null)) {
-    let val = res[key];
-    if (primary && typeof val !== "undefined" && primary.includes(String(val).slice(0, 20))) continue;
-    if (typeof val === "object" && val !== null) {
-      const o = val;
-      val = o.text ?? o.output ?? o.content ?? JSON.stringify(o, null, 2);
-    }
-    if (key === "stderr" || key === "error") {
-      parts.push(source_default.red(`\u2A02 ${key.toUpperCase()}:`) + "\n" + val);
-    } else if (key === "filePath") {
-      parts.push(source_default.cyan("\u{F021A} ") + source_default.bold("Path: ") + val);
-    } else if (key === "type") {
-      parts.push(source_default.cyan("\u29D6 ") + source_default.bold("Action: ") + val);
-    } else {
-      parts.push(String(val));
-    }
-    delete res[key];
-  }
+  const parts = primary ? [primary, ...renderContentParts(res, primary)] : renderContentParts(res, primary);
   primary = parts.join("\n\n");
   const metadata = Object.keys(res).length ? res : null;
   return { primary: primary || null, metadata };
@@ -8366,16 +8993,16 @@ defineGenericTool({
     if (primary) {
       let formatted = primary;
       if (typeof primary === "string") {
-        if (isJSON(primary)) formatted = simpleHighlight(formatJSON(primary), "json");
-        else if (isCode(primary)) formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
+        if (isJSON(primary))
+          formatted = simpleHighlight(formatJSON(primary), "json");
+        else if (isCode(primary))
+          formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
       }
       lines.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(formatted) }));
-      if (metadata && Object.keys(metadata).length) {
+      if (metadata && Object.keys(metadata).length)
         lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
-      }
-    } else if (result && typeof result === "object") {
+    } else if (result && typeof result === "object")
       lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
-    }
     const operation = playwrightOperation(rawTool);
     return {
       lines,
@@ -8441,32 +9068,35 @@ function asObject(raw) {
 function pickString(o, ...keys) {
   for (const k of keys) {
     const v = o[k];
-    if (typeof v === "string") return v;
+    if (typeof v === "string")
+      return v;
   }
   return void 0;
 }
 function pickNumber(o, ...keys) {
   for (const k of keys) {
     const v = o[k];
-    if (typeof v === "number") return v;
+    if (typeof v === "number")
+      return v;
   }
   return null;
 }
 function pickBool(o, ...keys) {
   for (const k of keys) {
     const v = o[k];
-    if (typeof v === "boolean") return v;
+    if (typeof v === "boolean")
+      return v;
   }
   return false;
 }
 function pickAny(o, ...keys) {
-  for (const k of keys) {
-    if (o[k] !== void 0) return o[k];
-  }
+  for (const k of keys)
+    if (o[k] !== void 0)
+      return o[k];
   return void 0;
 }
 function injectToolDiscriminator(toolName, input) {
-  const obj = input && typeof input === "object" ? { ...input } : {};
+  const obj = input && typeof input === "object" ? { ...input } : typeof input === "string" ? { input } : {};
   obj.__tool = toolName;
   return obj;
 }
@@ -8498,7 +9128,8 @@ var ASCII_DIR = path5.join(HOME2, "Documents", "Prompts", "anime-ascii");
 function findAsset() {
   const candidates = [];
   const declared = process.env.CLAUDE_PLUGIN_ROOT;
-  if (declared) candidates.push(path5.join(declared, WELCOME_ASSET));
+  if (declared)
+    candidates.push(path5.join(declared, WELCOME_ASSET));
   let dir;
   try {
     dir = path5.dirname(fileURLToPath(import.meta.url));
@@ -8508,20 +9139,22 @@ function findAsset() {
   for (let i = 0; i < 6; i++) {
     candidates.push(path5.join(dir, WELCOME_ASSET));
     const parent = path5.dirname(dir);
-    if (parent === dir) break;
+    if (parent === dir)
+      break;
     dir = parent;
   }
-  for (const candidate of candidates) {
+  for (const candidate of candidates)
     try {
-      if (fs6.statSync(candidate).isFile()) return candidate;
+      if (fs6.statSync(candidate).isFile())
+        return candidate;
     } catch {
     }
-  }
   return null;
 }
 function welcomeImagePath() {
   const override = process.env.CLAUDE_HOOKS_WELCOME_IMAGE;
-  if (override) return fs6.existsSync(override) ? override : null;
+  if (override)
+    return fs6.existsSync(override) ? override : null;
   return findAsset();
 }
 function charBudget(total) {
@@ -8534,7 +9167,8 @@ var BANNER = { dither: false, threshold: 0.35 };
 var MAX_COLS = 100;
 function renderWelcomeImage(spec) {
   const file = welcomeImagePath();
-  if (!file) return null;
+  if (!file)
+    return null;
   try {
     const art = imageToAscii(fs6.readFileSync(file), path5.extname(file), {
       maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
@@ -8550,11 +9184,13 @@ function renderWelcomeImage(spec) {
 }
 function loadAsciiArt(spec) {
   try {
-    if (!fs6.existsSync(ASCII_DIR)) return null;
+    if (!fs6.existsSync(ASCII_DIR))
+      return null;
     const files = fs6.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
     for (const pick of files.sort(() => Math.random() - 0.5)) {
       const art = fs6.readFileSync(path5.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
-      if (fits2(art, spec)) return art;
+      if (fits2(art, spec))
+        return art;
     }
   } catch (e) {
     debugLog("SessionStart", "load-ascii", e.message);
@@ -8562,7 +9198,8 @@ function loadAsciiArt(spec) {
   return null;
 }
 function renderWelcome(headroom) {
-  if (headroom <= RESERVE) return "";
+  if (headroom <= RESERVE)
+    return "";
   const spec = charBudget(headroom - RESERVE);
   const art = renderWelcomeImage(spec) ?? loadAsciiArt(spec);
   return art ? `
@@ -8580,7 +9217,8 @@ function prose(text2, limit) {
 }
 function loadSystemPrompt() {
   try {
-    if (fs7.existsSync(SYSTEM_PROMPT_PATH)) return fs7.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
+    if (fs7.existsSync(SYSTEM_PROMPT_PATH))
+      return fs7.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
   } catch (e) {
     debugLog("SessionStart", "load-system-prompt", e.message);
   }
@@ -8604,8 +9242,10 @@ defineHook({
       input.model ? new Badge({ label: input.model, color: "gray" }) : null
     ];
     const lines = [source_default.green("Session started")];
-    if (input.agentType) lines.push(source_default.gray("Agent: ") + input.agentType);
-    if (systemPrompt) lines.push(source_default.cyan("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH);
+    if (input.agentType)
+      lines.push(source_default.gray("Agent: ") + input.agentType);
+    if (systemPrompt)
+      lines.push(source_default.cyan("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH);
     const isWake = input.source === "compact";
     const heading = renderHeading({
       word: isWake ? "WAKE UP" : "BEGIN AGAIN",
@@ -8660,7 +9300,8 @@ defineHook({
     const heading = renderHeading({ word: "BEGIN", color: "green", event: "agent" });
     const main = new Badge({ label: "SubagentStart", color: "green", icon: "\u2B21" });
     const extras = [];
-    if (input.agentType) extras.push(new Badge({ label: input.agentType, color: "gray" }));
+    if (input.agentType)
+      extras.push(new Badge({ label: input.agentType, color: "gray" }));
     return { systemMessage: heading + renderSection({ badges: [main, ...extras] }) };
   }
 });
@@ -8731,7 +9372,8 @@ defineHook({
       input.loadReason ? new Badge({ label: input.loadReason, color: "gray" }) : null
     ];
     const lines = [];
-    if (input.filePath) lines.push(source_default.gray("File: ") + input.filePath);
+    if (input.filePath)
+      lines.push(source_default.gray("File: ") + input.filePath);
     return { systemMessage: renderSection({ badges, lines }) };
   }
 });
@@ -8744,7 +9386,8 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" });
     const lines = [];
-    if (input.prompt) lines.push(prose(input.prompt, 200));
+    if (input.prompt)
+      lines.push(prose(input.prompt, 200));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
@@ -8753,7 +9396,8 @@ defineHook({
   parse(raw) {
     const o = asObject(raw);
     const expanded = pickString(o, "expanded_prompt", "expandedPrompt", "expanded", "prompt") ?? "";
-    if (!expanded) debugLog("UserPromptExpansion", "unknown-shape", Object.keys(o));
+    if (!expanded)
+      debugLog("UserPromptExpansion", "unknown-shape", Object.keys(o));
     return {
       expandedPrompt: expanded,
       originalPrompt: pickString(o, "original_prompt", "originalPrompt")
@@ -8762,7 +9406,8 @@ defineHook({
   handle(input) {
     const badge = new Badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" });
     const lines = [];
-    if (input.expandedPrompt) lines.push(prose(input.expandedPrompt, 300));
+    if (input.expandedPrompt)
+      lines.push(prose(input.expandedPrompt, 300));
     return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
@@ -8798,9 +9443,12 @@ defineHook({
     ];
     const lines = [source_default.red("\u2A02 ") + source_default.bold.red("Tool failed:")];
     const err = input.error;
-    if (typeof err === "string") lines.push(err);
-    else if (typeof err === "object" && err && typeof err.message === "string") lines.push(err.message);
-    else lines.push(JSON.stringify(err, null, 2));
+    if (typeof err === "string")
+      lines.push(err);
+    else if (typeof err === "object" && err && typeof err.message === "string")
+      lines.push(err.message);
+    else
+      lines.push(JSON.stringify(err, null, 2));
     pushDurationLine(lines, input.durationMs);
     return {
       hookSpecificOutput: {
@@ -8860,9 +9508,8 @@ function readInput() {
 }
 function writeOutput(data, { mirrorSystemMessageToStderr = true } = {}) {
   const response = serializeHookResponse(data);
-  if (mirrorSystemMessageToStderr && response.systemMessage) {
+  if (mirrorSystemMessageToStderr && response.systemMessage)
     process.stderr.write(response.systemMessage + "\n");
-  }
   process.stdout.write(response.json);
   process.exit(0);
 }

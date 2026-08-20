@@ -4,9 +4,9 @@ Enhanced hooks for Claude Code — beautified terminal output for post-tool resu
 
 Block-letter headings, colored badges, syntax-highlighted diffs, sextant image
 previews and playful kaomoji phrases, across **13 active hook events** and
-**15 tool renderers**.
+**21 tool renderers**.
 
-**[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)** — 33
+**[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)** — 42
 examples, every one captured from the live pipeline at build time. Each links
 directly: [an image](https://tuomashatakka.github.io/claude-code-hooks/#read-image),
 [a file card](https://tuomashatakka.github.io/claude-code-hooks/#read-source),
@@ -59,28 +59,35 @@ splits any unknown response into its answer and its metadata.
 
 | Tool | What it draws | Live |
 | --- | --- | --- |
-| `Bash`, `wcgw BashCommand` | Command and output as paired cards, chains split a row per separator, heredocs verbatim, rulers turned into dividers, wcgw's trailer parsed into an exit/cwd row | [#bash-grep](https://tuomashatakka.github.io/claude-code-hooks/#bash-grep) |
+| `Bash`, `wcgw BashCommand` | Command and stdout as darker/regular regions in one card, chains split a row per separator, rulers start new cards below, wcgw metadata becomes an inset footer | [#bash-grep](https://tuomashatakka.github.io/claude-code-hooks/#bash-grep) |
 | `Read` | Syntax-highlighted file card, or an ANSI sextant preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
 | `Edit`, `MultiEdit` | The file re-read and cropped to the changed span plus three lines of context | [#edit](https://tuomashatakka.github.io/claude-code-hooks/#edit) |
+| `apply_patch` | Successful native patch summaries stay quiet instead of being repeated in a generic output card; unexpected output remains visible | [#apply-patch](https://tuomashatakka.github.io/claude-code-hooks/#apply-patch) |
+| `view_image` | The local target or inline data URL as a fitted ANSI image card | [#view-image](https://tuomashatakka.github.io/claude-code-hooks/#view-image) |
 | `wcgw FileWriteOrEdit` | Search/replace blocks parsed to tell an edit from a write, result read back off disk | [#wcgw-write](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-write) |
 | `wcgw ReadFiles`, `ReadImage` | One card per path, sharing a single response budget | [#wcgw-read](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-read) |
 | `wcgw Initialize`, `ContextSave` | Workspace handshake as three lines; saved context with its inlined files accounted for rather than printed | [#wcgw-ctx](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-ctx) |
 | Playwright `browser_*` | Output or JSON card plus a `ƒ` badge naming the operation; a screenshot draws the picture instead | [#pw-navigate](https://tuomashatakka.github.io/claude-code-hooks/#pw-navigate) |
 | `agent-browser` (via `Bash`) | One `ƒ` badge per subcommand in the chain; a screenshot it saves is drawn in place of its output | [#agent-browser](https://tuomashatakka.github.io/claude-code-hooks/#agent-browser) |
-| `Agent`, `Task` | Launch metadata as a card instead of raw JSON | [#agent-launch](https://tuomashatakka.github.io/claude-code-hooks/#agent-launch) |
-| `TaskCreate`, `TaskUpdate`, `TaskList` | Block-weight checkbox per task, state transitions spelled out | [#task-create](https://tuomashatakka.github.io/claude-code-hooks/#task-create) |
+| `ToolSearch` | Loaded tool names plus compact loaded/deferred counts | [#tool-search](https://tuomashatakka.github.io/claude-code-hooks/#tool-search) |
+| `AskUserQuestion` | The questions and selected answers, without unused options or annotations | [#ask-user-question](https://tuomashatakka.github.io/claude-code-hooks/#ask-user-question) |
+| `update_plan`, `TodoWrite`, `TodoRead` | Plan steps as a compact status list and completion count | [#update-plan](https://tuomashatakka.github.io/claude-code-hooks/#update-plan) |
+| `Agent`, `Task` | Description, launch status, model, id and output path—never the full worker prompt | [#agent-launch](https://tuomashatakka.github.io/claude-code-hooks/#agent-launch) |
+| collaboration `spawn_agent`, `wait_agent`, `followup_task`, `send_message`, `interrupt_agent`, `list_agents` | Compact lifecycle status and agent identity without replaying private briefs or raw result JSON | [#collaboration-spawn](https://tuomashatakka.github.io/claude-code-hooks/#collaboration-spawn) |
+| `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskStop` | Block-weight checkbox per task, state transitions and compact stop identity | [#task-create](https://tuomashatakka.github.io/claude-code-hooks/#task-create) |
 | `ExitPlanMode` | A block-letter sign-off | [#exit-plan](https://tuomashatakka.github.io/claude-code-hooks/#exit-plan) |
 | everything else | Generic fallback: answer card plus metadata card | [#generic-fallback](https://tuomashatakka.github.io/claude-code-hooks/#generic-fallback) |
 
-Cards are framed with the half-line glyphs — `▁` under the title badge, `▔`
-under the last row, `▏` and `▕` down the sides — because each sits against a
-different edge of its own cell and so closes flush around the fill. File cards
-additionally cast a `░` shadow, the one place the extra column earns its bytes.
-The title badge carries the path, shortened to whichever of project-relative or
-`~`-relative is shorter; detail about the content — the action, the line range —
-sits in the bottom-right corner of the frame instead of trailing the path.
-Paired command and output cards sit side-by-side when their ANSI-aware combined
-width fits comfortably, then fall back to a vertical stack on narrow terminals.
+Cards keep one half-line rule (`▁`) under the title badge and drop side borders,
+bottom borders and shadows. The title badge carries the path, shortened to
+whichever of project-relative or `~`-relative is shorter; detail about the
+content — the action, the line range, command metadata — sits inside the
+bottom-right backgrounded row instead of trailing the path. Cards always follow
+one another vertically. Bash command input uses a slightly darker region than
+stdout inside the same card, while ruler-led output starts a fresh card below.
+Tabs are expanded before width measurement, and foreign background/cursor/OSC
+sequences are removed so arbitrary terminal output cannot punch dark holes in a
+card or shift its right edge.
 Playwright and `agent-browser` calls add a compact operation badge such as
 `navigate`, `click`, or `snapshot`. `TaskCreate`, `TaskUpdate`, and `TaskList`
 share the same large block-weight checkbox: newly queued or active tasks stay
@@ -130,15 +137,17 @@ same room. Budgeting in JSON bytes of the whole envelope — as this plugin used
 — overcharges by roughly five times on output that is mostly escape sequences,
 which is all of it.
 
-When a composed render still exceeds the limit, the transport retains as many
-leading and trailing lines as fit and inserts a compact omitted-line count;
-single oversized lines use the same strategy at character granularity. That is a
-backstop, not a plan: previews size themselves first, weighing the finished card
-in the same characters Claude Code counts and re-rendering — fewer lines for
-text, a smaller picture for images — until it fits, because a picture with its
-middle cut out is worse than a smaller one. A picture that fits with room to
-spare is then re-aimed upward against its own measured cost, because the wrapper
-model is deliberately pessimistic and the renderer can only pick whole cells.
+When ANSI styling alone pushes a complete render over the limit, the transport
+keeps every row and falls back to plain text. If the content itself is genuinely
+larger than the field limit, it remains complete so Claude Code can use its
+native persisted-output preview and retain the full value on disk. The plugin
+never invents a lossy `… rows omitted …` summary. Previews still size themselves
+first, weighing the finished card in the same characters Claude Code counts and
+re-rendering — fewer lines for text, a smaller picture for images — until they
+fit, because a picture with its middle cut out is worse than a smaller one. A
+picture that fits with room to spare is then re-aimed upward against its own
+measured cost, because the wrapper model is deliberately pessimistic and the
+renderer can only pick whole cells.
 The image renderer searches two axes to meet the budget: the column ladder it
 always had, and a row cap. The rows matter because width is not always available to give — a
 tall, narrow source is already at its narrowest the moment it is decoded, so
@@ -157,6 +166,7 @@ bun install
 bun run smoke        # feed canned payloads through every event, eyeball the output
 bun test             # unit tests
 bun run typecheck
+bun run lint         # eslint 10, zero warnings or errors
 bun run build        # rebuild dist/hooks.mjs — commit the result
 bun run demo:capture # regenerate public/demo-data.js from the live pipeline
 ```

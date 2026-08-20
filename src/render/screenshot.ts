@@ -1,11 +1,11 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   isImageExtension,
   extensionFromPath,
   renderFileResult,
   renderInlineImageResult,
-} from './file-preview.ts';
+} from './file-preview.ts'
 
 /**
  * A screenshot tool's actual result is the picture. Everything it prints around
@@ -20,16 +20,17 @@ import {
  */
 
 /** Anything that could be a path to a picture. Verified against disk after. */
-const CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi;
+const CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi
 
 /** Trailing punctuation a sentence leaves stuck to a path. */
-const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"`]+$/;
+const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"`]+$/
 
-function isReadableFile(candidate: string): boolean {
+function isReadableFile (candidate: string): boolean {
   try {
-    return fs.statSync(candidate).isFile();
-  } catch {
-    return false;
+    return fs.statSync(candidate).isFile()
+  }
+  catch {
+    return false
   }
 }
 
@@ -39,46 +40,90 @@ function isReadableFile(candidate: string): boolean {
  * Relative names are resolved against `cwd`, which is where the tool ran — a
  * hook is spawned in the same working directory, so the two agree.
  */
-export function findImagePath(text: string | null | undefined, cwd: string = process.cwd()): string | null {
-  if (!text) return null;
+export function findImagePath (text: string | null | undefined, cwd: string = process.cwd()): string | null {
+  if (!text)
+    return null
 
   for (const match of String(text).matchAll(CANDIDATE_RE)) {
-    const candidate = match[0].replace(TRAILING_PUNCTUATION, '');
-    if (!isImageExtension(extensionFromPath(candidate))) continue;
-    const resolved = path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
-    if (isReadableFile(resolved)) return resolved;
+    const candidate = match[0].replace(TRAILING_PUNCTUATION, '')
+    if (!isImageExtension(extensionFromPath(candidate)))
+      continue
+
+    const resolved = path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate)
+    if (isReadableFile(resolved))
+      return resolved
   }
 
-  return null;
+  return null
 }
 
 interface InlineImage {
   data: Buffer;
-  ext: string;
+  ext:  string;
 }
 
 /** MIME subtypes worth decoding, mapped to the extension the decoder wants. */
 const MIME_EXTENSIONS: Record<string, string> = {
-  png: '.png',
+  png:  '.png',
   jpeg: '.jpg',
-  jpg: '.jpg',
+  jpg:  '.jpg',
   webp: '.webp',
-};
+}
 
-function inlineImageFrom(value: unknown): InlineImage | null {
-  if (!value || typeof value !== 'object') return null;
-  const block = value as { type?: unknown; data?: unknown; mimeType?: unknown };
-  if (block.type !== 'image' || typeof block.data !== 'string' || !block.data) return null;
+interface InlineImageBlock {
+  type?:      unknown;
+  data?:      unknown;
+  mimeType?:  unknown;
+  image_url?: unknown;
+}
 
-  const subtype = String(block.mimeType ?? 'image/png').split('/')[1]?.toLowerCase() ?? 'png';
-  const ext = MIME_EXTENSIONS[subtype];
-  if (!ext) return null;
+interface EncodedInlineImage {
+  encoded: string;
+  subtype: string;
+}
+
+function imageBlock (value: unknown): InlineImageBlock | null {
+  if (!value || typeof value !== 'object')
+    return null
+
+  const block = value as InlineImageBlock
+  if (block.type !== 'image' && block.type !== 'input_image')
+    return null
+  return block
+}
+
+function encodedInlineImage (block: InlineImageBlock): EncodedInlineImage | null {
+  const dataUrl = typeof block.image_url === 'string'
+    ? (/^data:image\/([^;,]+);base64,(.+)$/s).exec(block.image_url)
+    : null
+  const encoded = typeof block.data === 'string' ? block.data : dataUrl?.[2]
+  if (!encoded)
+    return null
+
+  const subtype = String(block.mimeType ?? `image/${dataUrl?.[1] ?? 'png'}`).split('/')[1]?.toLowerCase() ?? 'png'
+  return { encoded, subtype }
+}
+
+function decodeInlineImage ({ encoded, subtype }: EncodedInlineImage): InlineImage | null {
+  const ext     = MIME_EXTENSIONS[subtype]
+  if (!ext)
+    return null
 
   try {
-    return { data: Buffer.from(block.data, 'base64'), ext };
-  } catch {
-    return null;
+    return { data: Buffer.from(encoded, 'base64'), ext }
   }
+  catch {
+    return null
+  }
+}
+
+function inlineImageFrom (value: unknown): InlineImage | null {
+  const block = imageBlock(value)
+  if (!block)
+    return null
+
+  const encoded = encodedInlineImage(block)
+  return encoded ? decodeInlineImage(encoded) : null
 }
 
 /**
@@ -86,21 +131,25 @@ function inlineImageFrom(value: unknown): InlineImage | null {
  * return a screenshot inline put it here rather than naming a file, so this is
  * the path that has no path.
  */
-export function findInlineImage(result: unknown): InlineImage | null {
-  if (!result || typeof result !== 'object') return null;
+export function findInlineImage (result: unknown): InlineImage | null {
+  if (!result || typeof result !== 'object')
+    return null
 
-  const direct = inlineImageFrom(result);
-  if (direct) return direct;
+  const direct = inlineImageFrom(result)
+  if (direct)
+    return direct
 
-  const content = (result as { content?: unknown }).content;
-  if (!Array.isArray(content)) return null;
+  const content = (result as { content?: unknown }).content
+  if (!Array.isArray(content))
+    return null
 
   for (const block of content) {
-    const image = inlineImageFrom(block);
-    if (image) return image;
+    const image = inlineImageFrom(block)
+    if (image)
+      return image
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -110,16 +159,18 @@ export function findInlineImage(result: unknown): InlineImage | null {
  * A named file is preferred over inline bytes: it is the same picture, and the
  * card gets a real path for its title badge instead of a placeholder.
  */
-export function renderScreenshot(
+export function renderScreenshot (
   result: unknown,
   text: string | null | undefined,
   action = 'screenshot',
 ): string | null {
-  const file = findImagePath(text);
-  if (file) return renderFileResult(file, { action });
+  const file = findImagePath(text)
+  if (file)
+    return renderFileResult(file, { action })
 
-  const inline = findInlineImage(result);
-  if (inline) return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action });
+  const inline = findInlineImage(result)
+  if (inline)
+    return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action })
 
-  return null;
+  return null
 }

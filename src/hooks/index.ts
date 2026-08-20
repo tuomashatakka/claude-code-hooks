@@ -1,17 +1,17 @@
-import chalk from 'chalk';
-import fs from 'node:fs';
-import path from 'node:path';
-import { defineHook } from '../registry/hook-registry.ts';
+import chalk from 'chalk'
+import fs from 'node:fs'
+import path from 'node:path'
+import { defineHook } from '../registry/hook-registry.ts'
 import {
   Badge,
   getMaxContentWidth,
   pushDurationLine,
   renderHeading,
   renderSection,
-} from '../tui/index.ts';
-import { wrapText } from '../render/primitives.ts';
-import { debugLog } from '../runtime/debug.ts';
-import { systemMessageHeadroom } from '../runtime/output-transport.ts';
+} from '../tui/index.ts'
+import { wrapText } from '../render/primitives.ts'
+import { debugLog } from '../runtime/debug.ts'
+import { systemMessageHeadroom } from '../runtime/output-transport.ts'
 import {
   asObject,
   pickString,
@@ -19,318 +19,337 @@ import {
   pickBool,
   pickAny,
   injectToolDiscriminator
-} from './_normalize.ts';
-import { renderToolSection } from '../render/render-tool.ts';
-import { renderWelcome } from '../render/welcome.ts';
-import type { ToolName } from '../types/claude-code.ts';
-import type { RawToolResult } from '../types/tool-io.ts';
+} from './_normalize.ts'
+import { renderToolSection } from '../render/render-tool.ts'
+import { renderWelcome } from '../render/welcome.ts'
+import type { ToolName } from '../types/claude-code.ts'
+import type { RawToolResult } from '../types/tool-io.ts'
 
-chalk.level = 3;
 
-const HOME = process.env.HOME ?? process.env.USERPROFILE ?? '';
-const SYSTEM_PROMPT_PATH = path.join(HOME, 'system-prompt.md');
+chalk.level = 3
+
+const HOME               = process.env.HOME ?? process.env.USERPROFILE ?? ''
+const SYSTEM_PROMPT_PATH = path.join(HOME, 'system-prompt.md')
 
 /**
  * A quoted prompt or summary, capped and wrapped to the terminal width.
  * These are the only lines the plugin prints that are prose rather than
  * structure, so they are the only ones that need wrapping.
  */
-function prose(text: string, limit: number): string {
-  const capped = text.length > limit ? text.slice(0, limit) + '...' : text;
-  return chalk.gray(wrapText(capped, getMaxContentWidth()));
+function prose (text: string, limit: number): string {
+  const capped = text.length > limit ? text.slice(0, limit) + '...' : text
+  return chalk.gray(wrapText(capped, getMaxContentWidth()))
 }
 
-function loadSystemPrompt(): string | null {
+function loadSystemPrompt (): string | null {
   try {
-    if (fs.existsSync(SYSTEM_PROMPT_PATH)) return fs.readFileSync(SYSTEM_PROMPT_PATH, 'utf8');
-  } catch (e) { debugLog('SessionStart', 'load-system-prompt', (e as Error).message); }
-  return null;
+    if (fs.existsSync(SYSTEM_PROMPT_PATH))
+      return fs.readFileSync(SYSTEM_PROMPT_PATH, 'utf8')
+  }
+  catch (e) {
+    debugLog('SessionStart', 'load-system-prompt', (e as Error).message)
+  }
+  return null
 }
 
 // 1. SessionStart
 defineHook({
   event: 'SessionStart',
-  parse(raw) {
-    const o = asObject(raw);
+  parse (raw) {
+    const o      = asObject(raw)
     const source = (pickString(o, 'source') ?? 'startup') as
-      'startup' | 'resume' | 'clear' | 'compact' | (string & {});
+      'startup' | 'resume' | 'clear' | 'compact' | string & {}
     return {
       source,
-      model: pickString(o, 'model'),
+      model:     pickString(o, 'model'),
       agentType: pickString(o, 'agent_type', 'agentType'),
-    };
+    }
   },
-  handle(input) {
-    const systemPrompt = loadSystemPrompt();
+  handle (input) {
+    const systemPrompt = loadSystemPrompt()
 
     const badges = [
       new Badge({ label: `Session:${input.source}`, color: 'green', icon: '⏻' }),
       input.model ? new Badge({ label: input.model, color: 'gray' }) : null,
-    ];
+    ]
 
-    const lines: string[] = [chalk.green('Session started')];
-    if (input.agentType) lines.push(chalk.gray('Agent: ') + input.agentType);
-    if (systemPrompt)    lines.push(chalk.cyan('✓ ') + 'System prompt loaded from: ' + SYSTEM_PROMPT_PATH);
+    const lines: string[] = [ chalk.green('Session started') ]
+    if (input.agentType)
+      lines.push(chalk.gray('Agent: ') + input.agentType)
+    if (systemPrompt)
+      lines.push(chalk.cyan('✓ ') + 'System prompt loaded from: ' + SYSTEM_PROMPT_PATH)
 
-    const isWake = input.source === 'compact';
+    const isWake  = input.source === 'compact'
     const heading = renderHeading({
-      word: isWake ? 'WAKE UP' : 'BEGIN AGAIN',
+      word:  isWake ? 'WAKE UP' : 'BEGIN AGAIN',
       color: 'cyan',
       event: isWake ? 'wakeup' : 'start',
-    });
+    })
     // The art is sized against what the rest of the response leaves of the
     // transport's byte budget, so it has to be rendered last — and measured
     // against the response it will ship inside, not against a guess.
     const response = {
       hookSpecificOutput: {
         hookEventName: 'SessionStart' as const,
-        ...(systemPrompt ? { additionalContext: systemPrompt } : {}),
+        ...systemPrompt ? { additionalContext: systemPrompt } : {},
       },
       systemMessage: heading + renderSection({ badges, lines }),
-    };
+    }
 
     return {
       ...response,
       systemMessage: renderWelcome(systemMessageHeadroom(response)) + response.systemMessage,
-    };
+    }
   },
-});
+})
 
 // 2. SessionEnd
 defineHook({
   event: 'SessionEnd',
-  parse() { return {}; },
-  handle() {
-    const heading = renderHeading({ word: 'BYE', color: 'red', event: 'bye' });
-    const badge = new Badge({ label: 'SessionEnd', color: 'red', icon: '⏼' });
-    return { systemMessage: heading + renderSection({ badges: badge }) };
+  parse () {
+    return {}
   },
-});
+  handle () {
+    const heading = renderHeading({ word: 'BYE', color: 'red', event: 'bye' })
+    const badge   = new Badge({ label: 'SessionEnd', color: 'red', icon: '⏼' })
+    return { systemMessage: heading + renderSection({ badges: badge }) }
+  },
+})
 
 // 3. Stop
 defineHook({
   event: 'Stop',
-  parse() { return {}; },
-  handle() {
-    const heading = renderHeading({ word: 'STOP', color: 'red', event: 'stop' });
-    const badge = new Badge({ label: 'Stop', color: 'red', icon: '■' });
-    return { systemMessage: heading + renderSection({ badges: badge }) };
+  parse () {
+    return {}
   },
-});
+  handle () {
+    const heading = renderHeading({ word: 'STOP', color: 'red', event: 'stop' })
+    const badge   = new Badge({ label: 'Stop', color: 'red', icon: '■' })
+    return { systemMessage: heading + renderSection({ badges: badge }) }
+  },
+})
 
 // 4. SubagentStart
 defineHook({
   event: 'SubagentStart',
-  parse(raw) {
-    const o = asObject(raw);
+  parse (raw) {
+    const o = asObject(raw)
     return {
-      agentId: pickString(o, 'agent_id', 'agentId'),
+      agentId:   pickString(o, 'agent_id', 'agentId'),
       agentType: pickString(o, 'agent_type', 'agentType'),
 
-    };
+    }
   },
-  handle(input) {
-    const heading = renderHeading({ word: 'BEGIN', color: 'green', event: 'agent' });
-    const main = new Badge({ label: 'SubagentStart', color: 'green', icon: '⬡' });
-    const extras: Badge[] = [];
-    if (input.agentType) extras.push(new Badge({ label: input.agentType, color: 'gray' }));
-    return { systemMessage: heading + renderSection({ badges: [main, ...extras] }) };
+  handle (input) {
+    const heading         = renderHeading({ word: 'BEGIN', color: 'green', event: 'agent' })
+    const main            = new Badge({ label: 'SubagentStart', color: 'green', icon: '⬡' })
+    const extras: Badge[] = []
+    if (input.agentType)
+      extras.push(new Badge({ label: input.agentType, color: 'gray' }))
+    return { systemMessage: heading + renderSection({ badges: [ main, ...extras ]}) }
   },
-});
+})
 
 // 5. SubagentStop
 defineHook({
   event: 'SubagentStop',
-  parse(raw) {
-    const o = asObject(raw);
-    return { agentType: pickString(o, 'agent_type', 'agentType') };
+  parse (raw) {
+    const o = asObject(raw)
+    return { agentType: pickString(o, 'agent_type', 'agentType') }
   },
-  handle(input) {
+  handle (input) {
     const badges = [
       new Badge({ label: 'SubagentStop', color: 'green', icon: '⌟' }),
       new Badge({
         label: input.agentType ?? 'Main Process',
         color: 'gray',
       }),
-    ];
+    ]
     return {
       systemMessage:
-        renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' })
-        + renderSection({ badges }),
-    };
+        renderHeading({ word: 'GOIN ASLEEP', color: 'green', event: 'agent' }) +
+        renderSection({ badges }),
+    }
   },
-});
+})
 
 // 6. PreCompact
 defineHook({
   event: 'PreCompact',
-  parse(raw) {
-    const o = asObject(raw);
+  parse (raw) {
+    const o = asObject(raw)
     return {
-      trigger: pickString(o, 'trigger') as 'manual' | 'auto' | undefined,
+      trigger:            pickString(o, 'trigger') as 'manual' | 'auto' | undefined,
       customInstructions: pickString(o, 'custom_instructions', 'customInstructions'),
-    };
+    }
   },
-  handle(input) {
-    const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' });
-    const badges = [
+  handle (input) {
+    const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' })
+    const badges  = [
       new Badge({ label: 'PreCompact', color: 'yellow', icon: '⟳' }),
       input.trigger ? new Badge({ label: input.trigger, color: 'gray' }) : null,
-    ];
-    const lines = input.customInstructions ? [prose(input.customInstructions, 200)] : [];
-    return { systemMessage: heading + renderSection({ badges, lines }) };
+    ]
+    const lines = input.customInstructions ? [ prose(input.customInstructions, 200) ] : []
+    return { systemMessage: heading + renderSection({ badges, lines }) }
   },
-});
+})
 
 // 7. PostCompact
 defineHook({
   event: 'PostCompact',
-  parse(raw) {
-    const o = asObject(raw);
-    return { summary: pickString(o, 'summary', 'compact_summary') };
+  parse (raw) {
+    const o = asObject(raw)
+    return { summary: pickString(o, 'summary', 'compact_summary') }
   },
-  handle(input) {
-    const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' });
-    const badge = new Badge({ label: 'PostCompact', color: 'yellow', icon: '⟳' });
-    const lines = input.summary ? [prose(input.summary, 200)] : [];
-    return { systemMessage: heading + renderSection({ badges: badge, lines }) };
+  handle (input) {
+    const heading = renderHeading({ word: 'COMPACT', color: 'yellow', event: 'compact' })
+    const badge   = new Badge({ label: 'PostCompact', color: 'yellow', icon: '⟳' })
+    const lines   = input.summary ? [ prose(input.summary, 200) ] : []
+    return { systemMessage: heading + renderSection({ badges: badge, lines }) }
   },
-});
+})
 
 // 8. InstructionsLoaded
 defineHook({
   event: 'InstructionsLoaded',
-  parse(raw) {
-    const o = asObject(raw);
+  parse (raw) {
+    const o = asObject(raw)
     return {
-      filePath: pickString(o, 'file_path', 'filePath') ?? '',
+      filePath:   pickString(o, 'file_path', 'filePath') ?? '',
       memoryType: pickString(o, 'memory_type', 'memoryType') ?? 'Unknown',
       loadReason: pickString(o, 'load_reason', 'loadReason') ?? '',
-    };
+    }
   },
-  handle(input) {
+  handle (input) {
     const badges = [
       new Badge({ label: `Instructions:${input.memoryType}`, color: 'cyan', icon: '✓' }),
       input.loadReason ? new Badge({ label: input.loadReason, color: 'gray' }) : null,
-    ];
+    ]
 
-    const lines: string[] = [];
-    if (input.filePath) lines.push(chalk.gray('File: ') + input.filePath);
-    return { systemMessage: renderSection({ badges, lines }) };
+    const lines: string[] = []
+    if (input.filePath)
+      lines.push(chalk.gray('File: ') + input.filePath)
+    return { systemMessage: renderSection({ badges, lines }) }
   },
-});
+})
 
 // 9. UserPromptSubmit
 defineHook({
   event: 'UserPromptSubmit',
-  parse(raw) {
-    const o = asObject(raw);
-    return { prompt: pickString(o, 'prompt', 'user_prompt', 'userPrompt') ?? '' };
+  parse (raw) {
+    const o = asObject(raw)
+    return { prompt: pickString(o, 'prompt', 'user_prompt', 'userPrompt') ?? '' }
   },
-  handle(input) {
-    const badge = new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' });
-    const lines: string[] = [];
-    if (input.prompt) lines.push(prose(input.prompt, 200));
-    return { systemMessage: renderSection({ badges: badge, lines }) };
+  handle (input) {
+    const badge           = new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' })
+    const lines: string[] = []
+    if (input.prompt)
+      lines.push(prose(input.prompt, 200))
+    return { systemMessage: renderSection({ badges: badge, lines }) }
   },
-});
+})
 
 // 10. UserPromptExpansion
 defineHook({
   event: 'UserPromptExpansion',
-  parse(raw) {
-    const o = asObject(raw);
-    const expanded = pickString(o, 'expanded_prompt', 'expandedPrompt', 'expanded', 'prompt') ?? '';
-    if (!expanded) debugLog('UserPromptExpansion', 'unknown-shape', Object.keys(o));
+  parse (raw) {
+    const o        = asObject(raw)
+    const expanded = pickString(o, 'expanded_prompt', 'expandedPrompt', 'expanded', 'prompt') ?? ''
+    if (!expanded)
+      debugLog('UserPromptExpansion', 'unknown-shape', Object.keys(o))
     return {
       expandedPrompt: expanded,
       originalPrompt: pickString(o, 'original_prompt', 'originalPrompt'),
-    };
+    }
   },
-  handle(input) {
-    const badge = new Badge({ label: 'UserPromptExpansion', color: 'magenta', icon: '✱' });
-    const lines: string[] = [];
-    if (input.expandedPrompt) lines.push(prose(input.expandedPrompt, 300));
-    return { systemMessage: renderSection({ badges: badge, lines }) };
+  handle (input) {
+    const badge           = new Badge({ label: 'UserPromptExpansion', color: 'magenta', icon: '✱' })
+    const lines: string[] = []
+    if (input.expandedPrompt)
+      lines.push(prose(input.expandedPrompt, 300))
+    return { systemMessage: renderSection({ badges: badge, lines }) }
   },
-});
+})
 
 // 11. PostToolBatch
 defineHook({
   event: 'PostToolBatch',
-  parse(raw) {
-    return asObject(raw);
+  parse (raw) {
+    return asObject(raw)
   },
-  handle() {
-    return {};
+  handle () {
+    return {}
   },
-});
+})
 
 // 12. PostToolUseFailure
 defineHook({
   event: 'PostToolUseFailure',
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown';
-    const rawInput = pickAny(o, 'tool_input', 'toolInput') ?? {};
-    const errorRaw = pickAny(o, 'error', 'tool_result') ?? 'Unknown error';
-    const error = (typeof errorRaw === 'string' || (errorRaw && typeof errorRaw === 'object'))
+  parse (raw) {
+    const o                  = asObject(raw)
+    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown'
+    const rawInput           = pickAny(o, 'tool_input', 'toolInput') ?? {}
+    const errorRaw           = pickAny(o, 'error', 'tool_result') ?? 'Unknown error'
+    const error              = typeof errorRaw === 'string' || errorRaw && typeof errorRaw === 'object'
       ? errorRaw as string | { message?: string; [k: string]: unknown }
-      : 'Unknown error';
+      : 'Unknown error'
     return {
       toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput) as Record<string, unknown>,
+      toolInput:   injectToolDiscriminator(toolName, rawInput) as Record<string, unknown>,
       error,
       isInterrupt: pickBool(o, 'is_interrupt', 'isInterrupt'),
-      durationMs: pickNumber(o, 'duration_ms', 'durationMs'),
-    };
+      durationMs:  pickNumber(o, 'duration_ms', 'durationMs'),
+    }
   },
-  handle(input) {
+  handle (input) {
     const badges = [
       new Badge({ toolName: input.toolName, color: 'red', icon: '⨂' }),
       input.isInterrupt ? new Badge({ label: 'INTERRUPT', color: 'yellow' }) : null,
-    ];
+    ]
 
-    const lines: string[] = [chalk.red('⨂ ') + chalk.bold.red('Tool failed:')];
-    const err = input.error;
-    if (typeof err === 'string') lines.push(err);
-    else if (typeof err === 'object' && err && typeof err.message === 'string') lines.push(err.message);
-    else lines.push(JSON.stringify(err, null, 2));
-    pushDurationLine(lines, input.durationMs);
+    const lines: string[] = [ chalk.red('⨂ ') + chalk.bold.red('Tool failed:') ]
+    const err             = input.error
+    if (typeof err === 'string')
+      lines.push(err)
+    else if (typeof err === 'object' && err && typeof err.message === 'string')
+      lines.push(err.message)
+    else
+      lines.push(JSON.stringify(err, null, 2))
+    pushDurationLine(lines, input.durationMs)
 
     return {
       hookSpecificOutput: {
-        hookEventName: 'PostToolUseFailure',
+        hookEventName:     'PostToolUseFailure',
         additionalContext: typeof err === 'string' ? err : JSON.stringify(err),
       },
       systemMessage: renderSection({ badges, lines }),
-    };
+    }
   },
-});
+})
 
 // 13. PostToolUse
 defineHook({
   event: 'PostToolUse',
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown';
-    const rawInput = pickAny(o, 'tool_input', 'toolInput') ?? {};
-    const toolResponse = (pickAny(o, 'tool_response', 'tool_result', 'toolResult') ?? null) as RawToolResult;
+  parse (raw) {
+    const o                  = asObject(raw)
+    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown'
+    const rawInput           = pickAny(o, 'tool_input', 'toolInput') ?? {}
+    const toolResponse       = (pickAny(o, 'tool_response', 'tool_result', 'toolResult') ?? null) as RawToolResult
     return {
       toolResponse,
       toolName,
       toolInput:  injectToolDiscriminator(toolName, rawInput),
       sessionId:  pickString(o, 'session_id', 'sessionId'),
       durationMs: pickNumber(o, 'duration_ms', 'durationMs'),
-    };
+    }
   },
-  handle(input) {
+  handle (input) {
     const systemMessage = renderToolSection({
       toolName:   input.toolName,
       input:      input.toolInput,
       result:     input.toolResponse,
       durationMs: input.durationMs,
-    });
-    return { systemMessage };
+    })
+    return { systemMessage }
   },
-});
+})

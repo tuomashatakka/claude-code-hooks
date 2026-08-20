@@ -1,6 +1,6 @@
 name: CI
 
-# Typecheck, test, smoke, and - critically - verify that the committed
+# Lint, typecheck, test, smoke, and - critically - verify that the committed
 # dist/hooks.mjs bundle matches the current source. That bundle is what
 # actually runs on a user's machine: marketplace installs are copied into
 # ~/.claude/plugins/cache WITHOUT node_modules, so the hooks can only work
@@ -33,6 +33,9 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
 
       - name: Unit tests
         run: bun test
