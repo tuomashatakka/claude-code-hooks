@@ -24,7 +24,13 @@ import path from 'node:path'
 import { renderedHookOutput, runCase } from './smoke.ts'
 import type { Case } from './smoke.ts'
 import { ansiToHtmlLines } from './ansi-to-html.ts'
-import { demoContextPath, demoImagePath, writeDemoFixtures, removeDemoFixtures } from './fixtures.ts'
+import {
+  demoContextPath,
+  demoImagePath,
+  demoPromptImagePath,
+  writeDemoFixtures,
+  removeDemoFixtures,
+} from './fixtures.ts'
 import { listHooks } from '../src/registry/hook-registry.ts'
 import { getToolDefinition, listToolDefinitions } from '../src/registry/tool-registry.ts'
 import * as hooksIndex from '../src/hooks/index.ts'
@@ -35,11 +41,12 @@ void hooksIndex
 void toolsIndex
 
 
-const ROOT         = path.resolve(import.meta.dir, '..')
-const OUT          = path.join(ROOT, 'public', 'demo-data.js')
-const DEMO_HOME    = path.join(ROOT, 'scripts', 'fixtures', 'demo-home')
-const DEMO_PNG     = demoImagePath(DEMO_HOME)
-const DEMO_CONTEXT = demoContextPath(DEMO_HOME)
+const ROOT            = path.resolve(import.meta.dir, '..')
+const OUT             = path.join(ROOT, 'public', 'demo-data.js')
+const DEMO_HOME       = path.join(ROOT, 'scripts', 'fixtures', 'demo-home')
+const DEMO_PNG        = demoImagePath(DEMO_HOME)
+const DEMO_PROMPT_PNG = demoPromptImagePath(DEMO_HOME)
+const DEMO_CONTEXT    = demoContextPath(DEMO_HOME)
 
 // The banner's version came from a hand-edited string and was two releases
 // stale by the time anyone noticed. It is read from the manifest now, so it is
@@ -185,10 +192,11 @@ const SCRIPT: Beat[] = [
   }),
 
   hook('prompt-submit', 'session', 'UserPromptSubmit says:', 'UserPromptSubmit', {
-    prompt: 'give the Stop hook a matching badge and check nothing else regressed',
+    prompt: `<image name=[Image #1] path="${DEMO_PROMPT_PNG}">`,
+    cwd:    DEMO_HOME,
   }, {
-    prompt: 'give the Stop hook a matching badge and check nothing else regressed',
-    note:   'Every prompt you submit is echoed back through the hook.',
+    prompt: 'inspect this monochrome reference image',
+    note:   'A readable image path in the prompt becomes a fitted card through the established imageToAscii renderer.',
   }),
 
   tool('ask-user-question', 'session', 'AskUserQuestion',
@@ -619,7 +627,7 @@ function normalizePaths (text: string): string {
  * `getToolDefinition` hands back for a beat's tool name is the strategy that
  * beat proves, so no strategy needs to carry an id for this to work.
  */
-const SILENT_EVENTS = new Set([ 'PostToolBatch' ]) // handled, renders nothing by design
+const SILENT_EVENTS = new Set([ 'PreToolUse', 'PostToolBatch' ]) // handled, render nothing by design
 
 function assertFullCoverage (beats: readonly Beat[]): void {
   const shownEvents   = new Set(beats.map(b => b.event))
@@ -666,11 +674,11 @@ for (const beat of SCRIPT) {
   const lines    = ansiToHtmlLines(normalizePaths(rendered.replace(/\n+$/, '')))
   if (!lines.length)
     throw new Error(beat.id + ' produced no output — hook registry empty?')
-  // A renderer must never invent a lossy middle cut. Oversized output is left
-  // complete for the host's native persisted-output path instead.
-  if ((/\bomitted …/).test(rendered))
+  // Showcase fixtures are deliberately bounded; needing the transport's saved
+  // head/tail preview means the renderer itself spent too much of the budget.
+  if (rendered.includes('preview split'))
     throw new Error(
-      beat.id + ' overran the response budget — the transport cut its middle out. ' +
+      beat.id + ' overran the response budget and fell back to a persisted preview. ' +
       'Size the preview (src/render/file-preview.ts) rather than letting the transport trim it.'
     )
   examples.push({

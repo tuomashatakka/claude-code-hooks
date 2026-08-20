@@ -13,7 +13,7 @@ import { BASES, type CoverageBasis, type GlyphFamily, type GlyphTable } from './
 export { regularSextant, separatedSextant } from './glyphs/sextants.ts';
 export { renderBraille, brailleChars, type BrailleOptions } from './braille.ts';
 export { costOf, normalizeBudget, DEFAULT_BUDGET, type BudgetSpec } from './budget.ts';
-export type { RGBAImage } from './decode.ts';
+export { decodeImage, type RGBAImage } from './decode.ts';
 
 const MAX_ROWS = 120;       // downscale bound for very tall images — resizes, never crops
 const ALPHA_OPAQUE = 128;   // below this a pixel renders as the terminal's own background
@@ -137,7 +137,14 @@ const PALETTE_256: readonly RGB[] = (() => {
  * WezTerm synthesise every one of these glyphs from the cell metrics and are
  * immune to font coverage entirely. Everywhere else, sextants.
  */
-export type GlyphMode = 'sextant' | 'octant' | 'half' | 'braille';
+export type GlyphMode = 'sextant' | 'octant' | 'half' | 'braille' | 'ascii';
+
+function environmentGlyphMode(): GlyphMode | null {
+  const env = process.env.CLAUDE_HOOKS_IMAGE_MODE;
+  return env === 'sextant' || env === 'octant' || env === 'half' || env === 'braille' || env === 'ascii'
+    ? env
+    : null;
+}
 
 function drawsItsOwnGlyphs(): boolean {
   const program = (process.env.TERM_PROGRAM ?? '').toLowerCase();
@@ -146,13 +153,105 @@ function drawsItsOwnGlyphs(): boolean {
 }
 
 export function resolveGlyphMode(): GlyphMode {
-  const env = process.env.CLAUDE_HOOKS_IMAGE_MODE;
-  if (env === 'sextant' || env === 'octant' || env === 'half' || env === 'braille') return env;
+  const env = environmentGlyphMode();
+  if (env) return env;
   if (process.env.TERM === 'dumb') return 'half';
   // Below a 1.75 cell aspect a 2x3 grid is the squarer of the two, so the
   // octants' extra row would be buying detail in the wrong direction.
   if (drawsItsOwnGlyphs() && cellAspect() >= 1.75) return 'octant';
   return 'sextant';
+}
+
+interface MonochromeAnalysis {
+  monochrome:      boolean;
+  lightBackground: boolean;
+}
+
+const MONOCHROME_CHROMA_TOLERANCE = 18;
+const MONOCHROME_MIN_SHARE = 0.995;
+const MONOCHROME_SAMPLE_LIMIT = 100_000;
+const ASCII_RAMP = ' .:-=+*#%@';
+
+/** Low-chroma images take the token-cheap, color-free text renderer. */
+function analyzeMonochrome(img: RGBAImage): MonochromeAnalysis {
+  const pixels = img.width * img.height;
+  const step   = Math.max(1, Math.ceil(pixels / MONOCHROME_SAMPLE_LIMIT));
+  let visible  = 0;
+  let neutral  = 0;
+  let luminance = 0;
+
+  for (let pixel = 0; pixel < pixels; pixel += step) {
+    const at = pixel * 4;
+    if ((img.data[at + 3] ?? 255) < 16) continue;
+
+    const r = img.data[at] ?? 0;
+    const g = img.data[at + 1] ?? 0;
+    const b = img.data[at + 2] ?? 0;
+    visible++;
+    luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (Math.max(r, g, b) - Math.min(r, g, b) <= MONOCHROME_CHROMA_TOLERANCE)
+      neutral++;
+  }
+
+  return {
+    monochrome:      visible === 0 || neutral / visible >= MONOCHROME_MIN_SHARE,
+    lightBackground: visible > 0 && luminance / visible >= 127.5,
+  };
+}
+
+function renderAsciiLines(
+  sat: ImageSAT,
+  cols: number,
+  rows: number,
+  lightBackground: boolean,
+): string[] {
+  const sample: AreaSample = { r: 0, g: 0, b: 0, a: 0 };
+  const lines: string[] = [];
+
+  for (let y = 0; y < rows; y++) {
+    let line = '';
+    for (let x = 0; x < cols; x++) {
+      const [x0, y0, x1, y1] = subCellRect(sat, x, y, cols, rows);
+      rectMean(sat, x0, y0, x1, y1, sample);
+      if (sample.a < 16) {
+        line += ' ';
+        continue;
+      }
+
+      const luminance = 0.2126 * sample.r + 0.7152 * sample.g + 0.0722 * sample.b;
+      const polarity  = lightBackground ? 255 - luminance : luminance;
+      const ink       = polarity * sample.a / 255;
+      const index     = Math.min(ASCII_RAMP.length - 1, Math.round(ink / 255 * (ASCII_RAMP.length - 1)));
+      line += ASCII_RAMP[index];
+    }
+    lines.push(line.trimEnd());
+  }
+  return lines;
+}
+
+function widestAsciiRender(
+  img: RGBAImage,
+  sat: ImageSAT,
+  startCols: number,
+  spec: BudgetSpec,
+  maxRows: number,
+  lightBackground: boolean,
+): string[] {
+  let smallest = [ ' ' ];
+  let previousGeometry = '';
+
+  for (let requested = startCols; requested >= 1; requested--) {
+    const geometry = fitGeometry(img.width, img.height, requested, BASES['1x1'], cellAspect(), maxRows);
+    const key      = `${geometry.cols}x${geometry.rows}`;
+    if (key === previousGeometry) continue;
+    previousGeometry = key;
+
+    const lines = renderAsciiLines(sat, geometry.cols, geometry.rows, lightBackground);
+    smallest = lines;
+    if (costOf(lines, spec) <= spec.total)
+      return lines;
+  }
+  return smallest;
 }
 
 interface RenderContext {
@@ -643,6 +742,35 @@ export interface RenderOptions {
   braille?: BrailleOptions;
 }
 
+export function imageToMonochromeAscii(buffer: Buffer, ext: string, maxWidth?: number): string | null;
+export function imageToMonochromeAscii(buffer: Buffer, ext: string, options: RenderOptions): string | null;
+export function imageToMonochromeAscii(
+  buffer: Buffer,
+  ext: string,
+  widthOrOptions: number | RenderOptions = 80,
+): string | null {
+  const options: RenderOptions = typeof widthOrOptions === 'number'
+    ? { maxWidth: widthOrOptions }
+    : widthOrOptions;
+  const img = decodeImage(buffer, ext);
+  if (!img) return null;
+
+  const maxWidth = options.maxWidth ?? 80;
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+  const analysis = analyzeMonochrome(img);
+  const lines = widestAsciiRender(
+    img,
+    buildSAT(img),
+    Math.min(img.width, requestedMax),
+    normalizeBudget(options.budget),
+    requestedRows,
+    analysis.lightBackground,
+  );
+  const output = lines.join('\n');
+  return output.length > 0 ? output : ' ';
+}
+
 /**
  * Widest braille render that fits.
  *
@@ -702,6 +830,10 @@ export function imageToAscii(
     : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
 
   const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+
+  if (mode === 'ascii') {
+    return imageToMonochromeAscii(buffer, ext, options);
+  }
 
   if (mode === 'braille') {
     return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join('\n');

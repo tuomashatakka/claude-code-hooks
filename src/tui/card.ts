@@ -24,6 +24,9 @@ export interface CardRegion {
 
   /** Defaults to the regular card background. */
   background?: string;
+
+  /** Close this region with one empty row in its own background. */
+  trailingBlank?: boolean;
 }
 
 export interface BoxProps {
@@ -127,7 +130,12 @@ function prepareBox ({ content, minimumWidth = 0, footerText = '' }: BoxProps): 
       .split('\n')
       .map(normalizeCardLine)
       .map(line => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line)
-    return { background: region.background ?? background, heading, lines }
+    return {
+      background:    region.background ?? background,
+      heading,
+      lines,
+      trailingBlank: region.trailingBlank ?? false,
+    }
   })
 
   const contentWidth = Math.min(Math.max(
@@ -137,6 +145,7 @@ function prepareBox ({ content, minimumWidth = 0, footerText = '' }: BoxProps): 
   const width          = Math.max(contentWidth + horizontalPadding * 2, minimumWidth)
   const footerWidth    = visibleWidth(footerText)
   const rows: string[] = []
+  let transitionBlank  = false
 
   for (const region of regions) {
     const fill  = chalk.bgHex(region.background)
@@ -149,10 +158,14 @@ function prepareBox ({ content, minimumWidth = 0, footerText = '' }: BoxProps): 
     // One deliberate empty row opens every region. For ruler-led regions this
     // is the requested single beat before the heading; for a normal card it is
     // the top breathing room the old full frame used to provide.
-    rows.push(fill(' '.repeat(width)))
+    if (!transitionBlank)
+      rows.push(fill(' '.repeat(width)))
     if (region.heading)
       rows.push(frame(region.heading, 0))
     rows.push(...region.lines.map(line => frame(line)))
+    if (region.trailingBlank)
+      rows.push(fill(' '.repeat(width)))
+    transitionBlank = region.trailingBlank
   }
 
   const lastBackground = regions.at(-1)?.background ?? background

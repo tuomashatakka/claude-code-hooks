@@ -21,6 +21,8 @@ import {
   injectToolDiscriminator
 } from './_normalize.ts'
 import { renderToolSection } from '../render/render-tool.ts'
+import { renderFileResult } from '../render/file-preview.ts'
+import { findImagePath } from '../render/screenshot.ts'
 import { renderWelcome } from '../render/welcome.ts'
 import type { ToolName } from '../types/claude-code.ts'
 import type { RawToolResult } from '../types/tool-io.ts'
@@ -52,7 +54,25 @@ function loadSystemPrompt (): string | null {
   return null
 }
 
-// 1. SessionStart
+// 1. PreToolUse — registered so Codex receives a valid no-op response. This
+// renderer never grants or denies permission; policy remains entirely host-owned.
+defineHook({
+  event: 'PreToolUse',
+  parse (raw) {
+    const o                  = asObject(raw)
+    const toolName: ToolName = pickString(o, 'tool_name', 'toolName') ?? 'Unknown'
+    return {
+      toolName,
+      toolInput: injectToolDiscriminator(toolName, pickAny(o, 'tool_input', 'toolInput') ?? {}),
+      sessionId: pickString(o, 'session_id', 'sessionId'),
+    }
+  },
+  handle () {
+    return {}
+  },
+})
+
+// 2. SessionStart
 defineHook({
   event: 'SessionStart',
   parse (raw) {
@@ -238,13 +258,27 @@ defineHook({
   event: 'UserPromptSubmit',
   parse (raw) {
     const o = asObject(raw)
-    return { prompt: pickString(o, 'prompt', 'user_prompt', 'userPrompt') ?? '' }
+    return {
+      prompt: pickString(o, 'prompt', 'user_prompt', 'userPrompt') ?? '',
+      cwd:    pickString(o, 'cwd'),
+    }
   },
   handle (input) {
     const badge           = new Badge({ label: 'UserPromptSubmit', color: 'yellow', icon: '✎' })
     const lines: string[] = []
     if (input.prompt)
       lines.push(prose(input.prompt, 200))
+
+    const imagePath = findImagePath(input.prompt, input.cwd)
+    if (imagePath) {
+      const occupied = renderSection({ badges: badge, lines })
+      const image    = renderFileResult(imagePath, {
+        action:      'prompt image',
+        budgetChars: systemMessageHeadroom({ systemMessage: occupied }),
+      })
+      if (image)
+        lines.push(image)
+    }
     return { systemMessage: renderSection({ badges: badge, lines }) }
   },
 })

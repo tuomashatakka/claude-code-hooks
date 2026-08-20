@@ -21,11 +21,13 @@ const PICTURE = /[⠀-⣿\u{1CD00}-\u{1CDE5}\u{1FB00}-\u{1FBFF}█▖-▟]/u
 
 let dir    = ''
 let shot   = ''
+let spaced = ''
 let base64 = ''
 
 beforeAll(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
   shot = path.join(dir, 'page-1.png')
+  spaced = path.join(dir, 'page with spaces.png')
 
   const png = new PNG({ width: 640, height: 400 })
   for (let i = 0; i < 640 * 400; i++) {
@@ -38,6 +40,7 @@ beforeAll(() => {
     png.data[at + 3] = 255
   }
   fs.writeFileSync(shot, PNG.sync.write(png))
+  fs.copyFileSync(shot, spaced)
   base64 = fs.readFileSync(shot).toString('base64')
 })
 
@@ -59,6 +62,10 @@ describe('finding the picture in a result', () => {
   test('drops the punctuation a sentence leaves stuck to a path', () => {
     expect(findImagePath(`Saved to ${shot}.`)).toBe(shot)
     expect(findImagePath(`Saved to "${shot}"`)).toBe(shot)
+  })
+
+  test('reads a quoted attachment path containing spaces', () => {
+    expect(findImagePath(`<image name=[Image #1] path="${spaced}">`)).toBe(spaced)
   })
 
   test('ignores a name that no file answers to', () => {

@@ -156,6 +156,25 @@ function alphaLogo (): Buffer {
   })
 }
 
+/** High-contrast line art, in both common background polarities. */
+function monochromeMark (lightBackground: boolean): Buffer {
+  const width  = 160
+  const height = 80
+  const bg     = lightBackground ? 255 : 0
+  const ink    = lightBackground ? 0 : 255
+  return build(width, height, (x, y) => {
+    const border   = x < 6 || x >= width - 6 || y < 6 || y >= height - 6
+    const diagonal = Math.abs(y - x * height / width) < 4
+    const bar      = x > 60 && x < 100 && y > 24 && y < 56
+    const value    = border || diagonal || bar ? ink : bg
+    return [ value, value, value, 255 ]
+  })
+}
+
+export function monochromeFixture (lightBackground: boolean): Buffer {
+  return monochromeMark(lightBackground)
+}
+
 export const IMAGE_FIXTURES: Readonly<Record<string, () => Buffer>> = {
   'ui-screenshot': uiScreenshot,
   'dark-terminal': darkTerminal,

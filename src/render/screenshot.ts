@@ -19,7 +19,10 @@ import {
  * only the result names in full.
  */
 
-/** Anything that could be a path to a picture. Verified against disk after. */
+/** A quoted path, including attachment markup whose filename contains spaces. */
+const QUOTED_CANDIDATE_RE = /["']([^"'\n]+\.(?:png|jpe?g|webp))["']/gi
+
+/** An unquoted path to a picture. Verified against disk after. */
 const CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi
 
 /** Trailing punctuation a sentence leaves stuck to a path. */
@@ -44,8 +47,14 @@ export function findImagePath (text: string | null | undefined, cwd: string = pr
   if (!text)
     return null
 
-  for (const match of String(text).matchAll(CANDIDATE_RE)) {
-    const candidate = match[0].replace(TRAILING_PUNCTUATION, '')
+  const source     = String(text)
+  const candidates = [
+    ...Array.from(source.matchAll(QUOTED_CANDIDATE_RE), match => match[1]!),
+    ...Array.from(source.matchAll(CANDIDATE_RE), match => match[0]),
+  ]
+
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate.replace(TRAILING_PUNCTUATION, '')
     if (!isImageExtension(extensionFromPath(candidate)))
       continue
 

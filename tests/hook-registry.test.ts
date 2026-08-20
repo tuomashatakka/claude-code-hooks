@@ -2,11 +2,13 @@
 import { describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { dispatchHook, listHooks } from '../src/registry/hook-registry.ts'
 import { stripAnsi } from '../src/render/primitives.ts'
 import { HOOK_EVENT_NAMES } from '../src/types/hook-events.ts'
 import { serializeHookResponse } from '../src/runtime/output-transport.ts'
+import { monochromeFixture } from './helpers/image-fixtures.ts'
 import '../src/tools/index.ts'
 import '../src/hooks/index.ts'
 
@@ -24,7 +26,7 @@ type RunWireHookReturnType = {
   output: Record<string, unknown>;
 }
 
-function runWireHook (event: 'PostToolUse', payload: unknown): RunWireHookReturnType {
+function runWireHook (event: 'PreToolUse' | 'PostToolUse', payload: unknown): RunWireHookReturnType {
   const result = spawnSync('bun', [ 'run', BIND, event ], {
     cwd:      ROOT,
     input:    JSON.stringify(payload),
@@ -69,6 +71,14 @@ describe('codex-compatible tool hook output', () => {
     expect(output.hookSpecificOutput).toBeUndefined()
   })
 
+  test('emits a valid empty PreToolUse response without changing host policy', () => {
+    const result = runWireHook('PreToolUse', input)
+
+    expect(result.stdout).toBe('{}')
+    expect(result.stderr).toBe('')
+    expect(result.output).toEqual({})
+  })
+
   test('emits PostToolUse output once on stdout and never mirrors it to stderr', () => {
     const result = runWireHook('PostToolUse', {
       ...input,
@@ -81,7 +91,7 @@ describe('codex-compatible tool hook output', () => {
     expect(result.output.hookSpecificOutput).toBeUndefined()
   })
 
-  test('preserves oversized output for the host persisted-output path', () => {
+  test('keeps oversized output on disk while emitting valid bounded JSON', () => {
     const toolResponse = Array.from(
       { length: 240 },
       (_, index) => `${String(index).padStart(3, '0')} ${'x'.repeat(56)}`,
@@ -91,13 +101,19 @@ describe('codex-compatible tool hook output', () => {
       tool_response: { stdout: toolResponse },
     })
     const systemMessage = stripAnsi(result.output.systemMessage)
+    const savedPath     = systemMessage.match(/saved to (\/[^\n]+\.log)/)?.[1]
 
-    expect(String(result.output.systemMessage).length).toBeGreaterThan(10_000)
+    expect(String(result.output.systemMessage).length).toBeLessThanOrEqual(10_000)
     expect(systemMessage).toContain('000 ')
     expect(systemMessage).toContain('239 ')
+    expect(systemMessage).toContain('preview split')
     expect(systemMessage).not.toContain('lines omitted')
-    expect(systemMessage).not.toContain('system-message.ansi')
-    expect(systemMessage).not.toContain('Claude Code limits hook output transport')
+    expect(savedPath).toBeString()
+
+    const complete = fs.readFileSync(savedPath!, 'utf8')
+    expect(complete).toContain('000 ')
+    expect(complete).toContain('239 ')
+    expect(complete.length).toBeGreaterThan(toolResponse.length)
   })
 
   // The limit Claude Code applies is `value.length <= 1e4` on the parsed string,
@@ -152,13 +168,16 @@ describe('codex-compatible tool hook output', () => {
     expect(stripAnsi(withContext.systemMessage ?? '')).not.toContain('omitted')
   })
 
-  test('keeps one oversized line complete for native persistence', () => {
-    const result = serializeHookResponse({ systemMessage: 'x'.repeat(20_000) })
-    const output = JSON.parse(result.json) as { systemMessage: string }
+  test('persists one oversized line without making the hook envelope invalid', () => {
+    const complete = 'x'.repeat(20_000)
+    const result   = serializeHookResponse({ systemMessage: complete })
+    const output   = JSON.parse(result.json) as { systemMessage: string }
+    const saved    = output.systemMessage.match(/saved to (\/[^\n]+\.log)/)?.[1]
 
-    expect(output.systemMessage.length).toBeGreaterThan(20_000)
-    expect(stripAnsi(output.systemMessage)).toContain('x'.repeat(20_000))
-    expect(stripAnsi(output.systemMessage)).not.toContain('characters omitted')
+    expect(output.systemMessage.length).toBeLessThanOrEqual(10_000)
+    expect(output.systemMessage).toContain('preview split')
+    expect(saved).toBeString()
+    expect(fs.readFileSync(saved!, 'utf8')).toBe(complete)
   })
 
   test('restores nested wcgw stdout while leaving the trailer as metadata', () => {
@@ -183,22 +202,28 @@ describe('codex-compatible tool hook output', () => {
   })
 
   test('combines command and stdout regions, then starts rulers in vertically stacked cards', () => {
-    const output = dispatchHook('PostToolUse', {
+    const output        = dispatchHook('PostToolUse', {
       tool_name:     'Bash',
       tool_input:    { command: "rg -n 'value' src/index.ts" },
       tool_response: '1: value\n=== report ===\n2: value',
     })
-    const rendered   = String(output.systemMessage)
-    const lines      = rendered.split('\n').map(stripAnsi)
-    const plain      = stripAnsi(rendered)
-    const rulerAt    = lines.findIndex(line => line.includes(' report '))
-    const titleLines = lines.filter(line => (/Running|Output/).test(line))
+    const rendered      = String(output.systemMessage)
+    const rawLines      = rendered.split('\n')
+    const lines         = rawLines.map(stripAnsi)
+    const plain         = stripAnsi(rendered)
+    const rulerAt       = lines.findIndex(line => line.includes(' report '))
+    const commandAt     = lines.findIndex(line => line.includes("$ rg -n 'value'"))
+    const firstOutputAt = lines.findIndex((line, index) => index > commandAt && line.includes('Output'))
+    const titleLines    = lines.filter(line => (/Running|Output/).test(line))
 
     expect(plain.match(/Running/g) ?? []).toHaveLength(1)
     expect(plain.match(/Output/g) ?? []).toHaveLength(2)
     expect(titleLines.every(line => !(line.includes('Running') && line.includes('Output')))).toBeTrue()
     expect(lines[rulerAt - 1]!.trim()).toBe('')
     expect(lines[rulerAt - 2]).toContain('Output')
+    expect(lines[commandAt + 1]!.trim()).toBe('')
+    expect(rawLines[commandAt + 1]).toContain('\x1b[48;2;39;38;41m')
+    expect(firstOutputAt).toBe(commandAt + 2)
     expect(rendered).toContain('\x1b[48;2;39;38;41m')
     expect(rendered).toContain('\x1b[48;2;48;47;50m')
   })
@@ -368,6 +393,29 @@ describe('codex-compatible tool hook output', () => {
     expect(prompt).toContain('make every lifecycle event readable')
     for (const output of [ taskUpdate, taskList, agent, prompt ])
       expect(output).not.toContain('metadata')
+  })
+
+  test('renders a readable image path from UserPromptSubmit with the original image renderer', () => {
+    const dir    = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt-image-'))
+    const image  = path.join(dir, 'reference image.png')
+    const prompt = `<image name=[Image #1] path="${image}">`
+    fs.writeFileSync(image, monochromeFixture(true))
+
+    try {
+      const message = String(dispatchHook('UserPromptSubmit', { prompt, cwd: dir }).systemMessage)
+      const plain   = stripAnsi(message)
+      const wire    = serializeHookResponse({ systemMessage: message })
+
+      expect(plain).toContain('UserPromptSubmit')
+      expect(plain).toContain('reference image.png')
+      expect(plain).toContain('prompt image')
+      expect(message).toMatch(/[▀▄█\u{1FB00}-\u{1FB3B}\u{1CE51}-\u{1CE8F}]/u)
+      expect(message).toContain('\x1b[38;')
+      expect(wire.systemMessage!.length).toBeLessThanOrEqual(10_000)
+    }
+    finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test('summarises collaboration lifecycle tools without replaying their payloads', () => {

@@ -3707,9 +3707,9 @@ var require_decoder = __commonJS({
         return a < 0 ? 0 : a > 255 ? 255 : a;
       }
       constructor.prototype = {
-        load: function load(path7) {
+        load: function load(path8) {
           var xhr = new XMLHttpRequest();
-          xhr.open("GET", path7, true);
+          xhr.open("GET", path8, true);
           xhr.responseType = "arraybuffer";
           xhr.onload = (function() {
             var data = new Uint8Array(xhr.response || xhr.mozResponseArrayBuffer);
@@ -4802,9 +4802,9 @@ var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<
 function expandPersistedOutput(text2) {
   if (typeof text2 !== "string" || !text2.includes("<persisted-output>"))
     return text2;
-  return text2.replace(PERSISTED_RE, (match, path7) => {
+  return text2.replace(PERSISTED_RE, (match, path8) => {
     try {
-      return readFileSync(path7, "utf8");
+      return readFileSync(path8, "utf8");
     } catch {
       return match;
     }
@@ -5248,7 +5248,12 @@ function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
     const headingList = region.heading === void 0 ? [] : Array.isArray(region.heading) ? region.heading : [region.heading];
     const heading = renderBadges(...headingList);
     const lines = String(region.content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map(normalizeCardLine).map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
-    return { background: region.background ?? background, heading, lines };
+    return {
+      background: region.background ?? background,
+      heading,
+      lines,
+      trailingBlank: region.trailingBlank ?? false
+    };
   });
   const contentWidth = Math.min(Math.max(
     ...regions.flatMap((region) => [visibleWidth(region.heading), ...region.lines.map(visibleWidth)]),
@@ -5257,15 +5262,20 @@ function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
   const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
   const footerWidth = visibleWidth(footerText);
   const rows = [];
+  let transitionBlank = false;
   for (const region of regions) {
     const fill = source_default.bgHex(region.background);
     const frame = (line, leftPadding = horizontalPadding) => fill(
       " ".repeat(leftPadding) + line + " ".repeat(Math.max(0, width - leftPadding - visibleWidth(line)))
     );
-    rows.push(fill(" ".repeat(width)));
+    if (!transitionBlank)
+      rows.push(fill(" ".repeat(width)));
     if (region.heading)
       rows.push(frame(region.heading, 0));
     rows.push(...region.lines.map((line) => frame(line)));
+    if (region.trailingBlank)
+      rows.push(fill(" ".repeat(width)));
+    transitionBlank = region.trailingBlank;
   }
   const lastBackground = regions.at(-1)?.background ?? background;
   const fillLast = source_default.bgHex(lastBackground);
@@ -5340,14 +5350,14 @@ function displayPath(filePath) {
   return candidates.reduce((best, c) => c.length < best.length ? c : best);
 }
 function renderFileCard({
-  path: path7,
+  path: path8,
   content,
   details = null,
   badges = []
 }) {
   return renderCard({
     badges: [
-      new Badge({ label: displayPath(path7), color: "cyan", icon: "\u25A4" }),
+      new Badge({ label: displayPath(path8), color: "cyan", icon: "\u25A4" }),
       ...badges
     ],
     // The action and line range describe the content, not the file, so they sit
@@ -6251,11 +6261,11 @@ function operationBadges(operations) {
 }
 
 // src/render/screenshot.ts
-import fs4 from "node:fs";
-import path2 from "node:path";
+import fs5 from "node:fs";
+import path3 from "node:path";
 
 // src/render/file-preview.ts
-import fs3 from "node:fs";
+import fs4 from "node:fs";
 
 // packages/image-to-ascii/src/decode.ts
 var import_pngjs = __toESM(require_png(), 1);
@@ -7307,17 +7317,84 @@ var PALETTE_256 = (() => {
   }
   return out;
 })();
+function environmentGlyphMode() {
+  const env2 = process.env.CLAUDE_HOOKS_IMAGE_MODE;
+  return env2 === "sextant" || env2 === "octant" || env2 === "half" || env2 === "braille" || env2 === "ascii" ? env2 : null;
+}
 function drawsItsOwnGlyphs() {
   const program = (process.env.TERM_PROGRAM ?? "").toLowerCase();
   if (program === "ghostty" || program === "wezterm") return true;
   return Boolean(process.env.KITTY_WINDOW_ID) || process.env.TERM === "xterm-kitty";
 }
 function resolveGlyphMode() {
-  const env2 = process.env.CLAUDE_HOOKS_IMAGE_MODE;
-  if (env2 === "sextant" || env2 === "octant" || env2 === "half" || env2 === "braille") return env2;
+  const env2 = environmentGlyphMode();
+  if (env2) return env2;
   if (process.env.TERM === "dumb") return "half";
   if (drawsItsOwnGlyphs() && cellAspect() >= 1.75) return "octant";
   return "sextant";
+}
+var MONOCHROME_CHROMA_TOLERANCE = 18;
+var MONOCHROME_MIN_SHARE = 0.995;
+var MONOCHROME_SAMPLE_LIMIT = 1e5;
+var ASCII_RAMP = " .:-=+*#%@";
+function analyzeMonochrome(img) {
+  const pixels = img.width * img.height;
+  const step = Math.max(1, Math.ceil(pixels / MONOCHROME_SAMPLE_LIMIT));
+  let visible = 0;
+  let neutral = 0;
+  let luminance = 0;
+  for (let pixel = 0; pixel < pixels; pixel += step) {
+    const at = pixel * 4;
+    if ((img.data[at + 3] ?? 255) < 16) continue;
+    const r = img.data[at] ?? 0;
+    const g = img.data[at + 1] ?? 0;
+    const b = img.data[at + 2] ?? 0;
+    visible++;
+    luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (Math.max(r, g, b) - Math.min(r, g, b) <= MONOCHROME_CHROMA_TOLERANCE)
+      neutral++;
+  }
+  return {
+    monochrome: visible === 0 || neutral / visible >= MONOCHROME_MIN_SHARE,
+    lightBackground: visible > 0 && luminance / visible >= 127.5
+  };
+}
+function renderAsciiLines(sat, cols, rows, lightBackground) {
+  const sample = { r: 0, g: 0, b: 0, a: 0 };
+  const lines = [];
+  for (let y = 0; y < rows; y++) {
+    let line = "";
+    for (let x = 0; x < cols; x++) {
+      const [x0, y0, x1, y1] = subCellRect(sat, x, y, cols, rows);
+      rectMean(sat, x0, y0, x1, y1, sample);
+      if (sample.a < 16) {
+        line += " ";
+        continue;
+      }
+      const luminance = 0.2126 * sample.r + 0.7152 * sample.g + 0.0722 * sample.b;
+      const polarity = lightBackground ? 255 - luminance : luminance;
+      const ink = polarity * sample.a / 255;
+      const index = Math.min(ASCII_RAMP.length - 1, Math.round(ink / 255 * (ASCII_RAMP.length - 1)));
+      line += ASCII_RAMP[index];
+    }
+    lines.push(line.trimEnd());
+  }
+  return lines;
+}
+function widestAsciiRender(img, sat, startCols, spec, maxRows, lightBackground) {
+  let smallest = [" "];
+  let previousGeometry = "";
+  for (let requested = startCols; requested >= 1; requested--) {
+    const geometry = fitGeometry(img.width, img.height, requested, BASES["1x1"], cellAspect(), maxRows);
+    const key = `${geometry.cols}x${geometry.rows}`;
+    if (key === previousGeometry) continue;
+    previousGeometry = key;
+    const lines = renderAsciiLines(sat, geometry.cols, geometry.rows, lightBackground);
+    smallest = lines;
+    if (costOf(lines, spec) <= spec.total)
+      return lines;
+  }
+  return smallest;
 }
 var CONTEXTS = /* @__PURE__ */ new Map();
 function contextFor(mode, palette) {
@@ -7570,6 +7647,25 @@ function bestFittingRender(startCols, spec, render) {
   }
   return best;
 }
+function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
+  const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
+  const img = decodeImage(buffer, ext);
+  if (!img) return null;
+  const maxWidth = options.maxWidth ?? 80;
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+  const analysis = analyzeMonochrome(img);
+  const lines = widestAsciiRender(
+    img,
+    buildSAT(img),
+    Math.min(img.width, requestedMax),
+    normalizeBudget(options.budget),
+    requestedRows,
+    analysis.lightBackground
+  );
+  const output = lines.join("\n");
+  return output.length > 0 ? output : " ";
+}
 function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS) {
   const at = (cols) => {
     const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"], cellAspect(), maxRows);
@@ -7602,6 +7698,9 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const forceHalfBlocks = mode === "half";
   const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
   const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
+  if (mode === "ascii") {
+    return imageToMonochromeAscii(buffer, ext, options);
+  }
   if (mode === "braille") {
     return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join("\n");
   }
@@ -7630,6 +7729,9 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
 }
 
 // src/runtime/output-transport.ts
+import fs3 from "node:fs";
+import os3 from "node:os";
+import path2 from "node:path";
 var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
 var HOOK_FIELD_CHAR_LIMIT = 1e4;
 var HOOK_RESPONSE_CHAR_BUDGET = HOOK_FIELD_CHAR_LIMIT;
@@ -7646,15 +7748,46 @@ function systemMessageHeadroom(data) {
   const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
   return Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - messageCost(current));
 }
-function smallestCompleteMessage(systemMessage) {
+var PERSISTED_OUTPUT_DIRECTORY = path2.join(os3.tmpdir(), "claude-code-hooks");
+var MAX_PERSISTED_OUTPUTS = 20;
+function persistCompleteOutput(content) {
+  try {
+    fs3.mkdirSync(PERSISTED_OUTPUT_DIRECTORY, { recursive: true });
+    const file = path2.join(PERSISTED_OUTPUT_DIRECTORY, `hook-output-${Date.now()}-${process.pid}.log`);
+    fs3.writeFileSync(file, content);
+    const stale = fs3.readdirSync(PERSISTED_OUTPUT_DIRECTORY).map((name) => {
+      const candidate = path2.join(PERSISTED_OUTPUT_DIRECTORY, name);
+      return { candidate, modified: fs3.statSync(candidate).mtimeMs };
+    }).sort((a, b) => b.modified - a.modified).slice(MAX_PERSISTED_OUTPUTS);
+    for (const entry of stale)
+      fs3.unlinkSync(entry.candidate);
+    return file;
+  } catch {
+    return null;
+  }
+}
+function persistedPreview(plain) {
+  const file = persistCompleteOutput(plain);
+  const detail = file ? `full ${plain.length.toLocaleString("en-US")}-character hook output saved to ${file}` : `full hook output exceeded the ${HOOK_FIELD_CHAR_LIMIT.toLocaleString("en-US")}-character host limit`;
+  const marker = `
+
+  \u2026 preview split \u2014 ${detail} \u2026
+
+`;
+  const available = Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - CLEAR_LINE_PREFIX.length - marker.length);
+  const headSize = Math.floor(available * 0.65);
+  const tailSize = available - headSize;
+  return plain.slice(0, headSize) + marker + plain.slice(-tailSize);
+}
+function transportSafeMessage(systemMessage) {
   if (fits(systemMessage))
     return systemMessage;
   const plain = stripAnsi(systemMessage);
-  return fits(plain) ? plain : systemMessage;
+  return fits(plain) ? plain : persistedPreview(plain);
 }
 function serializeHookResponse(data) {
   const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  const message = systemMessage ? smallestCompleteMessage(systemMessage) : systemMessage;
+  const message = systemMessage ? transportSafeMessage(systemMessage) : systemMessage;
   const output = message === null ? { ...data } : responseWithMessage(data, message);
   return {
     json: JSON.stringify(output, null, 2),
@@ -7682,7 +7815,7 @@ function renderFilePreview(filePath, options = {}) {
   const maxWidth = options.maxWidth ?? getMaxContentWidth();
   if (isImageExtension(ext))
     try {
-      const ascii = imageToAscii(fs3.readFileSync(filePath), ext, {
+      const ascii = imageToAscii(fs4.readFileSync(filePath), ext, {
         maxWidth,
         budget: imageBudget(options.budgetChars ?? previewBudgetChars())
       });
@@ -7693,7 +7826,7 @@ function renderFilePreview(filePath, options = {}) {
   const shape = (raw) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
   if (options.readText !== false)
     try {
-      return { content: shape(fs3.readFileSync(filePath, "utf8")), kind: "text" };
+      return { content: shape(fs4.readFileSync(filePath, "utf8")), kind: "text" };
     } catch {
     }
   return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
@@ -7754,8 +7887,8 @@ function growImageCard(card, reRender, fitted, budget) {
   }
   return best;
 }
-function renderFittedFileCard(path7, content, kind, details, budget, reRender) {
-  const card = (body) => renderFileCard({ path: path7, content: body, details });
+function renderFittedFileCard(path8, content, kind, details, budget, reRender) {
+  const card = (body) => renderFileCard({ path: path8, content: body, details });
   if (kind === "image" && reRender) {
     let smallest = card(content);
     if (charCost(smallest) <= budget)
@@ -7829,11 +7962,12 @@ function renderInlineImageResult(data, ext, label, options = {}) {
 }
 
 // src/render/screenshot.ts
+var QUOTED_CANDIDATE_RE = /["']([^"'\n]+\.(?:png|jpe?g|webp))["']/gi;
 var CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi;
 var TRAILING_PUNCTUATION = /[.,;:!?)\]}'"`]+$/;
 function isReadableFile(candidate) {
   try {
-    return fs4.statSync(candidate).isFile();
+    return fs5.statSync(candidate).isFile();
   } catch {
     return false;
   }
@@ -7841,11 +7975,16 @@ function isReadableFile(candidate) {
 function findImagePath(text2, cwd = process.cwd()) {
   if (!text2)
     return null;
-  for (const match of String(text2).matchAll(CANDIDATE_RE)) {
-    const candidate = match[0].replace(TRAILING_PUNCTUATION, "");
+  const source = String(text2);
+  const candidates = [
+    ...Array.from(source.matchAll(QUOTED_CANDIDATE_RE), (match) => match[1]),
+    ...Array.from(source.matchAll(CANDIDATE_RE), (match) => match[0])
+  ];
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate.replace(TRAILING_PUNCTUATION, "");
     if (!isImageExtension(extensionFromPath(candidate)))
       continue;
-    const resolved = path2.isAbsolute(candidate) ? candidate : path2.resolve(cwd, candidate);
+    const resolved = path3.isAbsolute(candidate) ? candidate : path3.resolve(cwd, candidate);
     if (isReadableFile(resolved))
       return resolved;
   }
@@ -8049,6 +8188,7 @@ function outputSpecs(cmd, sections, language, footer) {
     }];
     const first = sections[0];
     if (first && !first.beginsWithRuler) {
+      regions[0].trailingBlank = true;
       regions.push({ heading: OUTPUT_BADGE, content: renderOutputSection(first.content, language) });
       nextSection = 1;
     }
@@ -8573,7 +8713,7 @@ defineTool({
 });
 
 // src/tools/wcgw-ctx.ts
-import path3 from "node:path";
+import path4 from "node:path";
 source_default.level = 3;
 var SAVED_PATH_RE = /(\/[^\s"']*\.txt)/;
 function savedContextPath(input, resultText) {
@@ -8582,8 +8722,8 @@ function savedContextPath(input, resultText) {
     return fromResult;
   if (!input.id)
     return null;
-  const dataHome = process.env.XDG_DATA_HOME || path3.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
-  return path3.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
+  const dataHome = process.env.XDG_DATA_HOME || path4.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
+  return path4.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
 }
 var RELEVANT_FILES_MARKER = "\n# Relevant Files:";
 function dropInlinedFiles(raw) {
@@ -9013,28 +9153,48 @@ defineGenericTool({
 });
 
 // src/hooks/index.ts
-import fs7 from "node:fs";
-import path6 from "node:path";
+import fs8 from "node:fs";
+import path7 from "node:path";
 
 // src/runtime/debug.ts
-import fs5 from "node:fs";
-import path4 from "node:path";
+import fs6 from "node:fs";
+import path5 from "node:path";
 var HOME = process.env.HOME || process.env.USERPROFILE || "";
-var DEBUG_LOG = path4.join(HOME, ".claude", "debug.log");
+var DEBUG_LOG = path5.join(HOME, ".claude", "debug.log");
+function detailValue(value) {
+  if (value instanceof Error)
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      cause: value.cause
+    };
+  try {
+    JSON.stringify(value);
+    return value;
+  } catch {
+    return String(value);
+  }
+}
+function formatDebugEntry(scope, parts, timestamp = /* @__PURE__ */ new Date()) {
+  const first = parts[0];
+  return `[${timestamp.toISOString()}] [${scope}] ${JSON.stringify({
+    stage: typeof first === "string" ? first : "log",
+    details: parts.slice(typeof first === "string" ? 1 : 0).map(detailValue),
+    pid: process.pid,
+    ppid: process.ppid,
+    runtime: `${process.release.name}@${process.version}`,
+    platform: `${process.platform}-${process.arch}`,
+    host: process.env.CLAUDE_PLUGIN_ROOT ? "claude-code" : "codex-or-direct",
+    cwd: process.cwd(),
+    entrypoint: process.argv[1] ?? null,
+    event: process.argv[2] ?? null
+  })}`;
+}
 function debugLog(scope, ...parts) {
   try {
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    const line = parts.map(
-      (p) => typeof p === "string" ? p : (() => {
-        try {
-          return JSON.stringify(p);
-        } catch {
-          return String(p);
-        }
-      })()
-    ).join(" ");
-    fs5.appendFileSync(DEBUG_LOG, `[${ts}] [${scope}] ${line}
-`);
+    fs6.mkdirSync(path5.dirname(DEBUG_LOG), { recursive: true });
+    fs6.appendFileSync(DEBUG_LOG, formatDebugEntry(scope, parts) + "\n");
   } catch {
   }
 }
@@ -9118,34 +9278,34 @@ function renderToolSection({
 }
 
 // src/render/welcome.ts
-import fs6 from "node:fs";
-import path5 from "node:path";
+import fs7 from "node:fs";
+import path6 from "node:path";
 import { fileURLToPath } from "node:url";
 var RESERVE = 8;
 var HOME2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var WELCOME_ASSET = path5.join("assets", "welcome.png");
-var ASCII_DIR = path5.join(HOME2, "Documents", "Prompts", "anime-ascii");
+var WELCOME_ASSET = path6.join("assets", "welcome.png");
+var ASCII_DIR = path6.join(HOME2, "Documents", "Prompts", "anime-ascii");
 function findAsset() {
   const candidates = [];
   const declared = process.env.CLAUDE_PLUGIN_ROOT;
   if (declared)
-    candidates.push(path5.join(declared, WELCOME_ASSET));
+    candidates.push(path6.join(declared, WELCOME_ASSET));
   let dir;
   try {
-    dir = path5.dirname(fileURLToPath(import.meta.url));
+    dir = path6.dirname(fileURLToPath(import.meta.url));
   } catch {
     dir = process.cwd();
   }
   for (let i = 0; i < 6; i++) {
-    candidates.push(path5.join(dir, WELCOME_ASSET));
-    const parent = path5.dirname(dir);
+    candidates.push(path6.join(dir, WELCOME_ASSET));
+    const parent = path6.dirname(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
   for (const candidate of candidates)
     try {
-      if (fs6.statSync(candidate).isFile())
+      if (fs7.statSync(candidate).isFile())
         return candidate;
     } catch {
     }
@@ -9154,7 +9314,7 @@ function findAsset() {
 function welcomeImagePath() {
   const override = process.env.CLAUDE_HOOKS_WELCOME_IMAGE;
   if (override)
-    return fs6.existsSync(override) ? override : null;
+    return fs7.existsSync(override) ? override : null;
   return findAsset();
 }
 function charBudget(total) {
@@ -9170,7 +9330,7 @@ function renderWelcomeImage(spec) {
   if (!file)
     return null;
   try {
-    const art = imageToAscii(fs6.readFileSync(file), path5.extname(file), {
+    const art = imageToAscii(fs7.readFileSync(file), path6.extname(file), {
       maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
       mode: "braille",
       braille: BANNER,
@@ -9184,11 +9344,11 @@ function renderWelcomeImage(spec) {
 }
 function loadAsciiArt(spec) {
   try {
-    if (!fs6.existsSync(ASCII_DIR))
+    if (!fs7.existsSync(ASCII_DIR))
       return null;
-    const files = fs6.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
+    const files = fs7.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
     for (const pick of files.sort(() => Math.random() - 0.5)) {
-      const art = fs6.readFileSync(path5.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
+      const art = fs7.readFileSync(path6.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
       if (fits2(art, spec))
         return art;
     }
@@ -9210,20 +9370,35 @@ ${art}
 // src/hooks/index.ts
 source_default.level = 3;
 var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var SYSTEM_PROMPT_PATH = path6.join(HOME3, "system-prompt.md");
+var SYSTEM_PROMPT_PATH = path7.join(HOME3, "system-prompt.md");
 function prose(text2, limit) {
   const capped = text2.length > limit ? text2.slice(0, limit) + "..." : text2;
   return source_default.gray(wrapText(capped, getMaxContentWidth()));
 }
 function loadSystemPrompt() {
   try {
-    if (fs7.existsSync(SYSTEM_PROMPT_PATH))
-      return fs7.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
+    if (fs8.existsSync(SYSTEM_PROMPT_PATH))
+      return fs8.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
   } catch (e) {
     debugLog("SessionStart", "load-system-prompt", e.message);
   }
   return null;
 }
+defineHook({
+  event: "PreToolUse",
+  parse(raw) {
+    const o = asObject(raw);
+    const toolName = pickString(o, "tool_name", "toolName") ?? "Unknown";
+    return {
+      toolName,
+      toolInput: injectToolDiscriminator(toolName, pickAny(o, "tool_input", "toolInput") ?? {}),
+      sessionId: pickString(o, "session_id", "sessionId")
+    };
+  },
+  handle() {
+    return {};
+  }
+});
 defineHook({
   event: "SessionStart",
   parse(raw) {
@@ -9381,13 +9556,26 @@ defineHook({
   event: "UserPromptSubmit",
   parse(raw) {
     const o = asObject(raw);
-    return { prompt: pickString(o, "prompt", "user_prompt", "userPrompt") ?? "" };
+    return {
+      prompt: pickString(o, "prompt", "user_prompt", "userPrompt") ?? "",
+      cwd: pickString(o, "cwd")
+    };
   },
   handle(input) {
     const badge = new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" });
     const lines = [];
     if (input.prompt)
       lines.push(prose(input.prompt, 200));
+    const imagePath = findImagePath(input.prompt, input.cwd);
+    if (imagePath) {
+      const occupied = renderSection({ badges: badge, lines });
+      const image = renderFileResult(imagePath, {
+        action: "prompt image",
+        budgetChars: systemMessageHeadroom({ systemMessage: occupied })
+      });
+      if (image)
+        lines.push(image);
+    }
     return { systemMessage: renderSection({ badges: badge, lines }) };
   }
 });
@@ -9531,6 +9719,7 @@ async function runHook(name, handler) {
 
 // src/types/hook-events.ts
 var HOOK_EVENT_NAMES = [
+  "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
   "PostToolBatch",

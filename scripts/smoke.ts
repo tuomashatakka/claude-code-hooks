@@ -5,7 +5,7 @@
 
 import { spawn } from 'node:child_process'
 import path from 'node:path'
-import { SMOKE_PNG, SMOKE_JPG, writeImageFixtures, removeImageFixtures } from './fixtures.ts'
+import { SMOKE_PNG, SMOKE_JPG, SMOKE_MONO_PNG, writeImageFixtures, removeImageFixtures } from './fixtures.ts'
 
 
 const ROOT = path.resolve(import.meta.dir, '..')
@@ -179,7 +179,11 @@ export const CASES: Case[] = [
   {
     label:   'UserPromptSubmit',
     event:   'UserPromptSubmit',
-    payload: { prompt: 'hello world' },
+    payload: {
+      prompt: `<image name=[Image #1] path="${SMOKE_MONO_PNG}">`,
+      cwd:    path.dirname(SMOKE_MONO_PNG),
+    },
+    expectAsciiImage: true,
   },
   {
     label:   'PostToolUse — Agent',

@@ -16,6 +16,7 @@ const TMP = os.tmpdir()
 
 export const SMOKE_PNG = path.join(TMP, 'claude-hooks-smoke.png')
 export const SMOKE_JPG = path.join(TMP, 'claude-hooks-smoke.jpg')
+export const SMOKE_MONO_PNG = path.join(TMP, 'claude hooks monochrome.png')
 
 /**
  * The showcase's fixtures live inside its fake HOME rather than in /tmp.
@@ -27,6 +28,7 @@ export const SMOKE_JPG = path.join(TMP, 'claude-hooks-smoke.jpg')
  * ended at different columns.
  */
 export const demoImagePath = (home: string) => path.join(home, 'docs', 'sigil.png')
+export const demoPromptImagePath = (home: string) => path.join(home, 'docs', 'prompt mark.png')
 export const demoContextPath = (home: string) =>
   path.join(home, '.local', 'share', 'wcgw', 'memory', 'hooks-badge-parity.txt')
 
@@ -77,6 +79,16 @@ function writePng (file: string, width: number, height: number, data: Buffer): v
 // that block characters come out the other side.
 const smokeGradient = (x: number, y: number): [number, number, number] => [ x * 32, y * 32, 128 ]
 
+function monochromeMark (width: number, height: number) {
+  return (x: number, y: number): [number, number, number] => {
+    const border   = x < 4 || x >= width - 4 || y < 4 || y >= height - 4
+    const diagonal = Math.abs(y - x * height / width) < 3
+    const bar      = x > width * 0.38 && x < width * 0.62 && y > height * 0.3 && y < height * 0.7
+    const value    = border || diagonal || bar ? 0 : 255
+    return [ value, value, value ]
+  }
+}
+
 /**
  * A hexagonal sigil for the showcase page's "Read an image" beat.
  *
@@ -115,19 +127,20 @@ function demoSigil (width: number, height: number) {
 }
 
 /** The two images scripts/smoke.ts asserts against. */
-type WriteImageFixturesReturnType = { png: string; jpg: string }
+type WriteImageFixturesReturnType = { png: string; jpg: string; monochrome: string }
 
 export function writeImageFixtures (): WriteImageFixturesReturnType {
   writePng(SMOKE_PNG, 8, 8, paint(8, 8, smokeGradient))
 
   const jpegBuffer = jpeg.encode({ data: paint(8, 8, smokeGradient), width: 8, height: 8 }, 50).data
   fs.writeFileSync(SMOKE_JPG, jpegBuffer)
+  writePng(SMOKE_MONO_PNG, 120, 60, paint(120, 60, monochromeMark(120, 60)))
 
-  return { png: SMOKE_PNG, jpg: SMOKE_JPG }
+  return { png: SMOKE_PNG, jpg: SMOKE_JPG, monochrome: SMOKE_MONO_PNG }
 }
 
 export function removeImageFixtures (): void {
-  for (const f of [ SMOKE_PNG, SMOKE_JPG ])
+  for (const f of [ SMOKE_PNG, SMOKE_JPG, SMOKE_MONO_PNG ])
     try {
       fs.unlinkSync(f)
     }
@@ -137,11 +150,12 @@ export function removeImageFixtures (): void {
 }
 
 /** The sigil and the saved context the showcase reads, inside its fake HOME. */
-type WriteDemoFixturesReturnType = { image: string; context: string }
+type WriteDemoFixturesReturnType = { image: string; promptImage: string; context: string }
 
 export function writeDemoFixtures (home: string): WriteDemoFixturesReturnType {
-  const image   = demoImagePath(home)
-  const context = demoContextPath(home)
+  const image       = demoImagePath(home)
+  const promptImage = demoPromptImagePath(home)
+  const context     = demoContextPath(home)
 
   fs.mkdirSync(path.dirname(image), { recursive: true })
   fs.mkdirSync(path.dirname(context), { recursive: true })
@@ -149,9 +163,10 @@ export function writeDemoFixtures (home: string): WriteDemoFixturesReturnType {
   const dw = 60
   const dh = 44
   writePng(image, dw, dh, paint(dw, dh, demoSigil(dw, dh)))
+  writePng(promptImage, 120, 60, paint(120, 60, monochromeMark(120, 60)))
   fs.writeFileSync(context, DEMO_CONTEXT_BODY)
 
-  return { image, context }
+  return { image, promptImage, context }
 }
 
 export function removeDemoFixtures (home: string): void {

@@ -2,8 +2,8 @@
 
 Enhanced hooks for Claude Code — beautified terminal output for post-tool results and lifecycle events.
 
-Block-letter headings, colored badges, syntax-highlighted diffs, sextant image
-previews and playful kaomoji phrases, across **13 active hook events** and
+Block-letter headings, colored badges, syntax-highlighted diffs, sextant or
+opt-in literal-ASCII image previews and playful kaomoji phrases, across **14 hook events** and
 **21 tool renderers**.
 
 **[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)** — 42
@@ -42,12 +42,11 @@ claude --plugin-dir /path/to/claude-code-hooks
 | `SessionEnd` / `Stop` | `BYE` / `STOP` block heading with a generated kaomoji phrase |
 | `PostToolUse` | Tool badge, duration, tab-titled output cards, diffs, JSON cards, file previews, task state headings |
 | `PostToolUseFailure` | Failure badge plus the error body |
-| `PostToolBatch` | One summary line per tool in a resolved parallel batch |
+| `PreToolUse` / `PostToolBatch` | Registered no-ops: policy remains host-owned, and resolved batches are already represented by their members |
 | `PreCompact` / `PostCompact` | Compaction headings and badges |
 | `InstructionsLoaded` | Which CLAUDE.md / rules files entered context |
-| `UserPromptSubmit` / `UserPromptExpansion` | The prompt, and what a command expanded into |
+| `UserPromptSubmit` / `UserPromptExpansion` | The prompt, any readable local image path it contains, and what a command expanded into |
 | `SubagentStart` / `SubagentStop` | Agent id, type, and lifecycle badges |
-| `PostToolBatch` | Registered but silent — a resolved batch is already summarised by its members |
 
 Every row above has a live example on the showcase page; the capture fails the
 build if one does not, so this table cannot drift from what ships.
@@ -60,7 +59,7 @@ splits any unknown response into its answer and its metadata.
 | Tool | What it draws | Live |
 | --- | --- | --- |
 | `Bash`, `wcgw BashCommand` | Command and stdout as darker/regular regions in one card, chains split a row per separator, rulers start new cards below, wcgw metadata becomes an inset footer | [#bash-grep](https://tuomashatakka.github.io/claude-code-hooks/#bash-grep) |
-| `Read` | Syntax-highlighted file card, or an ANSI sextant preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
+| `Read` | Syntax-highlighted file card, or the established ANSI `imageToAscii` preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
 | `Edit`, `MultiEdit` | The file re-read and cropped to the changed span plus three lines of context | [#edit](https://tuomashatakka.github.io/claude-code-hooks/#edit) |
 | `apply_patch` | Successful native patch summaries stay quiet instead of being repeated in a generic output card; unexpected output remains visible | [#apply-patch](https://tuomashatakka.github.io/claude-code-hooks/#apply-patch) |
 | `view_image` | The local target or inline data URL as a fitted ANSI image card | [#view-image](https://tuomashatakka.github.io/claude-code-hooks/#view-image) |
@@ -84,7 +83,8 @@ whichever of project-relative or `~`-relative is shorter; detail about the
 content — the action, the line range, command metadata — sits inside the
 bottom-right backgrounded row instead of trailing the path. Cards always follow
 one another vertically. Bash command input uses a slightly darker region than
-stdout inside the same card, while ruler-led output starts a fresh card below.
+stdout inside the same card, including its single transition row, while
+ruler-led output starts a fresh card below.
 Tabs are expanded before width measurement, and foreign background/cursor/OSC
 sequences are removed so arbitrary terminal output cannot punch dark holes in a
 card or shift its right edge.
@@ -101,6 +101,13 @@ with its middle omitted.
 Point `CLAUDE_HOOKS_WELCOME_IMAGE` at another file to change the face; if no
 image can be rendered, a random `.txt` from `$HOME/Documents/Prompts/anime-ascii`
 is used instead, skipping any that would not fit.
+
+`imageToMonochromeAscii()` is included as an opt-in literal text renderer using
+the ramp ` .:-=+*#%@`. It detects either light or dark dominant backgrounds,
+flips polarity accordingly, emits no colour SGR, and spends far fewer tokens
+than a photographic ANSI preview. Hooks continue to call the original
+`imageToAscii()` renderer for now; `CLAUDE_HOOKS_IMAGE_MODE=ascii` explicitly
+selects the new path.
 
 Braille is a mode of its own (`CLAUDE_HOOKS_IMAGE_MODE=braille`, or
 `mode: 'braille'`): 2x4 dots per cell in the terminal's own foreground, with no
@@ -138,10 +145,11 @@ same room. Budgeting in JSON bytes of the whole envelope — as this plugin used
 which is all of it.
 
 When ANSI styling alone pushes a complete render over the limit, the transport
-keeps every row and falls back to plain text. If the content itself is genuinely
-larger than the field limit, it remains complete so Claude Code can use its
-native persisted-output preview and retain the full value on disk. The plugin
-never invents a lossy `… rows omitted …` summary. Previews still size themselves
+keeps every row and falls back to plain text. If visible content itself is
+larger than the field limit, the complete plain result is saved under the
+system temp directory and the valid under-10k hook response carries a head/tail
+preview plus its exact path. This keeps Codex from rejecting the envelope and
+never invents a lossy `… rows omitted …` claim. Previews still size themselves
 first, weighing the finished card in the same characters Claude Code counts and
 re-rendering — fewer lines for text, a smaller picture for images — until they
 fit, because a picture with its middle cut out is worse than a smaller one. A
@@ -154,8 +162,11 @@ tall, narrow source is already at its narrowest the moment it is decoded, so
 every rung of a width-only ladder renders the identical grid at the identical
 price. Capping rows resizes it instead, and the whole picture survives, smaller.
 The showcase capture fails the build if any example reaches the backstop.
-`PreToolUse` is intentionally not registered, so this plugin never intercepts
-or delays a tool before it runs.
+`PreToolUse` is an intentional no-op. Registering it keeps Codex's configured
+wire event valid without emitting a permission decision, intercepting a tool,
+or changing host policy. Hook failures append structured one-line diagnostics
+to `~/.claude/debug.log`, including stage, details, pid/ppid, runtime, platform,
+host, cwd, entrypoint, and event.
 
 ## Development
 

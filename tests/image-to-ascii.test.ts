@@ -4,9 +4,11 @@ import jpeg from 'jpeg-js'
 import {
   costOf,
   imageToAscii,
+  imageToMonochromeAscii,
   regularSextant,
   separatedSextant,
 } from '@tuomashatakka/image-to-ascii'
+import { fixture, monochromeFixture } from './helpers/image-fixtures.ts'
 
 
 const ANSI_RE  = /\x1b\[[0-9;]*m/g
@@ -86,6 +88,31 @@ describe('imageToAscii', () => {
     expect(out).toBeString()
     expect(out).not.toBe('')
     expect(out!).toMatch(BLOCK_RE)
+  })
+
+  test('renders either monochrome polarity through literal ascii without sgr', () => {
+    const light = imageToMonochromeAscii(monochromeFixture(true), '.png', { maxWidth: 48 })!
+    const dark  = imageToMonochromeAscii(monochromeFixture(false), '.png', { maxWidth: 48 })!
+
+    expect(light).toBe(dark)
+    expect(light).not.toMatch(ANSI_RE)
+    expect(light).not.toMatch(BLOCK_RE)
+    expect(light).toMatch(/[@%#*+=:-]/)
+
+    const color = imageToAscii(pngBuffer(32, 16), '.png', { maxWidth: 48 })!
+    expect(color).toMatch(ANSI_RE)
+  })
+
+  test('keeps the original imageToAscii renderer as the default for monochrome input', () => {
+    const out = imageToAscii(monochromeFixture(true), '.png', { maxWidth: 48 })!
+    expect(out).toMatch(ANSI_RE)
+    expect(out).toMatch(BLOCK_RE)
+  })
+
+  test('lets an explicit image mode override monochrome auto-detection', () => {
+    const out = imageToAscii(monochromeFixture(true), '.png', { maxWidth: 48, mode: 'half' })!
+    expect(out).toMatch(ANSI_RE)
+    expect(out).toMatch(BLOCK_RE)
   })
 
   test('treats dot and no-dot extensions the same', () => {

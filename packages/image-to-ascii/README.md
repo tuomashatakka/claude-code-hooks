@@ -1,6 +1,6 @@
 # @tuomashatakka/image-to-ascii
 
-High-fidelity ANSI image previews for PNG, JPEG, and WebP buffers, extracted from
+High-fidelity ANSI and literal-ASCII image previews for PNG, JPEG, and WebP buffers, extracted from
 [claude-code-hooks](https://github.com/tuomashatakka/claude-code-hooks).
 
 **[Live example →](https://tuomashatakka.github.io/claude-code-hooks/#read-image)** — a
@@ -53,8 +53,11 @@ worse than one a few columns narrower.
 
 ## Glyph modes
 
-`CLAUDE_HOOKS_IMAGE_MODE` selects `sextant`, `octant`, or `half`. Left unset,
-the mode follows the terminal: Ghostty, kitty and WezTerm synthesise these
+`CLAUDE_HOOKS_IMAGE_MODE` selects `ascii`, `braille`, `sextant`, `octant`, or
+`half`. `imageToMonochromeAscii()` (or explicit `ascii` mode) uses the color-free
+ramp ` .:-=+*#%@`, with polarity inferred for black-on-white or white-on-black
+art. Left unset, `imageToAscii()` preserves its original terminal-selected
+renderer: Ghostty, kitty and WezTerm synthesise these
 glyphs from the cell metrics and are immune to font coverage, so they get
 octants — a third more vertical detail for the same one-code-point cost, with
 square sub-samples on a 1:2 cell. Everywhere else, sextants, because octants are

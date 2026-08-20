@@ -86,9 +86,9 @@ export function renderFilePreview (filePath: string, options: FilePreviewOptions
 // rewrites nested styles inside a background fill, and every estimate of that
 // came out low by a factor of three.
 //
-// Being wrong is expensive. The transport's answer to an oversized message is
-// to cut its middle out, so a mis-sized picture arrives with a hole in it. So
-// the card is rendered, weighed on the scale that actually decides — the
+// Being wrong is expensive. An oversized card forces the transport to replace
+// the inline picture with a saved head/tail preview. So the card is rendered,
+// weighed on the scale that actually decides — the
 // character count Claude Code itself applies the 10,000 limit to — and rendered
 // again smaller until it fits.
 //
@@ -264,10 +264,9 @@ export function renderFittedFileCard (
         smallest = candidate
     }
 
-    // Nothing rendered small enough. Shipping the smallest anyway is the one
-    // outcome worth avoiding: the transport answers an oversized message by
-    // cutting its middle out, and half a picture with a hole in it says less
-    // than a line admitting there was no room for one.
+    // Nothing rendered small enough. Shipping the smallest anyway would force
+    // the whole message through the persisted-output fallback, and half a
+    // picture in a text preview says less than admitting there was no room.
     return charCost(smallest) <= budget ? smallest : card(NO_ROOM)
   }
 

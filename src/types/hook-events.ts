@@ -3,7 +3,8 @@ import type { RawToolInput, RawToolResult, ToolInputUnion } from './tool-io.ts'
 
 
 export type HookEventName =
-  | 'PostToolUse' |
+  | 'PreToolUse' |
+  'PostToolUse' |
   'PostToolUseFailure' |
   'PostToolBatch' |
   'SessionStart' |
@@ -25,6 +26,12 @@ export interface PostToolUseInput {
   toolResponse: RawToolResult;
   durationMs:   number | null;
   sessionId?:   string;
+}
+
+export interface PreToolUseInput {
+  toolName:   ToolName;
+  toolInput:  ToolInputUnion;
+  sessionId?: string;
 }
 
 export interface PostToolUseFailureInput {
@@ -72,6 +79,7 @@ export interface InstructionsLoadedInput {
 
 export interface UserPromptSubmitInput {
   prompt: string;
+  cwd?:   string;
 }
 
 export interface UserPromptExpansionInput {
@@ -88,7 +96,8 @@ export interface StopInput {
 }
 
 export type HookInput<E extends HookEventName> =
-  E extends 'PostToolUse' ? PostToolUseInput
+  E extends 'PreToolUse' ? PreToolUseInput
+  : E extends 'PostToolUse' ? PostToolUseInput
   : E extends 'PostToolUseFailure' ? PostToolUseFailureInput
   : E extends 'PostToolBatch' ? PostToolBatchInput
   : E extends 'SessionStart' ? SessionStartInput
@@ -104,6 +113,7 @@ export type HookInput<E extends HookEventName> =
   : never
 
 export const HOOK_EVENT_NAMES: readonly HookEventName[] = [
+  'PreToolUse',
   'PostToolUse',
   'PostToolUseFailure',
   'PostToolBatch',

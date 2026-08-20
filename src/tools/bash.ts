@@ -223,6 +223,7 @@ function outputSpecs (
     }]
     const first = sections[0]
     if (first && !first.beginsWithRuler) {
+      regions[0]!.trailingBlank = true
       regions.push({ heading: OUTPUT_BADGE, content: renderOutputSection(first.content, language) })
       nextSection = 1
     }

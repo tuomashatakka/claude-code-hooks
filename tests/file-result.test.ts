@@ -62,10 +62,9 @@ describe('renderFileResult', () => {
     expect(out).not.toContain('const a = 1;')
   })
 
-  // The transport's answer to an oversized message is to cut its middle out, so
-  // a card that overruns its budget reaches the terminal as a picture with a
-  // hole in it. Every shape has to come in under it — the tall, narrow one that
-  // no width the renderer could pick would ever shrink most of all.
+  // A card that overruns its budget forces the entire response through the
+  // persisted-preview backstop. Every shape has to come in under it — the tall,
+  // narrow one that no width the renderer could pick would shrink most of all.
   test.each([
     [ 'tall', 40, 4_000 ],
     [ 'wide', 4_000, 40 ],
