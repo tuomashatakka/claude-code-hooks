@@ -35,7 +35,7 @@ describe('welcome art', () => {
     })
 
   test('renders complete art once there is room for it', () => {
-    expect(renderWelcome(6_000)).toMatch(GLYPH_ROW)
+    expect(renderWelcome(9_000)).toMatch(GLYPH_ROW)
   })
 
   test('prints nothing rather than a sliver when there is no room', () => {

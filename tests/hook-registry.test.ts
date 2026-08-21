@@ -48,8 +48,9 @@ describe('hook registration', () => {
   test('keeps hooks.json bound events in sync with known events', () => {
     const hooksConfig = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8')
-    ) as { hooks: Record<string, unknown> }
+    ) as { description: string; hooks: Record<string, unknown> }
 
+    expect(Object.keys(hooksConfig).sort()).toEqual([ 'description', 'hooks' ])
     expect(sorted(Object.keys(hooksConfig.hooks))).toEqual(sorted(HOOK_EVENT_NAMES))
   })
 })
@@ -407,7 +408,7 @@ describe('codex-compatible tool hook output', () => {
       const wire    = serializeHookResponse({ systemMessage: message })
 
       expect(plain).toContain('UserPromptSubmit')
-      expect(plain).toContain('reference image.png')
+      expect(plain.replace(/\s+/g, ' ')).toContain('reference image.png')
       expect(plain).toContain('prompt image')
       expect(message).toMatch(/[▀▄█\u{1FB00}-\u{1FB3B}\u{1CE51}-\u{1CE8F}]/u)
       expect(message).toContain('\x1b[38;')

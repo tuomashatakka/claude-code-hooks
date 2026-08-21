@@ -4,6 +4,7 @@ import jpeg from 'jpeg-js'
 import {
   costOf,
   imageToAscii,
+  imageToAsciiSimple,
   imageToMonochromeAscii,
   regularSextant,
   separatedSextant,
@@ -52,11 +53,38 @@ function maskedPng (mask: number): Buffer {
   return PNG.sync.write(png)
 }
 
+type Pixel = readonly [red: number, green: number, blue: number, alpha: number]
+
+function pairedPng (top: Pixel, bottom: Pixel): Buffer {
+  const png = new PNG({ width: 1, height: 2 })
+  for (const [ row, pixel ] of [ top, bottom ].entries())
+    png.data.set(pixel, row * 4)
+  return PNG.sync.write(png)
+}
+
 function visibleText (value: string): string {
   return value.replace(ANSI_RE, '')
 }
 
 describe('imageToAscii', () => {
+  test('maps every simple half-block alpha and colour pairing without painting transparent cells', () => {
+    const clear: Pixel = [ 0, 0, 0, 0 ]
+    const red: Pixel   = [ 255, 0, 0, 255 ]
+    const blue: Pixel  = [ 0, 0, 255, 255 ]
+    const glyph        = (top: Pixel, bottom: Pixel) => visibleText(
+      imageToAsciiSimple(pairedPng(top, bottom), '.png', 1)!
+    )
+
+    expect(glyph(clear, clear)).toBe(' ')
+    expect(glyph(red, clear)).toBe('▀')
+    expect(glyph(clear, blue)).toBe('▄')
+    expect(glyph(red, red)).toBe('█')
+    expect(glyph(red, blue)).toBe('▀')
+
+    const mixed = imageToAsciiSimple(pairedPng(red, blue), '.png', 1)!
+    expect(mixed).toContain('38;2;255;0;0;48;2;0;0;255m')
+  })
+
   test('maps regular sextant masks around the legacy half-block gaps', () => {
     expect(regularSextant(1)).toBe('🬀')
     expect(regularSextant(0b011000)).toBe('🬖')

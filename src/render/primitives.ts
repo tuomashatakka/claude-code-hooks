@@ -107,6 +107,49 @@ export function visibleWidth (str: unknown): number {
   return Array.from(expandTabs(stripAnsi(str))).length
 }
 
+/**
+ * Hard-wraps terminal text without counting SGR sequences as columns.
+ *
+ * Card content is often code, paths or command output where dropping spaces or
+ * inserting an ellipsis changes what was printed. Splitting at the exact cell
+ * boundary preserves every visible character and leaves the ANSI stream in its
+ * original order, so a style open at one row naturally continues on the next.
+ */
+export function wrapAnsi (text: string, width: number): string[] {
+  if (width <= 0)
+    return [ String(text) ]
+
+  const input           = String(text)
+  const lines: string[] = []
+  let line    = ''
+  let visible = 0
+
+  for (let index = 0; index < input.length;) {
+    CSI_SEQUENCE.lastIndex = index
+
+    const sequence         = CSI_SEQUENCE.exec(input)
+    if (sequence?.index === index) {
+      line += sequence[0]
+      index += sequence[0].length
+      continue
+    }
+
+    if (visible === width) {
+      lines.push(line)
+      line = ''
+      visible = 0
+    }
+
+    const codePoint = input.codePointAt(index)!
+    line += String.fromCodePoint(codePoint)
+    visible += 1
+    index += codePoint > 0xffff ? 2 : 1
+  }
+
+  lines.push(line)
+  return lines
+}
+
 // Truncates by visible-character count, passing ANSI escape sequences
 // through untouched (they don't count against the budget) so a cut never
 // lands mid-sequence and drops a style's closing reset code - which would
