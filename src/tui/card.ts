@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import fs from 'node:fs'
 import tty from 'node:tty'
-import { normalizeCardLine, truncateAnsi, visibleWidth } from '../render/primitives.ts'
+import { normalizeCardLine, truncateAnsi, visibleWidth, wrapAnsi } from '../render/primitives.ts'
 import { Badge, renderBadges } from './badge.ts'
 import type { BadgeLike } from './badge.ts'
 import { TUI_TOKENS } from './tokens.ts'
@@ -84,15 +84,24 @@ function terminalColumns (): number {
   }
 }
 
+export function layoutWidthForTerminal (columns: number): number {
+  const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width
+  const available                                             = (columns > 0 ? columns : fallbackContent) - outerIndentMargin
+  return Math.max(1, Math.min(maximumLayout, available))
+}
+
 export function getMaxLayoutWidth (): number {
-  const columns                                = terminalColumns()
-  const { fallbackContent, outerIndentMargin } = TUI_TOKENS.width
-  return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin)
+  return layoutWidthForTerminal(terminalColumns())
 }
 
 export function getMaxContentWidth (): number {
-  const { horizontalPadding, chromeColumns } = TUI_TOKENS.card
-  return Math.max(20, getMaxLayoutWidth() - horizontalPadding * 2 - chromeColumns)
+  const layoutWidth = getMaxLayoutWidth()
+  const padding     = horizontalPaddingFor(layoutWidth)
+  return Math.max(1, layoutWidth - padding * 2 - TUI_TOKENS.card.chromeColumns)
+}
+
+function horizontalPaddingFor (layoutWidth: number): number {
+  return Math.min(TUI_TOKENS.card.horizontalPadding, Math.max(0, Math.floor((layoutWidth - 1) / 2)))
 }
 
 /**
@@ -118,18 +127,23 @@ function regionList (content: BoxProps['content']): CardRegion[] {
 }
 
 function prepareBox ({ content, minimumWidth = 0, footerText = '' }: BoxProps): PreparedBox {
-  const maxWidth                          = getMaxContentWidth()
-  const { background, horizontalPadding } = TUI_TOKENS.card
-  const regions                           = regionList(content).map(region => {
+  const layoutWidth       = getMaxLayoutWidth()
+  const maxWidth          = getMaxContentWidth()
+  const { background }    = TUI_TOKENS.card
+  const horizontalPadding = horizontalPaddingFor(layoutWidth)
+  const regions           = regionList(content).map(region => {
     const headingList = region.heading === undefined
       ? []
       : Array.isArray(region.heading) ? region.heading : [ region.heading ]
-    const heading = renderBadges(...headingList)
+    const fullHeading = renderBadges(...headingList)
+    const heading     = visibleWidth(fullHeading) > layoutWidth
+      ? truncateAnsi(fullHeading, layoutWidth - 1)
+      : fullHeading
     const lines   = String(region.content)
       .replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, '')
       .split('\n')
       .map(normalizeCardLine)
-      .map(line => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line)
+      .flatMap(line => wrapAnsi(line, maxWidth))
     return {
       background:    region.background ?? background,
       heading,
@@ -142,7 +156,7 @@ function prepareBox ({ content, minimumWidth = 0, footerText = '' }: BoxProps): 
     ...regions.flatMap(region => [ visibleWidth(region.heading), ...region.lines.map(visibleWidth) ]),
     0,
   ), maxWidth)
-  const width          = Math.max(contentWidth + horizontalPadding * 2, minimumWidth)
+  const width          = Math.min(layoutWidth, Math.max(contentWidth + horizontalPadding * 2, minimumWidth))
   const footerWidth    = visibleWidth(footerText)
   const rows: string[] = []
   let transitionBlank  = false
@@ -189,7 +203,10 @@ export function renderCard ({ badges, content, minimumWidth = 0, footer }: CardP
   const badgeList  = Array.isArray(badges) ? badges : [ badges ]
   const footerList = footer === undefined ? [] : Array.isArray(footer) ? footer : [ footer ]
   const footerText = renderBadges(...footerList)
-  const title      = renderBadges(...badgeList)
+  const fullTitle  = renderBadges(...badgeList)
+  const title      = visibleWidth(fullTitle) > getMaxLayoutWidth()
+    ? truncateAnsi(fullTitle, getMaxLayoutWidth() - 1)
+    : fullTitle
   if (!title)
     return renderBox({
       content,

@@ -95,18 +95,12 @@ export function imageToAsciiSimple (buffer: Buffer, ext: string, maxWidth: numbe
       for (let x = 0; x < targetWidth; x++) {
         const top    = px(x, y)
         const bottom = y + 1 < pxRows ? px(x, y + 1) : null
-        const byte   = Number(top !== null) * 1 + Number(bottom !== null) * 2 + Number(bottom === top) * 1
-        const symbol = [ '　', '▀', '▄', '█', '▀' ]
-        put(symbol[byte] as string, top || bottom, top && bottom)
-        // const top    = px(x, y)
-        // const bottom = y + 1 < pxRows ? px(x, y + 1) : null
-        // if (top === null && bottom === null)
-        //   put('　', null, null); else if (top !== null && bottom === null)
-        //   put('▀', top, null); else if (top === null && bottom !== null)
-        //   put('▄', bottom, null); else if (top === bottom)
-        //   put('█', top, bg); else
-        //   put('▀', top, bottom)
-        // '　─╵╹╴╸╱┌───┐└┘▮▯▖░▒▓╌╍┉┈┄┅━▁▂▃
+        if (top === null && bottom === null)
+          put(' ', null, null); else if (top !== null && bottom === null)
+          put('▀', top, null); else if (top === null && bottom !== null)
+          put('▄', bottom, null); else if (top === bottom)
+          put('█', top, null); else
+          put('▀', top, bottom)
       }
       if (fg !== null)
         line += FG_RESET

@@ -4870,6 +4870,34 @@ function normalizeCardLine(line) {
 function visibleWidth(str) {
   return Array.from(expandTabs(stripAnsi(str))).length;
 }
+function wrapAnsi(text2, width) {
+  if (width <= 0)
+    return [String(text2)];
+  const input = String(text2);
+  const lines = [];
+  let line = "";
+  let visible = 0;
+  for (let index = 0; index < input.length; ) {
+    CSI_SEQUENCE.lastIndex = index;
+    const sequence = CSI_SEQUENCE.exec(input);
+    if (sequence?.index === index) {
+      line += sequence[0];
+      index += sequence[0].length;
+      continue;
+    }
+    if (visible === width) {
+      lines.push(line);
+      line = "";
+      visible = 0;
+    }
+    const codePoint = input.codePointAt(index);
+    line += String.fromCodePoint(codePoint);
+    visible += 1;
+    index += codePoint > 65535 ? 2 : 1;
+  }
+  lines.push(line);
+  return lines;
+}
 function truncateAnsi(text2, maxVisibleLen, ellipsis = "\u2026") {
   const csi = /\x1b\[[0-9;]*m/y;
   let out = "";
@@ -5188,6 +5216,7 @@ import tty2 from "node:tty";
 var TUI_TOKENS = {
   width: {
     fallbackContent: 96,
+    maximumLayout: 100,
     outerIndentMargin: 6,
     divider: 60
   },
@@ -5222,14 +5251,21 @@ function terminalColumns() {
     return cachedColumns = 0;
   }
 }
+function layoutWidthForTerminal(columns) {
+  const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width;
+  const available = (columns > 0 ? columns : fallbackContent) - outerIndentMargin;
+  return Math.max(1, Math.min(maximumLayout, available));
+}
 function getMaxLayoutWidth() {
-  const columns = terminalColumns();
-  const { fallbackContent, outerIndentMargin } = TUI_TOKENS.width;
-  return Math.max(20, (columns > 0 ? columns : fallbackContent) - outerIndentMargin);
+  return layoutWidthForTerminal(terminalColumns());
 }
 function getMaxContentWidth() {
-  const { horizontalPadding, chromeColumns } = TUI_TOKENS.card;
-  return Math.max(20, getMaxLayoutWidth() - horizontalPadding * 2 - chromeColumns);
+  const layoutWidth = getMaxLayoutWidth();
+  const padding = horizontalPaddingFor(layoutWidth);
+  return Math.max(1, layoutWidth - padding * 2 - TUI_TOKENS.card.chromeColumns);
+}
+function horizontalPaddingFor(layoutWidth) {
+  return Math.min(TUI_TOKENS.card.horizontalPadding, Math.max(0, Math.floor((layoutWidth - 1) / 2)));
 }
 var EDGE_TOP = "\u2581";
 function borderInk(text2) {
@@ -5242,12 +5278,15 @@ function regionList(content) {
   return typeof content === "string" ? [{ content }] : [...content];
 }
 function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
+  const layoutWidth = getMaxLayoutWidth();
   const maxWidth = getMaxContentWidth();
-  const { background, horizontalPadding } = TUI_TOKENS.card;
+  const { background } = TUI_TOKENS.card;
+  const horizontalPadding = horizontalPaddingFor(layoutWidth);
   const regions = regionList(content).map((region) => {
     const headingList = region.heading === void 0 ? [] : Array.isArray(region.heading) ? region.heading : [region.heading];
-    const heading = renderBadges(...headingList);
-    const lines = String(region.content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map(normalizeCardLine).map((line) => visibleWidth(line) > maxWidth ? truncateAnsi(line, maxWidth - 1) : line);
+    const fullHeading = renderBadges(...headingList);
+    const heading = visibleWidth(fullHeading) > layoutWidth ? truncateAnsi(fullHeading, layoutWidth - 1) : fullHeading;
+    const lines = String(region.content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map(normalizeCardLine).flatMap((line) => wrapAnsi(line, maxWidth));
     return {
       background: region.background ?? background,
       heading,
@@ -5259,7 +5298,7 @@ function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
     ...regions.flatMap((region) => [visibleWidth(region.heading), ...region.lines.map(visibleWidth)]),
     0
   ), maxWidth);
-  const width = Math.max(contentWidth + horizontalPadding * 2, minimumWidth);
+  const width = Math.min(layoutWidth, Math.max(contentWidth + horizontalPadding * 2, minimumWidth));
   const footerWidth = visibleWidth(footerText);
   const rows = [];
   let transitionBlank = false;
@@ -5296,7 +5335,8 @@ function renderCard({ badges, content, minimumWidth = 0, footer }) {
   const badgeList = Array.isArray(badges) ? badges : [badges];
   const footerList = footer === void 0 ? [] : Array.isArray(footer) ? footer : [footer];
   const footerText = renderBadges(...footerList);
-  const title = renderBadges(...badgeList);
+  const fullTitle = renderBadges(...badgeList);
+  const title = visibleWidth(fullTitle) > getMaxLayoutWidth() ? truncateAnsi(fullTitle, getMaxLayoutWidth() - 1) : fullTitle;
   if (!title)
     return renderBox({
       content,
@@ -7322,9 +7362,16 @@ function imageToAsciiSimple(buffer, ext, maxWidth = 80) {
       for (let x = 0; x < targetWidth; x++) {
         const top = px(x, y);
         const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
-        const byte = Number(top !== null) * 1 + Number(bottom !== null) * 2 + Number(bottom === top) * 1;
-        const symbol = ["\u3000", "\u2580", "\u2584", "\u2588", "\u2580"];
-        put(symbol[byte], top || bottom, top && bottom);
+        if (top === null && bottom === null)
+          put(" ", null, null);
+        else if (top !== null && bottom === null)
+          put("\u2580", top, null);
+        else if (top === null && bottom !== null)
+          put("\u2584", bottom, null);
+        else if (top === bottom)
+          put("\u2588", top, null);
+        else
+          put("\u2580", top, bottom);
       }
       if (fg !== null)
         line += FG_RESET;

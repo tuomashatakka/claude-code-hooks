@@ -3,6 +3,7 @@ import {
   Badge,
   OUTPUT_BADGE,
   RUNNING_BADGE,
+  layoutWidthForTerminal,
   renderBox,
   renderCard,
   renderColumns,
@@ -99,6 +100,21 @@ describe('tui cards', () => {
     expect(rendered).not.toContain('\x1b[48;2;1;2;3m')
     expect(rendered).not.toContain('\x1b[10C')
     expect(new Set(lines.map(visibleWidth)).size).toBe(1)
+  })
+
+  test('caps layout width and wraps long content without ellipsising it', () => {
+    expect(layoutWidthForTerminal(240)).toBe(100)
+    expect(layoutWidthForTerminal(70)).toBeLessThanOrEqual(70)
+    expect(layoutWidthForTerminal(10)).toBeLessThanOrEqual(10)
+
+    const rendered = renderCard({ badges: RUNNING_BADGE, content: 'x'.repeat(250) })
+    const plain    = stripAnsi(rendered)
+    const rows     = rendered.split('\n')
+
+    expect(Math.max(...rows.map(visibleWidth))).toBeLessThanOrEqual(100)
+    expect(plain.match(/x/g) ?? []).toHaveLength(250)
+    expect(plain).not.toContain('…')
+    expect(plain.split('\n').filter(row => row.includes('x')).length).toBeGreaterThan(1)
   })
 
   test('always stacks cards even when horizontal space is available', () => {

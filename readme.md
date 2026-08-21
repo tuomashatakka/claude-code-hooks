@@ -125,8 +125,11 @@ smaller representation scores better. Set `CLAUDE_HOOKS_IMAGE_MODE=half` (or
 use `TERM=dumb`) for the legacy half-block fallback when a terminal font does
 not cover the sextant glyphs.
 
-Width comes from the terminal rather than from a guess. A hook's stdout is a
-pipe — Claude Code reads the response JSON off it — so `process.stdout.columns`
+Width comes from the terminal rather than from a guess and is capped at 100
+columns, or the available terminal width after the host's outer margin,
+whichever is smaller. Long content rows hard-wrap inside that width without
+dropping characters or replacing their tail with an ellipsis. A hook's stdout
+is a pipe — Claude Code reads the response JSON off it — so `process.stdout.columns`
 is undefined in exactly the situation that matters, and the fallback that stood
 in for it sized every card and every picture to 96 columns however wide the
 window was. The controlling terminal is asked directly through `/dev/tty`,
@@ -191,7 +194,7 @@ same commit**.
 ### Layout
 
 ```
-hooks/hooks.json     event -> command wiring (13 active events)
+hooks/hooks.json     event -> command wiring (14 active events)
 hooks/bin/bind.ts    entrypoint; dispatches one event and exits
 src/hooks/           per-event handlers
 src/tools/           per-tool renderers, registered into a lookup
@@ -202,6 +205,10 @@ packages/            @tuomashatakka/ansi-headings, @tuomashatakka/image-to-ascii
 public/              the showcase page (GitHub Pages)
 scripts/             smoke test, demo capture, ANSI->HTML converter
 ```
+
+The shared hook manifest intentionally limits its top-level keys to
+`description` and `hooks`, which keeps the same file valid in both Claude Code
+and Codex's strict plugin loader.
 
 The TUI has one public component surface at `src/tui/index.ts`. Tool and event
 renderers compose typed `Badge`, `Box`/`Card`, `FileCard`, output limiter,

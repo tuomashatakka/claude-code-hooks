@@ -1,6 +1,7 @@
 export const TUI_TOKENS = {
   width: {
     fallbackContent:   96,
+    maximumLayout:     100,
     outerIndentMargin: 6,
     divider:           60,
   },
