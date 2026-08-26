@@ -1,4 +1,4 @@
-import { stripAnsi } from '../render/primitives.ts'
+import { stripAnsi, stripBackgroundAnsi } from '../render/primitives.ts'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -112,6 +112,12 @@ function persistedPreview (plain: string): string {
 function transportSafeMessage (systemMessage: string): string {
   if (fits(systemMessage))
     return systemMessage
+
+  // Progressive fallback: strip background fills first (largest per-line ANSI
+  // cost, ~15 escape chars each) while preserving foreground syntax highlighting.
+  const noBg = stripBackgroundAnsi(systemMessage)
+  if (fits(noBg))
+    return noBg
 
   const plain = stripAnsi(systemMessage)
   return fits(plain) ? plain : persistedPreview(plain)

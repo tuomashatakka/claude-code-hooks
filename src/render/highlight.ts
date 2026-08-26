@@ -366,19 +366,26 @@ const OUTPUT_METRIC_RE = /\b\d+(?:[.,]\d+)?\s?(?:ms|s|m|h|[KMGT]i?B|kb|mb|gb|%)\
 
 function highlightOutput (code: string): string {
   return code.split('\n').map(line => {
-    if ((/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i).test(line))
-      return chalk.red(line)
-    if ((/\b(warn|warning|deprecated)\b/i).test(line))
-      return chalk.yellow(line)
-    if ((/\b(success|succeeded|passed|completed?)\b/i).test(line) || (/[✓✔]/).test(line))
-      return chalk.green(line)
+    const hasAnsi = line.includes('\x1b')
 
-    // Metrics first, while the line is still ANSI-free: `\d+m` would otherwise
-    // match inside escape codes (e.g. the `36m` of \x1b[36m) inserted below.
+    // Whole-line severity coloring only for ANSI-free lines: lines that already
+    // carry terminal colors (e.g. `git diff --color`, `ls --color=always`) would
+    // have the outer color override the inner one, producing garbled output.
+    if (!hasAnsi) {
+      if ((/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i).test(line))
+        return chalk.red(line)
+      if ((/\b(warn|warning|deprecated)\b/i).test(line))
+        return chalk.yellow(line)
+      if ((/\b(success|succeeded|passed|completed?)\b/i).test(line) || (/[✓✔]/).test(line))
+        return chalk.green(line)
+    }
+
+    // Per-token replacements go through replaceOutsideAnsi so they never match
+    // inside escape-code parameters (e.g. `38` inside \x1b[38;2;…m).
     let out = line
-    out = out.replace(OUTPUT_METRIC_RE, m => chalk.yellow(m))
-    out = out.replace(OUTPUT_URL_RE, m => chalk.cyan(m))
-    out = out.replace(OUTPUT_PATH_RE, (_m, pre: string, p: string) => pre + chalk.cyan(p))
+    out = replaceOutsideAnsi(out, OUTPUT_METRIC_RE, m => chalk.yellow(m))
+    out = replaceOutsideAnsi(out, OUTPUT_URL_RE, m => chalk.cyan(m))
+    out = replaceOutsideAnsi(out, OUTPUT_PATH_RE, (_m, pre: string, p: string) => pre + chalk.cyan(p))
     return out
   })
     .join('\n')

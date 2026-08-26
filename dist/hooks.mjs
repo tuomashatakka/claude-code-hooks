@@ -4816,6 +4816,24 @@ var SGR_SEQUENCE = /\x1b\[([0-9;]*)m/g;
 function stripAnsi(str) {
   return String(str).replace(OSC_SEQUENCE, "").replace(CSI_SEQUENCE, "");
 }
+function stripBackgroundAnsi(str) {
+  return String(str).replace(SGR_SEQUENCE, (match, raw) => {
+    const values = (raw || "0").split(";").map((v) => Number(v || 0));
+    const kept = [];
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v === 49 || v >= 40 && v <= 47 || v >= 100 && v <= 107)
+        continue;
+      if (v === 48) {
+        const mode = values[i + 1];
+        i += mode === 2 ? 4 : mode === 5 ? 2 : 0;
+        continue;
+      }
+      kept.push(v);
+    }
+    return kept.length ? `\x1B[${kept.join(";")}m` : "";
+  });
+}
 function expandTabs(text2, tabSize = 4) {
   let column = 0;
   let output = "";
@@ -6057,16 +6075,19 @@ var OUTPUT_PATH_RE = /(^|[\s('"=])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+(?::
 var OUTPUT_METRIC_RE = /\b\d+(?:[.,]\d+)?\s?(?:ms|s|m|h|[KMGT]i?B|kb|mb|gb|%)\b/g;
 function highlightOutput(code) {
   return code.split("\n").map((line) => {
-    if (/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i.test(line))
-      return source_default.red(line);
-    if (/\b(warn|warning|deprecated)\b/i.test(line))
-      return source_default.yellow(line);
-    if (/\b(success|succeeded|passed|completed?)\b/i.test(line) || /[✓✔]/.test(line))
-      return source_default.green(line);
+    const hasAnsi = line.includes("\x1B");
+    if (!hasAnsi) {
+      if (/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i.test(line))
+        return source_default.red(line);
+      if (/\b(warn|warning|deprecated)\b/i.test(line))
+        return source_default.yellow(line);
+      if (/\b(success|succeeded|passed|completed?)\b/i.test(line) || /[✓✔]/.test(line))
+        return source_default.green(line);
+    }
     let out = line;
-    out = out.replace(OUTPUT_METRIC_RE, (m) => source_default.yellow(m));
-    out = out.replace(OUTPUT_URL_RE, (m) => source_default.cyan(m));
-    out = out.replace(OUTPUT_PATH_RE, (_m, pre, p) => pre + source_default.cyan(p));
+    out = replaceOutsideAnsi(out, OUTPUT_METRIC_RE, (m) => source_default.yellow(m));
+    out = replaceOutsideAnsi(out, OUTPUT_URL_RE, (m) => source_default.cyan(m));
+    out = replaceOutsideAnsi(out, OUTPUT_PATH_RE, (_m, pre, p) => pre + source_default.cyan(p));
     return out;
   }).join("\n");
 }
@@ -7960,6 +7981,9 @@ function persistedPreview(plain) {
 function transportSafeMessage(systemMessage) {
   if (fits(systemMessage))
     return systemMessage;
+  const noBg = stripBackgroundAnsi(systemMessage);
+  if (fits(noBg))
+    return noBg;
   const plain = stripAnsi(systemMessage);
   return fits(plain) ? plain : persistedPreview(plain);
 }

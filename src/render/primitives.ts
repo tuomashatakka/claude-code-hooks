@@ -38,6 +38,32 @@ export function stripAnsi (str: unknown): string {
     .replace(CSI_SEQUENCE, '')
 }
 
+/**
+ * Strips only background-related SGR codes (40-47, 48;…, 49, 100-107) from an
+ * ANSI string, preserving all foreground colors and text styling.  This is
+ * useful as a first-pass budget reduction: card background fills are the single
+ * largest ANSI cost per line (~15 escape chars), and removing them can bring an
+ * oversized systemMessage under the host limit without losing syntax highlighting.
+ */
+export function stripBackgroundAnsi (str: unknown): string {
+  return String(str).replace(SGR_SEQUENCE, (match, raw: string) => {
+    const values = (raw || '0').split(';').map(v => Number(v || 0))
+    const kept: number[] = []
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i]!
+      if (v === 49 || (v >= 40 && v <= 47) || (v >= 100 && v <= 107))
+        continue
+      if (v === 48) {
+        const mode = values[i + 1]
+        i += mode === 2 ? 4 : mode === 5 ? 2 : 0
+        continue
+      }
+      kept.push(v)
+    }
+    return kept.length ? `\x1b[${kept.join(';')}m` : ''
+  })
+}
+
 /** Expands tabs before measuring so terminal tab stops cannot shift a card. */
 export function expandTabs (text: string, tabSize = 4): string {
   let column = 0
