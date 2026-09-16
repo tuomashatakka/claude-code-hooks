@@ -2,7 +2,7 @@
 // Captures a whole simulated Claude Code session for the showcase page.
 //
 // Every `hook` beat below is fed through the real hook pipeline
-// (hooks/bin/bind.ts, same binary Claude Code runs) and its actual ANSI
+// (src/main.ts, same binary Claude Code runs) and its actual ANSI
 // systemMessage is converted to HTML. Nothing on the page is hand-authored
 // terminal output, so the showcase cannot drift from the live hook renderer.
 // Regenerated on every Pages deploy - see .github/workflows/pages.yml.
@@ -31,14 +31,8 @@ import {
   writeDemoFixtures,
   removeDemoFixtures,
 } from './fixtures.ts'
-import { listHooks } from '../src/registry/hook-registry.ts'
-import { getToolDefinition, listToolDefinitions } from '../src/registry/tool-registry.ts'
-import * as hooksIndex from '../src/hooks/index.ts'
-import * as toolsIndex from '../src/tools/index.ts'
-
-
-void hooksIndex
-void toolsIndex
+import { HOOKS } from '../src/hooks.ts'
+import { RENDERERS, rendererFor } from '../src/tools/index.ts'
 
 
 const ROOT            = path.resolve(import.meta.dir, '..')
@@ -63,12 +57,13 @@ const PLUGIN_INSTALL  = '/plugin install hooks@claude-code-hooks'
 // the page supports (the type scale shrinks with it), so it states its own.
 const CAPTURE_COLUMNS = 112
 
-// Real files, read off disk by the file-preview renderer exactly as they are in
+// Real files, read off disk by the file-card renderer exactly as they are in
 // a live session — so the syntax highlighting on the page is the real thing.
-const SRC_REGISTRY = path.join(ROOT, 'src', 'registry', 'tool-registry.ts')
+const SRC_REGISTRY = path.join(ROOT, 'src', 'tools', 'index.ts')
 const SRC_TOKENS   = path.join(ROOT, 'src', 'tui', 'tokens.ts')
-const SRC_DURATION = path.join(ROOT, 'src', 'tui', 'duration.ts')
-const SRC_RULER    = path.join(ROOT, 'src', 'tui', 'ruler.ts')
+const SRC_DURATION = path.join(ROOT, 'src', 'tui', 'tokens.ts')
+// Two short files: a two-file read has to fit the whole response un-shrunk.
+const SRC_RULER    = path.join(ROOT, 'src', 'runtime', 'io.ts')
 
 const CHAPTERS = [
   { id: 'session', label: 'session' },
@@ -348,6 +343,14 @@ const SCRIPT: Beat[] = [
          note:   'Edit answers with a structured patch, so the file is re-read and cropped to the changed span plus three lines — not dumped whole.',
        }),
 
+  tool('write', 'files', 'Write',
+       { file_path: SRC_TOKENS, content: '[file contents]' },
+       { type: 'update', filePath: SRC_TOKENS },
+       14, {
+         header: 'Write(src/tui/tokens.ts)',
+         note:   'Write answers with little more than the path, so the file is read back off disk and shown the way Read shows it.',
+       }),
+
   tool('apply-patch', 'files', 'apply_patch',
        '*** Begin Patch\n*** Update File: src/tui/tokens.ts\n*** End Patch',
        { output: 'Success. Updated the following files:\nM src/tui/tokens.ts', exit_code: 0 },
@@ -436,6 +439,28 @@ const SCRIPT: Beat[] = [
        4, {
          header: 'ToolSearch(select:WebFetch,ExitPlanMode)',
          note:   'Deferred-tool discovery shows only what loaded and how much remains deferred—not the transport payload.',
+       }),
+
+  tool('web-search', 'web', 'WebSearch',
+       { query: 'bun test runner snapshot' },
+       {
+         query:   'bun test runner snapshot',
+         results: [
+           {
+             tool_use_id: 'srvtoolu_01',
+             content:     [
+               { title: 'bun test – Bun Docs', url: 'https://bun.sh/docs/cli/test' },
+               { title: 'Snapshot testing | Bun', url: 'https://bun.sh/docs/test/snapshots' },
+               { title: 'Migrating from Jest to bun test', url: 'https://bun.sh/guides/test/migrate-from-jest' },
+             ],
+           },
+           'Bun ships a Jest-compatible runner with built-in snapshot support; `bun test --update-snapshots` rewrites stale ones.',
+         ],
+         durationSeconds: 3.2,
+       },
+       3200, {
+         header: 'WebSearch("bun test runner snapshot")',
+         note:   'Search results become a table of numbered links, with the model\'s summary underneath — never the raw result JSON.',
        }),
 
   tool('generic-fallback', 'web', 'WebFetch',
@@ -631,20 +656,20 @@ const SILENT_EVENTS = new Set([ 'PreToolUse', 'PostToolBatch' ]) // handled, ren
 
 function assertFullCoverage (beats: readonly Beat[]): void {
   const shownEvents   = new Set(beats.map(b => b.event))
-  const missingEvents = listHooks().filter(e => !SILENT_EVENTS.has(e) && !shownEvents.has(e))
+  const missingEvents = (Object.keys(HOOKS) as string[]).filter(e => !SILENT_EVENTS.has(e) && !shownEvents.has(e))
 
   const shownStrategies = new Set(
     beats
       .map(b => (b.payload as { tool_name?: string })?.tool_name)
       .filter((name): name is string => Boolean(name))
-      .map(name => getToolDefinition(name))
+      .map(name => rendererFor(name))
   )
-  const missingStrategies = listToolDefinitions().filter(def => !shownStrategies.has(def))
+  const missingStrategies = RENDERERS.filter(def => !shownStrategies.has(def))
 
   const problems = [
     missingEvents.length ? `hook events with no beat: ${missingEvents.join(', ')}` : null,
     missingStrategies.length
-      ? `tool strategies with no beat: ${missingStrategies.map(d => String(d.matches)).join(' | ')}`
+      ? `tool strategies with no beat: ${missingStrategies.map(d => d.id).join(' | ')}`
       : null,
   ].filter(Boolean)
 
@@ -676,10 +701,10 @@ for (const beat of SCRIPT) {
     throw new Error(beat.id + ' produced no output — hook registry empty?')
   // Showcase fixtures are deliberately bounded; needing the transport's saved
   // head/tail preview means the renderer itself spent too much of the budget.
-  if (rendered.includes('preview split'))
+  if ((/saved to |omitted …/).test(rendered))
     throw new Error(
       beat.id + ' overran the response budget and fell back to a persisted preview. ' +
-      'Size the preview (src/render/file-preview.ts) rather than letting the transport trim it.'
+      'Point the beat at smaller fixtures rather than letting the transport shrink it.'
     )
   examples.push({
     id:      beat.id,

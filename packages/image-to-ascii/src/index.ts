@@ -736,8 +736,10 @@ function renderHalfBlocks (
  * neither cost nor fidelity is monotonic in the width. Whether the cell grid
  * happens to land on the image's own edges swings the character count by more
  * than 20% between adjacent widths, and the widest render that fits is
- * routinely a couple of dB worse than one a few columns narrower. So this scans
- * a spread of widths and keeps the one that explains the most of the image.
+ * routinely a couple of dB worse than one a few columns narrower. So this
+ * bisects to the widest column that still fits — cost is monotone enough for
+ * that, give or take the oscillation — then scans the columns around it and
+ * keeps the render that explains the most of the image.
  */
 function bestFittingRender (
   startCols: number,
@@ -758,34 +760,43 @@ function bestFittingRender (
   let best: Render | null = null
   let bestScore           = -Infinity
 
+  const seen     = new Map<number, boolean>()
   const consider = (cols: number): boolean => {
+    const known = seen.get(cols)
+    if (known !== undefined)
+      return known
+
     const attempt = render(cols)
-    if (costOf(attempt.lines, spec) > spec.total)
-      return false
-    if (attempt.score > bestScore) {
+    const fits    = costOf(attempt.lines, spec) <= spec.total
+    seen.set(cols, fits)
+    if (fits && attempt.score > bestScore) {
       best = attempt
       bestScore = attempt.score
     }
-    return true
+    return fits
   }
 
   // The widest render is the common case and usually the best one; take it
   // without paying for a search when it already fits.
   if (consider(startCols))
     return best
+  if (!consider(floor))
+    return null
 
-  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--)
-    consider(cols)
-  if (best)
-    return best
-
-  for (let cols = Math.max(floor, startCols - WINDOW); cols >= floor;) {
-    if (consider(cols))
-      return best
-    if (cols === floor)
-      break
-    cols = Math.max(floor, Math.floor(cols * 0.85))
+  let low  = floor
+  let high = startCols - 1
+  while (low < high) {
+    const mid = low + high + 1 >> 1
+    if (consider(mid))
+      low = mid
+    else
+      high = mid - 1
   }
+
+  // The boundary itself is a coin toss against the oscillation: look a little
+  // above it and a window below for the render worth shipping.
+  for (let cols = Math.min(startCols - 1, low + WINDOW / 2); cols >= Math.max(floor, low - WINDOW); cols--)
+    consider(cols)
   return best
 }
 

@@ -119,27 +119,27 @@ var require_chunkstream = __commonJS({
       this._buffers = null;
       this.emit("close");
     };
-    ChunkStream.prototype._processReadAllowingLess = function(read) {
+    ChunkStream.prototype._processReadAllowingLess = function(read2) {
       this._reads.shift();
       let smallerBuf = this._buffers[0];
-      if (smallerBuf.length > read.length) {
-        this._buffered -= read.length;
-        this._buffers[0] = smallerBuf.slice(read.length);
-        read.func.call(this, smallerBuf.slice(0, read.length));
+      if (smallerBuf.length > read2.length) {
+        this._buffered -= read2.length;
+        this._buffers[0] = smallerBuf.slice(read2.length);
+        read2.func.call(this, smallerBuf.slice(0, read2.length));
       } else {
         this._buffered -= smallerBuf.length;
         this._buffers.shift();
-        read.func.call(this, smallerBuf);
+        read2.func.call(this, smallerBuf);
       }
     };
-    ChunkStream.prototype._processRead = function(read) {
+    ChunkStream.prototype._processRead = function(read2) {
       this._reads.shift();
       let pos = 0;
       let count = 0;
-      let data = Buffer.alloc(read.length);
-      while (pos < read.length) {
+      let data = Buffer.alloc(read2.length);
+      while (pos < read2.length) {
         let buf = this._buffers[count++];
-        let len = Math.min(buf.length, read.length - pos);
+        let len = Math.min(buf.length, read2.length - pos);
         buf.copy(data, pos, 0, len);
         pos += len;
         if (len !== buf.length) {
@@ -149,17 +149,17 @@ var require_chunkstream = __commonJS({
       if (count > 0) {
         this._buffers.splice(0, count);
       }
-      this._buffered -= read.length;
-      read.func.call(this, data);
+      this._buffered -= read2.length;
+      read2.func.call(this, data);
     };
     ChunkStream.prototype._process = function() {
       try {
         while (this._buffered > 0 && this._reads && this._reads.length > 0) {
-          let read = this._reads[0];
-          if (read.allowLess) {
-            this._processReadAllowingLess(read);
-          } else if (this._buffered >= read.length) {
-            this._processRead(read);
+          let read2 = this._reads[0];
+          if (read2.allowLess) {
+            this._processReadAllowingLess(read2);
+          } else if (this._buffered >= read2.length) {
+            this._processRead(read2);
           } else {
             break;
           }
@@ -1788,12 +1788,12 @@ var require_sync_reader = __commonJS({
     };
     SyncReader.prototype.process = function() {
       while (this._reads.length > 0 && this._buffer.length) {
-        let read = this._reads[0];
-        if (this._buffer.length && (this._buffer.length >= read.length || read.allowLess)) {
+        let read2 = this._reads[0];
+        if (this._buffer.length && (this._buffer.length >= read2.length || read2.allowLess)) {
           this._reads.shift();
           let buf = this._buffer;
-          this._buffer = buf.slice(read.length);
-          read.func.call(this, buf.slice(0, read.length));
+          this._buffer = buf.slice(read2.length);
+          read2.func.call(this, buf.slice(0, read2.length));
         } else {
           break;
         }
@@ -3707,9 +3707,9 @@ var require_decoder = __commonJS({
         return a < 0 ? 0 : a > 255 ? 255 : a;
       }
       constructor.prototype = {
-        load: function load(path8) {
+        load: function load(path9) {
           var xhr = new XMLHttpRequest();
-          xhr.open("GET", path8, true);
+          xhr.open("GET", path9, true);
           xhr.responseType = "arraybuffer";
           xhr.onload = (function() {
             var data = new Uint8Array(xhr.response || xhr.mozResponseArrayBuffer);
@@ -4275,6 +4275,10 @@ var require_jpeg_js = __commonJS({
   }
 });
 
+// src/hooks.ts
+import fs8 from "node:fs";
+import path8 from "node:path";
+
 // node_modules/chalk/source/vendor/ansi-styles/index.js
 var ANSI_BACKGROUND_OFFSET = 10;
 var wrapAnsi16 = (offset = 0) => (code) => `\x1B[${code + offset}m`;
@@ -4390,11 +4394,11 @@ function assembleStyles() {
     },
     hexToRgb: {
       value(hex) {
-        const matches2 = /[a-f\d]{6}|[a-f\d]{3}/i.exec(hex.toString(16));
-        if (!matches2) {
+        const matches = /[a-f\d]{6}|[a-f\d]{3}/i.exec(hex.toString(16));
+        if (!matches) {
           return [0, 0, 0];
         }
-        let [colorString] = matches2;
+        let [colorString] = matches;
         if (colorString.length === 3) {
           colorString = [...colorString].map((character) => character + character).join("");
         }
@@ -4770,1563 +4774,143 @@ var chalk = createChalk();
 var chalkStderr = createChalk({ level: stderrColor ? stderrColor.level : 0 });
 var source_default = chalk;
 
-// src/registry/tool-registry.ts
-var REGISTRY = [];
-var GENERIC = null;
-function defineTool(def) {
-  REGISTRY.push(def);
-}
-function defineGenericTool(def) {
-  GENERIC = { matches: () => true, ...def };
-}
-function matches(matcher, rawName) {
-  if (typeof matcher === "function")
-    return matcher(rawName);
-  if (Array.isArray(matcher))
-    return matcher.includes(rawName);
-  return matcher === rawName;
-}
-function getToolDefinition(rawName) {
-  for (const def of REGISTRY)
-    if (matches(def.matches, rawName))
-      return def;
-  if (GENERIC)
-    return GENERIC;
-  throw new Error(`No tool strategy registered (and no generic fallback) for ${rawName}`);
-}
-
-// src/render/primitives.ts
-import { readFileSync } from "node:fs";
+// src/ansi/chalk.ts
 source_default.level = 3;
+var GRAY_SPREAD = 12;
+function ansi256(hex) {
+  const value = Number.parseInt(hex.replace("#", ""), 16);
+  const [r, g, b] = [value >> 16 & 255, value >> 8 & 255, value & 255];
+  if (Math.max(r, g, b) - Math.min(r, g, b) < GRAY_SPREAD) {
+    const gray = Math.round((r + g + b) / 3);
+    if (gray < 8)
+      return 16;
+    if (gray > 238)
+      return 231;
+    return 232 + Math.min(23, Math.round((gray - 8) / 10));
+  }
+  const cube = (channel) => channel < 48 ? 0 : channel < 115 ? 1 : Math.min(5, Math.round((channel - 35) / 40));
+  return 16 + 36 * cube(r) + 6 * cube(g) + cube(b);
+}
+var paint256 = {
+  fg: (hex) => source_default.ansi256(ansi256(hex)),
+  bg: (hex) => source_default.bgAnsi256(ansi256(hex))
+};
+var ink = {
+  dim: source_default.gray,
+  note: source_default.gray.italic,
+  ok: source_default.green,
+  warn: source_default.yellow,
+  err: source_default.red,
+  key: source_default.cyan,
+  str: source_default.green,
+  num: source_default.yellow,
+  punct: source_default.gray,
+  accent: source_default.cyan,
+  strong: source_default.bold
+};
+
+// src/lib/data.ts
+import fs from "node:fs";
+import path from "node:path";
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+function pickString(source, ...keys) {
+  const record = asRecord(source);
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim())
+      return value;
+  }
+  return null;
+}
+function pickNumber(source, ...keys) {
+  const record = asRecord(source);
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value))
+      return value;
+  }
+  return null;
+}
+function pickBool(source, ...keys) {
+  const record = asRecord(source);
+  return keys.some((key) => record?.[key] === true);
+}
+function pickAny(source, ...keys) {
+  const record = asRecord(source);
+  for (const key of keys)
+    if (record?.[key] !== void 0 && record[key] !== null)
+      return record[key];
+  return void 0;
+}
+function pickId(source, ...keys) {
+  const value = pickAny(source, ...keys);
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+}
+function parseJsonish(value) {
+  if (typeof value !== "string")
+    return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("["))
+    return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
 var PERSISTED_RE = /<persisted-output>[\s\S]*?(?:saved to:|→)\s*(\S+)[\s\S]*?<\/persisted-output>/g;
-function expandPersistedOutput(text2) {
-  if (typeof text2 !== "string" || !text2.includes("<persisted-output>"))
-    return text2;
-  return text2.replace(PERSISTED_RE, (match, path8) => {
+function expandPersistedOutput(text) {
+  if (!text.includes("<persisted-output>"))
+    return text;
+  return text.replace(PERSISTED_RE, (match, file) => {
     try {
-      return readFileSync(path8, "utf8");
+      return fs.readFileSync(file, "utf8");
     } catch {
       return match;
     }
   });
 }
-var OSC_SEQUENCE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
-var CSI_SEQUENCE = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]/g;
-var SGR_SEQUENCE = /\x1b\[([0-9;]*)m/g;
-function stripAnsi(str) {
-  return String(str).replace(OSC_SEQUENCE, "").replace(CSI_SEQUENCE, "");
+function textOfBlocks(blocks) {
+  const text = blocks.map((block) => typeof block === "string" ? block : pickString(block, "text", "output")).filter((part) => part !== null).join("\n");
+  return text || null;
 }
-function stripBackgroundAnsi(str) {
-  return String(str).replace(SGR_SEQUENCE, (match, raw) => {
-    const values = (raw || "0").split(";").map((v) => Number(v || 0));
-    const kept = [];
-    for (let i = 0; i < values.length; i++) {
-      const v = values[i];
-      if (v === 49 || v >= 40 && v <= 47 || v >= 100 && v <= 107)
-        continue;
-      if (v === 48) {
-        const mode = values[i + 1];
-        i += mode === 2 ? 4 : mode === 5 ? 2 : 0;
-        continue;
-      }
-      kept.push(v);
-    }
-    return kept.length ? `\x1B[${kept.join(";")}m` : "";
-  });
-}
-function expandTabs(text2, tabSize = 4) {
-  let column = 0;
-  let output = "";
-  const input = String(text2);
-  for (let index = 0; index < input.length; ) {
-    CSI_SEQUENCE.lastIndex = index;
-    const sequence = CSI_SEQUENCE.exec(input);
-    if (sequence?.index === index) {
-      output += sequence[0];
-      index += sequence[0].length;
-      continue;
-    }
-    const char = input[index];
-    if (char === "	") {
-      const count = tabSize - column % tabSize;
-      output += " ".repeat(count);
-      column += count;
-    } else {
-      output += char;
-      column += 1;
-    }
-    index += 1;
-  }
-  return output;
-}
-function withoutBackgroundSgr(text2) {
-  SGR_SEQUENCE.lastIndex = 0;
-  return text2.replace(SGR_SEQUENCE, (sequence, raw) => {
-    const values = (raw || "0").split(";").map((value) => Number(value || 0));
-    const kept = [];
-    for (let index = 0; index < values.length; index++) {
-      const value = values[index];
-      if (value === 49 || value >= 40 && value <= 47 || value >= 100 && value <= 107)
-        continue;
-      if (value === 48) {
-        const mode = values[index + 1];
-        index += mode === 2 ? 4 : mode === 5 ? 2 : 0;
-        continue;
-      }
-      kept.push(value);
-    }
-    return kept.length ? `\x1B[${kept.join(";")}m` : "";
-  });
-}
-function normalizeCardLine(line) {
-  const withoutOsc = String(line).replace(OSC_SEQUENCE, "");
-  const withoutCursorControls = withoutOsc.replace(CSI_SEQUENCE, (sequence) => sequence.endsWith("m") ? sequence : "");
-  const withoutBackground = withoutBackgroundSgr(withoutCursorControls);
-  const withoutControls = withoutBackground.replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g, "").replace(/\r/g, "");
-  return expandTabs(withoutControls);
-}
-function visibleWidth(str) {
-  return Array.from(expandTabs(stripAnsi(str))).length;
-}
-function wrapAnsi(text2, width) {
-  if (width <= 0)
-    return [String(text2)];
-  const input = String(text2);
-  const lines = [];
-  let line = "";
-  let visible = 0;
-  for (let index = 0; index < input.length; ) {
-    CSI_SEQUENCE.lastIndex = index;
-    const sequence = CSI_SEQUENCE.exec(input);
-    if (sequence?.index === index) {
-      line += sequence[0];
-      index += sequence[0].length;
-      continue;
-    }
-    if (visible === width) {
-      lines.push(line);
-      line = "";
-      visible = 0;
-    }
-    const codePoint = input.codePointAt(index);
-    line += String.fromCodePoint(codePoint);
-    visible += 1;
-    index += codePoint > 65535 ? 2 : 1;
-  }
-  lines.push(line);
-  return lines;
-}
-function truncateAnsi(text2, maxVisibleLen, ellipsis = "\u2026") {
-  const csi = /\x1b\[[0-9;]*m/y;
-  let out = "";
-  let visible = 0;
-  let i = 0;
-  while (i < text2.length && visible < maxVisibleLen) {
-    csi.lastIndex = i;
-    const m = csi.exec(text2);
-    if (m) {
-      out += m[0];
-      i += m[0].length;
-      continue;
-    }
-    out += text2[i];
-    visible += 1;
-    i += 1;
-  }
-  return out + "\x1B[0m" + ellipsis;
-}
-function firstLine(value, maxLength) {
-  const line = String(value ?? "").split("\n")[0] ?? "";
-  return maxLength == null ? line : line.slice(0, maxLength);
-}
-function pickResultText(result, keys = ["text", "result", "output"]) {
+function rawResultText(result) {
   if (typeof result === "string")
     return result;
-  if (!result || typeof result !== "object")
+  if (Array.isArray(result))
+    return textOfBlocks(result);
+  const record = asRecord(result);
+  if (!record)
     return null;
-  const record3 = result;
-  for (const key of keys) {
-    const value = record3[key];
-    if (typeof value === "string")
-      return value;
-  }
-  return null;
-}
-var SAFETY_MAX_LINES = 2e3;
-function softCollapse(content, { maxLines = SAFETY_MAX_LINES, label = "lines" } = {}) {
-  const text2 = String(content);
-  const lines = text2.split("\n");
-  if (lines.length <= maxLines)
-    return text2;
-  const head = lines.slice(0, maxLines).join("\n");
-  return head + "\n" + source_default.gray.italic(`  \u2026 +${lines.length - maxLines} more ${label}`);
-}
-function wrapText(text2, width) {
-  if (width <= 0)
-    return text2;
-  return String(text2).split("\n").map((line) => {
-    const out = [];
-    let current = "";
-    for (const word of line.split(/ +/))
-      if (!current)
-        current = word;
-      else if (current.length + 1 + word.length <= width)
-        current += " " + word;
-      else {
-        out.push(current);
-        current = word;
-      }
-    out.push(current);
-    return out.join("\n");
-  }).join("\n");
-}
-function extractResultText(toolResponse) {
-  const raw = extractResultTextRaw(toolResponse);
-  return raw === null ? null : expandPersistedOutput(raw);
-}
-function extractResultTextRaw(toolResponse) {
-  if (typeof toolResponse === "string")
-    return toolResponse;
-  if (!toolResponse || typeof toolResponse !== "object")
-    return null;
-  if (Array.isArray(toolResponse))
-    return textBlocks(toolResponse);
-  const indexed = toolResponse;
-  if (indexed["0"]?.type === "text")
-    return textBlocks(Object.values(indexed));
-  const o = toolResponse;
-  const candidate = o.stdout ?? o.output ?? o.text ?? o.content;
+  if (asRecord(record["0"])?.type === "text")
+    return textOfBlocks(Object.values(record));
+  const candidate = pickAny(record, "stdout", "output", "text", "content");
   if (typeof candidate === "string")
     return candidate;
-  if (candidate && typeof candidate === "object" && candidate !== toolResponse)
-    return extractResultTextRaw(candidate);
-  return null;
+  return candidate && typeof candidate === "object" ? rawResultText(candidate) : null;
 }
-function textBlocks(blocks) {
-  const text2 = blocks.filter((b) => b?.type === "text" && typeof b.text === "string").map((b) => b.text).join("\n");
-  return text2 || null;
+function resultText(result) {
+  const text = rawResultText(result);
+  return text === null ? null : expandPersistedOutput(text);
 }
-
-// src/tui/theme.ts
-source_default.level = 3;
-var TOOL_ICONS = {
-  "Bash": "\u276F",
-  "Write": "\u2295",
-  "Edit": "\u0394",
-  "Read": "\u25A4",
-  "Glob": "\u2315",
-  "Grep": "\u2315",
-  "Task": "\u{F0495}",
-  "Agent": "\u{F0495}",
-  "WebFetch": "\u21CC",
-  "WebSearch": "\u2315",
-  "TaskCreate": "\u2713",
-  "TaskUpdate": "\u2713",
-  "TaskList": "\u2713",
-  "TaskStop": "\u25A0",
-  "apply_patch": "\u0394",
-  "ApplyPatch": "\u0394",
-  "ToolSearch": "\u2315",
-  "AskUserQuestion": "?",
-  "view_image": "\u25A9",
-  "ViewImage": "\u25A9",
-  "update_plan": "\u224B",
-  "UpdatePlan": "\u224B",
-  "TodoWrite": "\u224B",
-  "TodoRead": "\u224B",
-  "ExitPlanMode": "\u23FB",
-  "mcp__wcgw__BashCommand": "\u276F",
-  "mcp__wcgw__FileWriteOrEdit": "\u2295",
-  "mcp__wcgw__FileEdit": "\u0394",
-  "mcp__wcgw__ReadFiles": "\u25A4",
-  "mcp__wcgw__ReadImage": "\u25A9",
-  "mcp__wcgw__Initialize": "\u23FB",
-  "mcp__wcgw__ContextSave": "\u29FA",
-  "mcp__context7__query-docs": "\u21CC",
-  "mcp__context7__resolve-library-id": "\u21CC",
-  "mcp__claude-in-chrome__navigate": "\u21CC",
-  "mcp__claude-in-chrome__read_page": "\u25A4",
-  "spawn_agent": "\u2B21",
-  "wait_agent": "\u25F7",
-  "followup_task": "\u21BB",
-  "send_message": "\u2192",
-  "interrupt_agent": "\u25A0",
-  "list_agents": "\u224B",
-  "default": "\u{F0320}"
-};
-var TOOL_COLORS = {
-  Bash: "magenta",
-  Write: "green",
-  Edit: "green",
-  Read: "blue",
-  Task: "cyan",
-  Agent: "cyan",
-  Glob: "red",
-  Grep: "red",
-  WebFetch: "cyan",
-  WebSearch: "cyan",
-  TaskStop: "red",
-  ToolSearch: "cyan",
-  AskUserQuestion: "brightGreen",
-  view_image: "blue",
-  ViewImage: "blue",
-  update_plan: "cyan",
-  UpdatePlan: "cyan",
-  TodoWrite: "cyan",
-  TodoRead: "cyan",
-  apply_patch: "green",
-  ApplyPatch: "green",
-  mcp__wcgw__BashCommand: "magenta",
-  mcp__wcgw__FileWriteOrEdit: "green",
-  mcp__wcgw__FileEdit: "green",
-  mcp__wcgw__ReadFiles: "blue",
-  mcp__wcgw__ReadImage: "blue",
-  mcp__wcgw__Initialize: "cyan",
-  mcp__wcgw__ContextSave: "cyan",
-  spawn_agent: "green",
-  wait_agent: "gray",
-  followup_task: "cyan",
-  send_message: "cyan",
-  interrupt_agent: "red",
-  list_agents: "blue",
-  default: "blue"
-};
-function parseToolName(rawName) {
-  if (!rawName || typeof rawName !== "string")
-    return { server: null, tool: "Unknown", pretty: "Unknown" };
-  const collaboration = rawName.match(/^collaboration(?:__|[._-])?(spawn_agent|wait_agent|followup_task|send_message|interrupt_agent|list_agents)$/i);
-  if (collaboration) {
-    const tool = collaboration[1].toLowerCase();
-    return { server: "collaboration", tool, pretty: `collaboration \u25B8 ${tool.replace(/_/g, " ")}` };
-  }
-  if (rawName.startsWith("mcp__")) {
-    const rest = rawName.slice(5);
-    const idx = rest.indexOf("__");
-    if (idx > 0) {
-      const server = rest.slice(0, idx);
-      const tool = rest.slice(idx + 2);
-      const prettyTool = tool.replace(/_/g, " ");
-      return { server, tool, pretty: `${server} \u25B8 ${prettyTool}` };
-    }
-  }
-  return { server: null, tool: rawName, pretty: rawName };
+function resultRecord(result) {
+  return asRecord(result) ?? asRecord(parseJsonish(resultText(result)));
 }
-function getToolIcon(rawName) {
-  if (TOOL_ICONS[rawName])
-    return TOOL_ICONS[rawName];
-  const { tool } = parseToolName(rawName);
-  if (TOOL_ICONS[tool])
-    return TOOL_ICONS[tool];
-  if (/bash|command|exec|shell/i.test(tool))
-    return TOOL_ICONS.Bash;
-  if (/write|edit|create/i.test(tool))
-    return TOOL_ICONS.Write;
-  if (/read|get|fetch|load/i.test(tool))
-    return TOOL_ICONS.Read;
-  if (/search|find|grep|query|glob/i.test(tool))
-    return TOOL_ICONS.Grep;
-  return TOOL_ICONS.default;
-}
-function getToolColor(rawName) {
-  if (TOOL_COLORS[rawName])
-    return TOOL_COLORS[rawName];
-  const { tool } = parseToolName(rawName);
-  if (TOOL_COLORS[tool])
-    return TOOL_COLORS[tool];
-  if (/bash|command|exec|shell/i.test(tool))
-    return "magenta";
-  if (/write|edit|create/i.test(tool))
-    return "green";
-  if (/read|get|fetch|load/i.test(tool))
-    return "blue";
-  if (/search|find|grep|query|glob/i.test(tool))
-    return "red";
-  return TOOL_COLORS.default;
-}
-var BACKGROUND_COLOR_MAP = {
-  blue: source_default.bgBlue,
-  green: source_default.bgGreen,
-  yellow: source_default.bgYellow,
-  red: source_default.bgRed,
-  magenta: source_default.bgMagenta,
-  cyan: source_default.bgCyan,
-  gray: source_default.bgGray,
-  white: source_default.bgWhite,
-  black: source_default.bgBlack,
-  brightBlue: source_default.bgBlueBright,
-  brightGreen: source_default.bgGreenBright,
-  brightYellow: source_default.bgYellowBright,
-  brightRed: source_default.bgRedBright,
-  brightMagenta: source_default.bgMagentaBright,
-  brightCyan: source_default.bgCyanBright,
-  brightGray: source_default.bgGray,
-  brightWhite: source_default.bgWhiteBright
-};
-var FOREGROUND_COLOR_MAP = {
-  blue: source_default.blue,
-  green: source_default.green,
-  yellow: source_default.yellow,
-  red: source_default.red,
-  magenta: source_default.magenta,
-  cyan: source_default.cyan,
-  gray: source_default.gray,
-  white: source_default.white,
-  black: source_default.black,
-  brightBlue: source_default.blueBright,
-  brightGreen: source_default.greenBright,
-  brightYellow: source_default.yellowBright,
-  brightRed: source_default.redBright,
-  brightMagenta: source_default.magentaBright,
-  brightCyan: source_default.cyanBright,
-  brightGray: source_default.gray,
-  brightWhite: source_default.whiteBright
-};
-function getBadgeColor(name) {
-  return BACKGROUND_COLOR_MAP[name] ?? source_default.bgBlue;
-}
-function getBadgeTextColor(name) {
-  return FOREGROUND_COLOR_MAP[name] ?? source_default.blue;
+function displayPath(filePath, cwd = process.cwd(), home = process.env.HOME ?? process.env.USERPROFILE ?? "") {
+  const text = String(filePath);
+  const candidates = [text];
+  if (cwd && text.startsWith(cwd + path.sep))
+    candidates.push(text.slice(cwd.length + 1));
+  if (home && (text === home || text.startsWith(home + path.sep)))
+    candidates.push("~" + text.slice(home.length));
+  return candidates.reduce((best, candidate) => candidate.length < best.length ? candidate : best);
 }
 
-// src/tui/badge.ts
-function resolveBadge(props) {
-  if (props.toolName)
-    return {
-      text: parseToolName(props.toolName).pretty,
-      color: props.color ?? getToolColor(props.toolName),
-      icon: props.icon ?? getToolIcon(props.toolName)
-    };
-  return {
-    text: props.label ?? "",
-    color: props.color ?? "cyan",
-    icon: props.icon ?? null
-  };
-}
-function renderBadge(props = {}) {
-  const { text: text2, color, icon } = resolveBadge(props);
-  return getBadgeColor(color).black(` ${icon ? icon + " " : ""}${text2} `);
-}
-var Badge = class {
-  constructor(props = {}) {
-    this.props = props;
-  }
-  props;
-  toString() {
-    return renderBadge(this.props);
-  }
-  renderRule(length, character = "\u2581") {
-    const { color } = resolveBadge(this.props);
-    return getBadgeTextColor(color)(character.repeat(Math.max(0, length)));
-  }
-};
-function renderBadges(...badges) {
-  return badges.filter((badge) => Boolean(badge)).map((badge) => badge instanceof Badge ? badge.toString() : String(badge)).join(" ");
-}
-var RUNNING_BADGE = new Badge({ label: "Running", color: "magenta", icon: "\u23CE " });
-var OUTPUT_BADGE = new Badge({ label: "Output", color: "brightGreen", icon: "\u2258" });
-var META_BADGE = new Badge({ label: "metadata", color: "gray", icon: "\u26C1" });
-
-// src/tui/card.ts
-import fs from "node:fs";
-import tty2 from "node:tty";
-
-// src/tui/tokens.ts
-var TUI_TOKENS = {
-  width: {
-    fallbackContent: 96,
-    maximumLayout: 100,
-    outerIndentMargin: 6,
-    divider: 60
-  },
-  card: {
-    background: "#302f32",
-    commandBackground: "#272629",
-    ruleFallback: "#4a4a4a",
-    border: "#5a595c",
-    horizontalPadding: 2,
-    minimumHairline: 4,
-    // Cards keep only their top rule. Content spans the whole measured width.
-    chromeColumns: 0
-  }
-};
-
-// src/tui/card.ts
-source_default.level = 3;
-var cachedColumns = null;
-function terminalColumns() {
-  if (cachedColumns !== null)
-    return cachedColumns;
-  const declared = process.stdout.columns || process.stderr.columns || Number(process.env.COLUMNS) || 0;
-  if (declared > 0)
-    return cachedColumns = declared;
-  try {
-    const fd = fs.openSync("/dev/tty", "r+");
-    const stream = new tty2.WriteStream(fd);
-    const columns = stream.columns || 0;
-    stream.destroy();
-    return cachedColumns = columns;
-  } catch {
-    return cachedColumns = 0;
-  }
-}
-function layoutWidthForTerminal(columns) {
-  const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width;
-  const available = (columns > 0 ? columns : fallbackContent) - outerIndentMargin;
-  return Math.max(1, Math.min(maximumLayout, available));
-}
-function getMaxLayoutWidth() {
-  return layoutWidthForTerminal(terminalColumns());
-}
-function getMaxContentWidth() {
-  const layoutWidth = getMaxLayoutWidth();
-  const padding = horizontalPaddingFor(layoutWidth);
-  return Math.max(1, layoutWidth - padding * 2 - TUI_TOKENS.card.chromeColumns);
-}
-function horizontalPaddingFor(layoutWidth) {
-  return Math.min(TUI_TOKENS.card.horizontalPadding, Math.max(0, Math.floor((layoutWidth - 1) / 2)));
-}
-var EDGE_TOP = "\u2581";
-function borderInk(text2) {
-  return source_default.hex(TUI_TOKENS.card.border)(text2);
-}
-function renderBoxTopEdge(width) {
-  return borderInk(EDGE_TOP.repeat(Math.max(0, width)));
-}
-function regionList(content) {
-  return typeof content === "string" ? [{ content }] : [...content];
-}
-function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
-  const layoutWidth = getMaxLayoutWidth();
-  const maxWidth = getMaxContentWidth();
-  const { background } = TUI_TOKENS.card;
-  const horizontalPadding = horizontalPaddingFor(layoutWidth);
-  const regions = regionList(content).map((region) => {
-    const headingList = region.heading === void 0 ? [] : Array.isArray(region.heading) ? region.heading : [region.heading];
-    const fullHeading = renderBadges(...headingList);
-    const heading = visibleWidth(fullHeading) > layoutWidth ? truncateAnsi(fullHeading, layoutWidth - 1) : fullHeading;
-    const lines = String(region.content).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "").split("\n").map(normalizeCardLine).flatMap((line) => wrapAnsi(line, maxWidth));
-    return {
-      background: region.background ?? background,
-      heading,
-      lines,
-      trailingBlank: region.trailingBlank ?? false
-    };
-  });
-  const contentWidth = Math.min(Math.max(
-    ...regions.flatMap((region) => [visibleWidth(region.heading), ...region.lines.map(visibleWidth)]),
-    0
-  ), maxWidth);
-  const width = Math.min(layoutWidth, Math.max(contentWidth + horizontalPadding * 2, minimumWidth));
-  const footerWidth = visibleWidth(footerText);
-  const rows = [];
-  let transitionBlank = false;
-  for (const region of regions) {
-    const fill = source_default.bgHex(region.background);
-    const frame = (line, leftPadding = horizontalPadding) => fill(
-      " ".repeat(leftPadding) + line + " ".repeat(Math.max(0, width - leftPadding - visibleWidth(line)))
-    );
-    if (!transitionBlank)
-      rows.push(fill(" ".repeat(width)));
-    if (region.heading)
-      rows.push(frame(region.heading, 0));
-    rows.push(...region.lines.map((line) => frame(line)));
-    if (region.trailingBlank)
-      rows.push(fill(" ".repeat(width)));
-    transitionBlank = region.trailingBlank;
-  }
-  const lastBackground = regions.at(-1)?.background ?? background;
-  const fillLast = source_default.bgHex(lastBackground);
-  if (footerWidth > 0 && footerWidth <= width)
-    rows.push(fillLast(" ".repeat(width - footerWidth) + footerText));
-  else
-    rows.push(fillLast(" ".repeat(width)));
-  return {
-    lines: rows,
-    width
-  };
-}
-function renderBox(props) {
-  const box = prepareBox(props);
-  return ["", renderBoxTopEdge(box.width), ...box.lines, ""].join("\n");
-}
-function renderCard({ badges, content, minimumWidth = 0, footer }) {
-  const badgeList = Array.isArray(badges) ? badges : [badges];
-  const footerList = footer === void 0 ? [] : Array.isArray(footer) ? footer : [footer];
-  const footerText = renderBadges(...footerList);
-  const fullTitle = renderBadges(...badgeList);
-  const title = visibleWidth(fullTitle) > getMaxLayoutWidth() ? truncateAnsi(fullTitle, getMaxLayoutWidth() - 1) : fullTitle;
-  if (!title)
-    return renderBox({
-      content,
-      footerText,
-      minimumWidth: Math.max(minimumWidth, visibleWidth(footerText) + TUI_TOKENS.card.minimumHairline)
-    });
-  const badgeWidth = visibleWidth(title);
-  const { minimumHairline } = TUI_TOKENS.card;
-  const box = prepareBox({
-    content,
-    footerText,
-    minimumWidth: Math.max(
-      minimumWidth,
-      badgeWidth + minimumHairline,
-      visibleWidth(footerText) + minimumHairline
-    )
-  });
-  const ruleLength = Math.max(0, box.width - badgeWidth);
-  const ruleBadge = badgeList.find((badge) => badge instanceof Badge);
-  const rule = ruleBadge ? ruleBadge.renderRule(ruleLength) : source_default.hex(TUI_TOKENS.card.ruleFallback)("\u2581".repeat(ruleLength));
-  return ["", title + rule, ...box.lines, ""].join("\n");
-}
-
-// src/tui/columns.ts
-function renderColumns({ items }) {
-  return items.filter(Boolean).map((item) => item.replace(/^\n+|\n+$/g, "")).join("\n\n");
-}
-
-// src/tui/duration.ts
-source_default.level = 3;
-function renderDuration(durationMs) {
-  return durationMs == null ? null : source_default.gray(`\u0394 ${durationMs}ms`);
-}
-function pushDurationLine(lines, durationMs) {
-  const duration = renderDuration(durationMs);
-  if (duration)
-    lines.push(duration);
-}
-
-// src/tui/file-card.ts
-import nodePath from "node:path";
-function displayPath(filePath) {
-  const text2 = String(filePath);
-  const cwd = process.cwd();
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const candidates = [text2];
-  if (text2.startsWith(cwd + nodePath.sep))
-    candidates.push(text2.slice(cwd.length + 1));
-  if (home && text2.startsWith(home + nodePath.sep))
-    candidates.push("~" + text2.slice(home.length));
-  return candidates.reduce((best, c) => c.length < best.length ? c : best);
-}
-function renderFileCard({
-  path: path8,
-  content,
-  details = null,
-  badges = []
-}) {
-  return renderCard({
-    badges: [
-      new Badge({ label: displayPath(path8), color: "cyan", icon: "\u25A4" }),
-      ...badges
-    ],
-    // The action and line range describe the content, not the file, so they sit
-    // inside the bottom-right corner instead of trailing the path.
-    footer: details ? new Badge({ label: details, color: "gray", icon: "\u29D6" }) : void 0,
-    content
-  });
-}
-
-// packages/ansi-headings/src/primitives.ts
-source_default.level = 3;
-
-// packages/ansi-headings/src/phrase.ts
-source_default.level = 3;
-
-// packages/ansi-headings/src/glyphs.json
-var glyphs_default = {
-  " ": [
-    "    ",
-    "    ",
-    "    "
-  ],
-  A: [
-    " \u2584\u2580\u2584",
-    " \u2588\u2580\u2588",
-    " \u2580 \u2580"
-  ],
-  B: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  C: [
-    " \u2584\u2580\u2580",
-    " \u2588  ",
-    " \u2580\u2580\u2580"
-  ],
-  D: [
-    " \u2588\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2580 "
-  ],
-  E: [
-    " \u2588\u2580\u2580",
-    " \u2588\u2580 ",
-    " \u2580\u2580\u2580"
-  ],
-  F: [
-    " \u2588\u2580\u2580",
-    " \u2588\u2580 ",
-    " \u2580  "
-  ],
-  G: [
-    " \u2584\u2580\u2580",
-    " \u2588 \u2584",
-    " \u2580\u2580\u2580"
-  ],
-  H: [
-    " \u2588 \u2588",
-    " \u2588\u2580\u2588",
-    " \u2580 \u2580"
-  ],
-  I: [
-    " \u2588",
-    " \u2588",
-    " \u2580"
-  ],
-  J: [
-    "   \u2588",
-    " \u2584 \u2588",
-    " \u2580\u2580 "
-  ],
-  K: [
-    " \u2588 \u2588",
-    " \u2588\u2580\u2584",
-    " \u2580 \u2580"
-  ],
-  L: [
-    " \u2588  ",
-    " \u2588  ",
-    " \u2580\u2580\u2580"
-  ],
-  M: [
-    " \u2588\u2588\u2584\u2588\u2584",
-    " \u2588 \u2588 \u2588",
-    " \u2580 \u2580 \u2580"
-  ],
-  N: [
-    " \u2588\u2584 \u2588",
-    " \u2588 \u2580\u2588",
-    " \u2580  \u2580"
-  ],
-  O: [
-    " \u2588\u2580\u2588",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2580"
-  ],
-  P: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580 ",
-    " \u2580  "
-  ],
-  Q: [
-    " \u2584\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2584"
-  ],
-  R: [
-    " \u2588\u2580\u2584",
-    " \u2588\u2580\u2584",
-    " \u2580 \u2580"
-  ],
-  S: [
-    " \u2584\u2580\u2580",
-    "  \u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  T: [
-    " \u2580\u2588\u2580",
-    "  \u2588 ",
-    "  \u2580 "
-  ],
-  U: [
-    " \u2588 \u2588",
-    " \u2588 \u2588",
-    " \u2580\u2580\u2580"
-  ],
-  V: [
-    " \u2588 \u2588",
-    " \u2588 \u2588",
-    "  \u2580 "
-  ],
-  W: [
-    " \u2588 \u2588 \u2588",
-    " \u2588 \u2588 \u2588",
-    "  \u2580 \u2580 "
-  ],
-  X: [
-    " \u2588\u2584\u2588",
-    " \u2584\u2588\u2584",
-    " \u2580 \u2580"
-  ],
-  Y: [
-    " \u2588 \u2588",
-    "  \u2588 ",
-    "  \u2580 "
-  ],
-  Z: [
-    " \u2580\u2580\u2588",
-    " \u2584\u2584 ",
-    " \u2580\u2580\u2580"
-  ],
-  "0": [
-    " \u2584\u2580\u2584",
-    " \u2588 \u2588",
-    " \u2580\u2584\u2580"
-  ],
-  "1": [
-    " \u2588 ",
-    " \u2588 ",
-    " \u2580 "
-  ],
-  "2": [
-    " \u2584\u2580\u2584",
-    "  \u2584\u2580",
-    " \u2580\u2580\u2580"
-  ],
-  "3": [
-    " \u2580\u2580\u2584",
-    "  \u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "4": [
-    " \u2588 \u2588",
-    " \u2580\u2580\u2588",
-    "   \u2580"
-  ],
-  "5": [
-    " \u2588\u2580\u2580",
-    " \u2580\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "6": [
-    " \u2584\u2580\u2580",
-    " \u2588\u2580\u2584",
-    " \u2580\u2580 "
-  ],
-  "7": [
-    " \u2580\u2580\u2588",
-    "  \u2584\u2580",
-    "  \u2588 "
-  ],
-  "8": [
-    " \u2584\u2580\u2584",
-    " \u2584\u2580\u2584",
-    "  \u2580 "
-  ],
-  "9": [
-    " \u2584\u2580\u2584",
-    "  \u2580\u2588",
-    "  \u2580 "
-  ],
-  "!": [
-    " \u2588 ",
-    " \u2580 ",
-    " \u2580 "
-  ],
-  "?": [
-    " \u2580\u2580\u2584",
-    "  \u2584\u2580",
-    "  \u2580 "
-  ],
-  ".": [
-    "   ",
-    "   ",
-    " \u2580 "
-  ],
-  ",": [
-    "    ",
-    "    ",
-    " \u2580\u2588 "
-  ],
-  ":": [
-    " \u2584 ",
-    "   ",
-    " \u2580 "
-  ],
-  ";": [
-    " \u2584\u2584 ",
-    "    ",
-    " \u2580\u2588 "
-  ],
-  "-": [
-    "     ",
-    " \u2584\u2584\u2584 ",
-    "     "
-  ],
-  _: [
-    "     ",
-    "     ",
-    " \u2580\u2580\u2580 "
-  ],
-  "/": [
-    "   \u2588 ",
-    "  \u2588  ",
-    " \u2580   "
-  ]
-};
-
-// packages/ansi-headings/src/headings.ts
-source_default.level = 3;
-var glyphs = glyphs_default;
-function renderGlyphRows(text2, color) {
-  const chars = text2.toUpperCase().split("");
-  const rows = ["  ", "  ", "  "];
-  for (const ch of chars) {
-    const glyph = glyphs[ch] ?? glyphs[" "];
-    rows[0] += glyph[0];
-    rows[1] += glyph[1];
-    rows[2] += glyph[2];
-  }
-  const colorize = source_default[color] ?? source_default.cyan;
-  return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
-}
-function renderHeading({ word, color = "cyan", event, tone, width = 60, caption }) {
-  const glyphRows = renderGlyphRows(word, color);
-  const gutter = 2;
-  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
-  return "\n" + composed;
-}
-var EMPTY_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588   \u2588", " \u2588\u2584\u2584\u2584\u2588"];
-var CHECKED_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588\u2584 \u2588\u2588", " \u2588\u2584\u2588\u2584\u2588"];
-function wrapDescription(description, width) {
-  const lines = [];
-  for (const sourceLine of description.trim().split(/\r?\n/)) {
-    const words = sourceLine.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) {
-      lines.push("");
-      continue;
-    }
-    let line = "";
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (Array.from(next).length <= width || !line) line = next;
-      else {
-        lines.push(line);
-        line = word;
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
-}
-function renderCheckboxHeading(value, legacyColor = "green") {
-  const args = typeof value === "string" ? { caption: value, checked: true, color: legacyColor } : value;
-  const color = args.color ?? "green";
-  const colorize = source_default[color] ?? source_default.green;
-  const rows = (args.checked ? CHECKED_CHECKBOX_ROWS : EMPTY_CHECKBOX_ROWS).map((r) => colorize(r));
-  const gutter = 2;
-  const textIndent = Array.from(EMPTY_CHECKBOX_ROWS[0]).length + gutter;
-  const descriptionWidth = Math.max(20, (args.width ?? 60) - textIndent);
-  const description = args.description?.trim() ? wrapDescription(args.description, descriptionWidth) : [];
-  const slots = [
-    source_default.bold(colorize(args.caption)),
-    description[0] ? source_default.gray(description[0]) : "",
-    description[1] ? source_default.gray(description[1]) : ""
-  ];
-  const composed = rows.map((r, i) => r + " ".repeat(gutter) + slots[i]);
-  for (const line of description.slice(2)) {
-    composed.push(" ".repeat(textIndent) + source_default.gray(line));
-  }
-  return "\n" + composed.join("\n");
-}
-
-// src/tui/output-limit.ts
-source_default.level = 3;
-
-// src/tui/ruler.ts
-source_default.level = 3;
-function renderRuler(line) {
-  const plain = stripAnsi(line).trim();
-  const match = plain.match(/^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/);
-  if (!match)
-    return null;
-  const character = match[1][0] === "=" || match[1][0] === "\u2550" ? "\u2550" : "\u2500";
-  const text2 = match[2].replace(/[-=─═]{3,}\s*$/, "").trim();
-  if (!text2)
-    return source_default.gray(character.repeat(TUI_TOKENS.width.divider));
-  const label = ` ${text2} `;
-  const remaining = Math.max(6, TUI_TOKENS.width.divider - label.length);
-  const left = Math.floor(remaining / 2);
-  return source_default.gray(character.repeat(left)) + source_default.bold(label) + source_default.gray(character.repeat(remaining - left));
-}
-function splitRulerSections(text2) {
-  const sections = [];
-  let lines = [];
-  let beginsWithRuler = false;
-  const flush = () => {
-    if (!lines.length)
-      return;
-    sections.push({ content: lines.join("\n"), beginsWithRuler });
-    lines = [];
-  };
-  for (const line of String(text2).split("\n")) {
-    if (renderRuler(line) !== null) {
-      flush();
-      beginsWithRuler = true;
-    } else if (!lines.length)
-      beginsWithRuler = false;
-    lines.push(line);
-  }
-  flush();
-  return sections;
-}
-
-// src/tui/section.ts
-function renderSection({ badges, lines = [] }) {
-  const badgeList = Array.isArray(badges) ? badges : [badges];
-  let output = renderBadges(...badgeList);
-  const body = lines.filter((line) => Boolean(line));
-  if (body.length)
-    output += "\n\n" + body.join("\n");
-  return output;
-}
-
-// src/render/highlight.ts
-source_default.level = 3;
-function isJSON(str) {
-  if (typeof str !== "string")
-    return false;
-  const t = str.trim();
-  if (!t || t[0] !== "{" && t[0] !== "[")
-    return false;
-  try {
-    JSON.parse(t);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function isCode(str) {
-  if (typeof str !== "string")
-    return false;
-  const codePatterns = [
-    /^(function|const|let|var|class|import|export|if|for|while|return)\s/m,
-    /^(def|class|import|from|if|for|while|return)\s/m,
-    /=>/,
-    /\{\s*[\w\s:,\n]+\}/,
-    /^\s*```/m
-  ];
-  return codePatterns.some((p) => p.test(str));
-}
-function formatJSON(content) {
-  try {
-    const parsed = JSON.parse(content);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return content;
-  }
-}
-var EXT_TO_LANG = {
-  ts: "typescript",
-  tsx: "typescript",
-  mts: "typescript",
-  cts: "typescript",
-  js: "javascript",
-  jsx: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  json: "json",
-  jsonc: "json",
-  json5: "json",
-  sh: "bash",
-  bash: "bash",
-  zsh: "bash",
-  md: "markdown",
-  markdown: "markdown",
-  mdx: "markdown",
-  py: "python",
-  pyi: "python",
-  yaml: "yaml",
-  yml: "yaml",
-  diff: "diff",
-  patch: "diff",
-  html: "html",
-  htm: "html",
-  vue: "html",
-  svelte: "html",
-  xml: "xml",
-  svg: "xml",
-  plist: "xml",
-  css: "css",
-  scss: "css",
-  less: "css",
-  sql: "sql",
-  toml: "yaml",
-  ini: "yaml",
-  env: "bash"
-};
-function langFromPath(filePath) {
-  if (!filePath)
-    return null;
-  const m = String(filePath).match(/\.([^./\s]+)$/);
-  return m ? EXT_TO_LANG[m[1].toLowerCase()] ?? null : null;
-}
-function detectContentLanguage(content) {
-  const early = detectStructuredLanguage(content);
-  if (early)
-    return early;
-  const t = content.trimStart();
-  const checks = [
-    ["html", /^<!DOCTYPE html/i.test(t) || /^<(html|head|body)\b/i.test(t)],
-    ["xml", /^<\?xml/.test(t)],
-    ["sql", /^\s*(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE (TABLE|INDEX|VIEW)|ALTER TABLE)\b/im.test(content)],
-    ["python", /^\s*(def|class)\s+\w+.*:\s*$/m.test(content) || /^(from \w[\w.]* import|import \w+)\s*$/m.test(content)],
-    ["typescript", /^\s*(export\s+)?(interface|type|enum)\s+\w+/m.test(content) || /:\s*(string|number|boolean|void|unknown|never)\b/.test(content)],
-    ["javascript", /^(import|export)\s.*from\s+['"]/m.test(content) || /^\s*(const|let|var|function)\s+\w/m.test(content) || /=>\s*[{(]/.test(content)],
-    ["markdown", /^#{1,6}\s+\S/m.test(content) && (/^\s*[-*+]\s+\S/m.test(content) || /```/.test(content))]
-  ];
-  const match = checks.find(([, matched]) => matched);
-  if (match)
-    return match[0];
-  const yamlKeys = content.match(/^[\w."'-]+:(\s+\S|$)/gm);
-  if (yamlKeys && yamlKeys.length >= 2 && !/[{};]/.test(content))
-    return "yaml";
-  return null;
-}
-function detectStructuredLanguage(content) {
-  if (isJSON(String(content)))
-    return "json";
-  if (/^diff --git /m.test(content) || /^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/m.test(content) || /^--- \S/m.test(content) && /^\+\+\+ \S/m.test(content))
-    return "diff";
-  const shebang = content.match(/^#!\s*\S*?\/(?:env\s+)?([\w.-]+)/);
-  if (!shebang)
-    return null;
-  const interp = shebang[1];
-  if (/^(ba|z|da|k|)sh$/.test(interp))
-    return "bash";
-  if (/^python/.test(interp))
-    return "python";
-  if (/^(node|bun|deno)/.test(interp))
-    return "javascript";
-  return null;
-}
-function detectOutputLanguage(text2) {
-  return detectContentLanguage(text2) ?? "output";
-}
-function detectLanguage(content, toolName) {
-  const { tool } = parseToolName(toolName);
-  if (tool === "Read" || tool === "ReadFiles") {
-    const extMatch = content.match(/\.([a-z0-9]+)$/m);
-    const byExt = extMatch ? EXT_TO_LANG[extMatch[1].toLowerCase()] : null;
-    if (byExt)
-      return byExt;
-  }
-  if (tool === "Bash" || tool === "BashCommand")
-    return "bash";
-  return detectContentLanguage(content) ?? "text";
-}
-var HIGHLIGHTERS = {
-  json: highlightJSON,
-  javascript: highlightJS,
-  typescript: highlightJS,
-  bash: highlightBash,
-  markdown: highlightMarkdown,
-  python: highlightPython,
-  yaml: highlightYaml,
-  diff: highlightDiff,
-  html: highlightXML,
-  xml: highlightXML,
-  css: highlightCSS,
-  sql: highlightSQL,
-  output: highlightOutput
-};
-function simpleHighlight(code, language) {
-  const fn = language ? HIGHLIGHTERS[language] : void 0;
-  return fn ? fn(code) : code;
-}
-var ANSI_SEQ = /\x1b\[[0-9;]*[a-zA-Z]/g;
-function replaceOutsideAnsi(input, pattern, replacer) {
-  if (!input.includes("\x1B"))
-    return input.replace(pattern, replacer);
-  let out = "";
-  let last = 0;
-  ANSI_SEQ.lastIndex = 0;
-  let m;
-  while (m = ANSI_SEQ.exec(input)) {
-    out += input.slice(last, m.index).replace(pattern, replacer) + m[0];
-    last = ANSI_SEQ.lastIndex;
-  }
-  return out + input.slice(last).replace(pattern, replacer);
-}
-function highlightJSON(code) {
-  let result = code;
-  result = result.replace(/"([^"]+)":/g, (_, p1) => source_default.cyan(`"${p1}"`) + source_default.gray(":"));
-  result = result.replace(/: "([^"]*)"/g, (_, p1) => source_default.gray(": ") + source_default.green(`"${p1}"`));
-  result = replaceOutsideAnsi(result, /: (-?\d+\.?\d*)/g, (_, p1) => source_default.gray(": ") + source_default.yellow(p1));
-  result = result.replace(/: (true|false|null)/g, (_, p1) => source_default.gray(": ") + source_default.yellow(p1));
-  return result;
-}
-function highlightJS(code) {
-  const tokens = /(?<comment>\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(?<string>(?<quote>["'`])(?:(?!\k<quote>)[^\\]|\\.)*\k<quote>)|(?<number>\b\d+\.?\d*\b)|(?<keyword>\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|static|interface|type|enum|extends|implements|typeof|instanceof|in|of|yield|switch|case|default|break|continue|do|void|delete)\b)|(?<call>\b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\())/g;
-  return code.replace(tokens, (token, ...args) => {
-    const groups = args.at(-1);
-    if (groups.comment)
-      return source_default.gray(token);
-    if (groups.string)
-      return source_default.green(token);
-    if (groups.number)
-      return source_default.yellow(token);
-    if (groups.keyword)
-      return source_default.cyan(token);
-    return source_default.magenta(token);
-  });
-}
-function highlightBash(code) {
-  const tokens = /(?<string>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(?<variable>\$\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@#?*!$])|(?<flag>(?<!\S)--?[\w][\w-]*)|(?<keyword>\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|return|export|local|readonly|declare|set|unset|source|exit|break|continue)\b)|(?<command>\b(?:echo|printf|cd|pwd|ls|cat|grep|rg|sed|awk|jq|curl|wget|git|gh|npm|npx|bun|bunx|node|deno|python|python3|pip|pip3|uv|docker|kubectl|make|cargo|go|rustc|tsc|find|xargs|tar|zip|unzip|chmod|chown|mkdir|rm|mv|cp|ln|touch|env|which|head|tail|sort|uniq|wc|tee|read|diff|patch|ssh|scp|rsync|kill|ps|open|brew|apt|yarn|pnpm)\b)|(?<operator>2>&1|&&|\|\||>>?|[|<])|(?<number>\b\d+\b)/g;
-  return code.split("\n").map((line) => {
-    if (/^\s*#/.test(line))
-      return source_default.gray(line);
-    return line.replace(tokens, (token, ...args) => {
-      const groups = args.at(-1);
-      if (groups.string)
-        return source_default.green(token);
-      if (groups.variable || groups.flag || groups.number)
-        return source_default.yellow(token);
-      if (groups.keyword)
-        return source_default.cyan(token);
-      if (groups.command)
-        return source_default.magenta(token);
-      return source_default.gray(token);
-    });
-  }).join("\n");
-}
-function highlightPython(code) {
-  let result = code;
-  result = result.replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, (m) => source_default.green(m));
-  result = result.replace(/(^|\n)(\s*#.*)/g, (_, p1, p2) => p1 + source_default.gray(p2));
-  result = result.replace(/(["'])(?:(?!\1)[^\\\n]|\\.)*\1/g, (m) => source_default.green(m));
-  result = result.replace(/(^|\n)(\s*@[\w.]+)/g, (_, p1, p2) => p1 + source_default.magenta(p2));
-  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
-  result = result.replace(/\b(None|True|False)\b/g, (m) => source_default.yellow(m));
-  result = result.replace(
-    /\b(def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|yield|async|await|pass|break|continue|raise|global|nonlocal|assert|del|in|not|and|or|is|match|case)\b/g,
-    (m) => source_default.cyan(m)
-  );
-  result = result.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()/g, (m) => source_default.magenta(m));
-  return result;
-}
-function highlightYaml(code) {
-  return code.split("\n").map((line) => {
-    if (/^\s*#/.test(line))
-      return source_default.gray(line);
-    let out = line;
-    out = out.replace(
-      /^(\s*-?\s*)([\w."'-]+)(:)(\s|$)/,
-      (_m, sp, key, colon, tail) => sp + source_default.cyan(key) + source_default.gray(colon) + tail
-    );
-    out = out.replace(/^(\s*)(-)(\s)/, (_m, sp, marker, tail) => sp + source_default.yellow(marker) + tail);
-    out = out.replace(/(["'])(?:(?!\1)[^\\]|\\.)*\1/g, (m) => source_default.green(m));
-    out = out.replace(/\b(true|false|null|~)\b/g, (m) => source_default.yellow(m));
-    out = out.replace(/(:\s+)(-?\d+\.?\d*)\s*$/, (_m, p1, p2) => p1 + source_default.yellow(p2));
-    return out;
-  }).join("\n");
-}
-function highlightDiff(code) {
-  return code.split("\n").map((line) => {
-    if (/^(diff --git|index |new file|deleted file|similarity|rename )/.test(line))
-      return source_default.gray.bold(line);
-    if (/^(--- |\+\+\+ )/.test(line))
-      return source_default.bold(line);
-    if (/^@@ /.test(line))
-      return source_default.cyan(line);
-    if (line.startsWith("+"))
-      return source_default.green(line);
-    if (line.startsWith("-"))
-      return source_default.red(line);
-    return line;
-  }).join("\n");
-}
-function highlightXML(code) {
-  let result = code;
-  result = result.replace(/<!--[\s\S]*?-->/g, (m) => source_default.gray(m));
-  result = result.replace(/(["'])(?:(?!\1)[^\\]|\\.)*\1/g, (m) => source_default.green(m));
-  result = result.replace(/(<\/?)([\w:-]+)/g, (_m, punct, tag) => source_default.gray(punct) + source_default.cyan(tag));
-  result = result.replace(/([\w:-]+)(=)/g, (_m, attr, eq) => source_default.yellow(attr) + source_default.gray(eq));
-  result = result.replace(/(\/?>)/g, (m) => source_default.gray(m));
-  return result;
-}
-function highlightCSS(code) {
-  let result = code;
-  result = result.replace(/\/\*[\s\S]*?\*\//g, (m) => source_default.gray(m));
-  result = result.replace(/(["'])(?:(?!\1)[^\\]|\\.)*\1/g, (m) => source_default.green(m));
-  result = result.replace(/^([^{}\n]+)(?=\s*\{)/gm, (m) => source_default.magenta(m));
-  result = result.replace(/([\w-]+)(\s*:)/g, (_m, prop, colon) => source_default.cyan(prop) + source_default.gray(colon));
-  result = result.replace(/#[0-9a-fA-F]{3,8}\b/g, (m) => source_default.yellow(m));
-  result = replaceOutsideAnsi(
-    result,
-    /\b(\d+\.?\d*)(px|em|rem|vh|vw|%|s|ms|deg|fr)?\b/g,
-    (_m, n, unit) => source_default.yellow(n) + (unit ? source_default.gray(unit) : "")
-  );
-  return result;
-}
-function highlightSQL(code) {
-  let result = code;
-  result = result.replace(/(^|\n)(\s*--.*)/g, (_, p1, p2) => p1 + source_default.gray(p2));
-  result = result.replace(/'(?:[^'\\]|\\.)*'/g, (m) => source_default.green(m));
-  result = replaceOutsideAnsi(result, /\b\d+\.?\d*\b/g, (m) => source_default.yellow(m));
-  result = result.replace(
-    /\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|VIEW|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AS|AND|OR|NOT|NULL|IN|IS|LIKE|ORDER|GROUP|BY|HAVING|LIMIT|OFFSET|DISTINCT|COUNT|SUM|AVG|MIN|MAX|UNION|ALL|EXISTS|BETWEEN|CASE|WHEN|THEN|ELSE|END|PRIMARY|FOREIGN|KEY|REFERENCES|DEFAULT|UNIQUE|CONSTRAINT|IF)\b/gi,
-    (m) => source_default.cyan(m)
-  );
-  return result;
-}
-var OUTPUT_URL_RE = /\bhttps?:\/\/[^\s)'"]+/g;
-var OUTPUT_PATH_RE = /(^|[\s('"=])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+(?::\d+(?::\d+)?)?)/g;
-var OUTPUT_METRIC_RE = /\b\d+(?:[.,]\d+)?\s?(?:ms|s|m|h|[KMGT]i?B|kb|mb|gb|%)\b/g;
-function highlightOutput(code) {
-  return code.split("\n").map((line) => {
-    const hasAnsi = line.includes("\x1B");
-    if (!hasAnsi) {
-      if (/\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused)\b/i.test(line))
-        return source_default.red(line);
-      if (/\b(warn|warning|deprecated)\b/i.test(line))
-        return source_default.yellow(line);
-      if (/\b(success|succeeded|passed|completed?)\b/i.test(line) || /[✓✔]/.test(line))
-        return source_default.green(line);
-    }
-    let out = line;
-    out = replaceOutsideAnsi(out, OUTPUT_METRIC_RE, (m) => source_default.yellow(m));
-    out = replaceOutsideAnsi(out, OUTPUT_URL_RE, (m) => source_default.cyan(m));
-    out = replaceOutsideAnsi(out, OUTPUT_PATH_RE, (_m, pre, p) => pre + source_default.cyan(p));
-    return out;
-  }).join("\n");
-}
-function highlightMarkdown(code) {
-  let result = code;
-  result = result.replace(/```(\w+)?\n([\s\S]*?)```/g, (_m, lang, body) => {
-    const inner = lang ? simpleHighlight(body, lang) : body;
-    const fence = source_default.gray("```" + (lang ?? ""));
-    return fence + "\n" + inner + source_default.gray("```");
-  });
-  result = result.replace(
-    /^(#{1,6})\s+(.*)$/gm,
-    (_m, h, t) => source_default.bold.cyan(h + " " + t)
-  );
-  result = result.replace(/^(>\s.*)$/gm, (m) => source_default.gray.italic(m));
-  result = result.replace(
-    /^(\s*)([-*+])(\s)/gm,
-    (_m, sp, marker, tail) => sp + source_default.yellow(marker) + tail
-  );
-  result = result.replace(
-    /^(\s*)(\d+\.)(\s)/gm,
-    (_m, sp, marker, tail) => sp + source_default.yellow(marker) + tail
-  );
-  result = result.replace(/\*\*([^*]+)\*\*/g, (_m, t) => source_default.bold(t));
-  result = result.replace(/__([^_]+)__/g, (_m, t) => source_default.bold(t));
-  result = result.replace(/(?<![*_])\*([^*\n]+)\*(?!\*)/g, (_m, t) => source_default.italic(t));
-  result = result.replace(/(?<![*_])_([^_\n]+)_(?!_)/g, (_m, t) => source_default.italic(t));
-  result = result.replace(/`([^`\n]+)`/g, (_m, t) => source_default.inverse(t));
-  result = result.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    (_m, text2, url) => source_default.cyan(text2) + source_default.gray(" (") + source_default.gray.underline(url) + source_default.gray(")")
-  );
-  return result;
-}
-var META_KEY = source_default.cyan;
-var META_STR = source_default.green;
-var META_NUM = source_default.yellow;
-var META_PUNCT = source_default.gray;
-var META_STR_MAX = 200;
-function flattenString(s) {
-  const collapsed = s.replace(/\s+/g, " ").trim();
-  return collapsed.length > META_STR_MAX ? collapsed.slice(0, META_STR_MAX - 1) + "\u2026" : collapsed;
-}
-function formatMetaValue(val, depth) {
-  if (val === null)
-    return META_NUM("null");
-  if (val === void 0)
-    return META_NUM("undefined");
-  if (typeof val === "boolean")
-    return META_NUM(String(val));
-  if (typeof val === "number")
-    return META_NUM(String(val));
-  if (typeof val === "string")
-    return META_STR(flattenString(val));
-  const pad = "  ".repeat(depth + 1);
-  const cpad = "  ".repeat(depth);
-  if (Array.isArray(val)) {
-    if (val.length === 0)
-      return META_PUNCT("[ ]");
-    const items = val.map((v) => formatMetaValue(v, depth + 1));
-    const inline = META_PUNCT("[ ") + items.join(META_PUNCT(", ")) + META_PUNCT(" ]");
-    if (stripAnsi(inline).length <= 50)
-      return inline;
-    return META_PUNCT("[\n") + items.map((i) => pad + i).join(META_PUNCT(",\n")) + "\n" + cpad + META_PUNCT("]");
-  }
-  if (typeof val === "object") {
-    const entries = Object.entries(val);
-    if (entries.length === 0)
-      return META_PUNCT("{ }");
-    const pairs = entries.map(([k, v]) => META_KEY(k) + META_PUNCT(": ") + formatMetaValue(v, depth + 1));
-    const inline = META_PUNCT("{ ") + pairs.join(META_PUNCT(", ")) + META_PUNCT(" }");
-    if (stripAnsi(inline).length <= 50)
-      return inline;
-    return META_PUNCT("{\n") + pairs.map((p) => pad + p).join(META_PUNCT(",\n")) + "\n" + cpad + META_PUNCT("}");
-  }
-  return String(val);
-}
-function formatMetadataCustom(obj) {
-  if (!obj || typeof obj !== "object")
-    return String(obj);
-  const entries = Object.entries(obj);
-  if (!entries.length)
-    return "";
-  const keyWidth = Math.max(...entries.map(([k]) => k.length));
-  return entries.map(([k, v]) => {
-    const gap = " ".repeat(keyWidth - k.length);
-    return META_KEY(k) + META_PUNCT(":") + gap + "  " + formatMetaValue(v, 0);
-  }).join("\n");
-}
-
-// src/parsers/wcgw-trailer.ts
-var TRAILER_SEP = /\n---\s*\n/;
-function parseWcgwTrailer(rawOutput) {
-  if (typeof rawOutput !== "string")
-    return { stdout: String(rawOutput ?? ""), status: null, cwd: null, extra: {} };
-  const sepMatch = TRAILER_SEP.exec(rawOutput);
-  if (!sepMatch)
-    return { stdout: rawOutput, status: null, cwd: null, extra: {} };
-  const stdout = rawOutput.slice(0, sepMatch.index);
-  const trailerRaw = rawOutput.slice(sepMatch.index + sepMatch[0].length);
-  const status = extractField(trailerRaw, "status");
-  const cwd = extractField(trailerRaw, "cwd");
-  const knownKeys = /* @__PURE__ */ new Set(["status", "cwd"]);
-  const extra = {};
-  for (const line of trailerRaw.split("\n")) {
-    const m = /^([a-z_][a-z0-9_ ]*?)\s*=\s*(.*)$/.exec(line.trim());
-    if (m && !knownKeys.has(m[1].trim()))
-      extra[m[1].trim()] = m[2].trim();
-  }
-  return { stdout, status, cwd, extra };
-}
-function extractField(text2, key) {
-  const re = new RegExp(`(?:^|\\n)${key}\\s*=\\s*([^\\n]*)`, "i");
-  const m = re.exec(text2);
-  return m ? m[1].trim() : null;
-}
-function shortenPath(p, home) {
-  if (!p)
-    return String(p ?? "");
-  const h = home ?? process.env.HOME ?? process.env.USERPROFILE ?? "";
-  if (h && p.startsWith(h))
-    return "~" + p.slice(h.length);
-  return p;
-}
-
-// src/tools/browser-operations.ts
-var VALUE_OPTIONS = /* @__PURE__ */ new Set([
-  "--session",
-  "--session-name",
-  "--profile",
-  "--state",
-  "--headers",
-  "--executable-path",
-  "--extension",
-  "--init-script",
-  "--enable",
-  "--args",
-  "--user-agent",
-  "--proxy",
-  "--proxy-bypass",
-  "--hide-scrollbars",
-  "--provider",
-  "--device",
-  "--screenshot-dir",
-  "--screenshot-quality",
-  "--screenshot-format",
-  "--cdp",
-  "--color-scheme",
-  "--download-path",
-  "--max-output",
-  "--allowed-domains",
-  "--action-policy",
-  "--confirm-actions",
-  "--engine",
-  "--model",
-  "--config",
-  "-p"
-]);
-function shellWords(command) {
-  const words = [];
-  let current = "";
-  let quote = null;
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-    if (quote) {
-      if (quote === '"' && ch === "\\" && i + 1 < command.length)
-        current += command[++i];
-      else if (ch === quote)
-        quote = null;
-      else
-        current += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (current)
-        words.push(current);
-      current = "";
-      continue;
-    }
-    if (ch === "\\" && i + 1 < command.length)
-      current += command[++i];
-    else
-      current += ch;
-  }
-  if (current)
-    words.push(current);
-  return words;
-}
-function executableName(token) {
-  return token.split("/").pop() ?? token;
-}
-function operationFromAgentBrowserSegment(segment) {
-  const words = shellWords(segment);
-  const executableIndex = words.findIndex((word) => executableName(word) === "agent-browser");
-  if (executableIndex < 0)
-    return null;
-  for (let i = executableIndex + 1; i < words.length; i++) {
-    const word = words[i];
-    if (word === "--")
-      return words[i + 1] ?? null;
-    if (!word.startsWith("-"))
-      return word;
-    const option = word.includes("=") ? word.slice(0, word.indexOf("=")) : word;
-    if (!word.includes("=") && VALUE_OPTIONS.has(option))
-      i++;
-  }
-  return null;
-}
-function agentBrowserOperations(segments) {
-  const operations = [];
-  for (const segment of segments) {
-    const operation = operationFromAgentBrowserSegment(segment);
-    if (operation && !operations.includes(operation))
-      operations.push(operation);
-  }
-  return operations;
-}
-function playwrightOperation(toolName) {
-  const match = toolName.match(/playwright.*__browser_(.+)$/i);
-  return match?.[1]?.replace(/_/g, " ") ?? null;
-}
-function operationBadges(operations) {
-  return operations.map((operation) => new Badge({
-    label: operation,
-    color: "brightBlue",
-    icon: "\u0192"
-  }));
-}
-
-// src/render/screenshot.ts
-import fs5 from "node:fs";
-import path3 from "node:path";
-
-// src/render/file-preview.ts
+// src/render/file-card.ts
 import fs4 from "node:fs";
+import path3 from "node:path";
 
 // packages/image-to-ascii/src/decode.ts
 var import_pngjs = __toESM(require_png(), 1);
@@ -6334,9 +4918,9 @@ var import_jpeg_js = __toESM(require_jpeg_js(), 1);
 import { execFileSync } from "node:child_process";
 import fs2 from "node:fs";
 import os2 from "node:os";
-import path from "node:path";
+import path2 from "node:path";
 function decodeWebp(buffer) {
-  const base = path.join(os2.tmpdir(), `claude-webp-${process.pid}-${Date.now()}`);
+  const base = path2.join(os2.tmpdir(), `claude-webp-${process.pid}-${Date.now()}`);
   const inPath = `${base}.webp`;
   const outPath = `${base}.png`;
   try {
@@ -7006,8 +5590,8 @@ function buildTable(families) {
   const byBasis = /* @__PURE__ */ new Map();
   for (let i = 0; i < glyphs2.length; i++) {
     const id = glyphs2[i].basis.id;
-    const list = byBasis.get(id);
-    if (list) list.push(i);
+    const list2 = byBasis.get(id);
+    if (list2) list2.push(i);
     else byBasis.set(id, [i]);
   }
   const bases = [];
@@ -7018,7 +5602,7 @@ function buildTable(families) {
   return {
     glyphs: glyphs2,
     families: enabled,
-    byBasis: new Map([...byBasis].map(([id, list]) => [id, Int32Array.from(list)])),
+    byBasis: new Map([...byBasis].map(([id, list2]) => [id, Int32Array.from(list2)])),
     bases,
     complement: buildComplements(glyphs2),
     chars: claimed
@@ -7063,8 +5647,8 @@ function compileTable(table) {
   const byFamilyBasis = /* @__PURE__ */ new Map();
   for (const glyph of table.glyphs) {
     const key = `${glyph.family}|${glyph.basis.id}`;
-    const list = byFamilyBasis.get(key);
-    if (list) list.push(glyph);
+    const list2 = byFamilyBasis.get(key);
+    if (list2) list2.push(glyph);
     else byFamilyBasis.set(key, [glyph]);
   }
   for (const [key, glyphs2] of byFamilyBasis) {
@@ -7279,21 +5863,21 @@ function renderBraille(sat, cols, rows, options = {}) {
   const threshold = options.threshold ?? THRESHOLD;
   const dotCols = cols * BRAILLE_COLS;
   const dotRows = rows * BRAILLE_ROWS;
-  const ink = new Float64Array(dotCols * dotRows);
+  const ink2 = new Float64Array(dotCols * dotRows);
   for (let y = 0; y < dotRows; y++) {
-    for (let x = 0; x < dotCols; x++) ink[y * dotCols + x] = inkAt(sat, x, y, dotCols, dotRows);
+    for (let x = 0; x < dotCols; x++) ink2[y * dotCols + x] = inkAt(sat, x, y, dotCols, dotRows);
   }
   const on = new Uint8Array(dotCols * dotRows);
   for (let y = 0; y < dotRows; y++) {
     for (let x = 0; x < dotCols; x++) {
       const at = y * dotCols + x;
-      const value = ink[at];
+      const value = ink2[at];
       const lit = value >= threshold ? 1 : 0;
       on[at] = lit;
       if (options.dither === false) continue;
       const error = value - lit;
       const spread = (index, weight) => {
-        ink[index] = ink[index] + error * weight;
+        ink2[index] = ink2[index] + error * weight;
       };
       if (x + 1 < dotCols) spread(at + 1, 7 / 16);
       if (y + 1 < dotRows) {
@@ -7321,105 +5905,9 @@ function renderBraille(sat, cols, rows, options = {}) {
   return lines;
 }
 
-// packages/image-to-ascii/src/imageToTerm.ts
+// packages/image-to-ascii/src/index.ts
 var MAX_ROWS = 120;
 var ALPHA_OPAQUE = 128;
-var BYTE_BUDGET = 9200;
-var ATTEMPTS = [
-  { mask: 255 },
-  { mask: 252 },
-  { mask: 248 },
-  { palette: true }
-];
-var MIN_COLS = 24;
-var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
-function to256(r, g, b) {
-  if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
-    if (r < 8)
-      return 16;
-    if (r > 238)
-      return 231;
-    return 232 + Math.min(23, Math.round((r - 8) / 10));
-  }
-  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
-}
-var FG_RESET = "\x1B[39m";
-var BG_RESET2 = "\x1B[49m";
-function imageToAsciiSimple(buffer, ext, maxWidth = 80) {
-  const img = decodeImage(buffer, ext);
-  if (!img)
-    return null;
-  const { width, height, data } = img;
-  if (!width || !height)
-    return null;
-  const render = (cols, attempt) => {
-    const scale = Math.max(1, width / cols, height / (MAX_ROWS * 2));
-    const targetWidth = Math.max(1, Math.round(width / scale));
-    const pxRows = Math.max(1, Math.round(height / scale));
-    const sgrTail = attempt.palette ? (r, g, b) => `5;${to256(r, g, b)}` : (r, g, b) => `2;${r & attempt.mask};${g & attempt.mask};${b & attempt.mask}`;
-    const px = (col, row) => {
-      const idx = (Math.min(height - 1, Math.floor(row * scale)) * width + Math.min(width - 1, Math.floor(col * scale))) * 4;
-      if ((data[idx + 3] ?? 255) < ALPHA_OPAQUE)
-        return null;
-      return sgrTail(data[idx] ?? 0, data[idx + 1] ?? 0, data[idx + 2] ?? 0);
-    };
-    const lines = [];
-    for (let y = 0; y < pxRows; y += 2) {
-      let line = "";
-      let fg = null;
-      let bg = null;
-      const put = (char, wantFg, wantBg) => {
-        const parts = [];
-        if (wantFg !== null && wantFg !== fg) {
-          parts.push(`38;${wantFg}`);
-          fg = wantFg;
-        }
-        if (wantBg !== bg) {
-          parts.push(wantBg === null ? "49" : `48;${wantBg}`);
-          bg = wantBg;
-        }
-        line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
-      };
-      for (let x = 0; x < targetWidth; x++) {
-        const top = px(x, y);
-        const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
-        if (top === null && bottom === null)
-          put(" ", null, null);
-        else if (top !== null && bottom === null)
-          put("\u2580", top, null);
-        else if (top === null && bottom !== null)
-          put("\u2584", bottom, null);
-        else if (top === bottom)
-          put("\u2588", top, null);
-        else
-          put("\u2580", top, bottom);
-      }
-      if (fg !== null)
-        line += FG_RESET;
-      if (bg !== null)
-        line += BG_RESET2;
-      lines.push(line);
-    }
-    return lines.join("\n");
-  };
-  let out = "";
-  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  for (let cols = Math.min(width, requestedMax); ; ) {
-    for (const attempt of ATTEMPTS) {
-      out = render(cols, attempt);
-      if (out.length <= BYTE_BUDGET)
-        return out;
-    }
-    if (cols <= MIN_COLS)
-      break;
-    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
-  }
-  return out;
-}
-
-// packages/image-to-ascii/src/index.ts
-var MAX_ROWS2 = 120;
-var ALPHA_OPAQUE2 = 128;
 function quantizeChannel(value, levels) {
   if (levels >= 256)
     return value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
@@ -7427,7 +5915,7 @@ function quantizeChannel(value, levels) {
   const index = Math.round(value * steps / 255);
   return Math.round(Math.min(steps, Math.max(0, index)) * 255 / steps);
 }
-var MIN_COLS2 = 24;
+var MIN_COLS = 24;
 var MIN_ROWS = 8;
 var ROW_DECAY = 0.7;
 var DEFAULT_TIERS = [256, 64, 32, "palette"];
@@ -7454,8 +5942,8 @@ function cellAspect() {
   const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_CELL_ASPECT);
   return Number.isFinite(raw) && raw > 0 ? raw : 2;
 }
-var cubeIdx2 = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
-function to2562(r, g, b) {
+var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
+function to256(r, g, b) {
   if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
     if (r < 8)
       return 16;
@@ -7463,10 +5951,10 @@ function to2562(r, g, b) {
       return 231;
     return 232 + Math.min(23, Math.round((r - 8) / 10));
   }
-  return 16 + 36 * cubeIdx2(r) + 6 * cubeIdx2(g) + cubeIdx2(b);
+  return 16 + 36 * cubeIdx(r) + 6 * cubeIdx(g) + cubeIdx(b);
 }
-var FG_RESET2 = "\x1B[39m";
-var BG_RESET3 = "\x1B[49m";
+var FG_RESET = "\x1B[39m";
+var BG_RESET2 = "\x1B[49m";
 var PALETTE_256 = (() => {
   const levels = [0, 95, 135, 175, 215, 255];
   const out = [];
@@ -7545,8 +6033,8 @@ function renderAsciiLines(sat, cols, rows, lightBackground) {
       }
       const luminance = 0.2126 * sample.r + 0.7152 * sample.g + 0.0722 * sample.b;
       const polarity = lightBackground ? 255 - luminance : luminance;
-      const ink = polarity * sample.a / 255;
-      const index = Math.min(ASCII_RAMP.length - 1, Math.round(ink / 255 * (ASCII_RAMP.length - 1)));
+      const ink2 = polarity * sample.a / 255;
+      const index = Math.min(ASCII_RAMP.length - 1, Math.round(ink2 / 255 * (ASCII_RAMP.length - 1)));
       line += ASCII_RAMP[index];
     }
     lines.push(line.trimEnd());
@@ -7615,7 +6103,7 @@ function fitMargin() {
 function classify(alpha) {
   let opaque = 0;
   for (let i = 0; i < alpha.length; i++)
-    if (alpha[i] >= ALPHA_OPAQUE2)
+    if (alpha[i] >= ALPHA_OPAQUE)
       opaque++;
   if (opaque === alpha.length)
     return 0 /* Opaque */;
@@ -7628,7 +6116,7 @@ function transparentCell(alpha, plane) {
   let b = 0;
   let count = 0;
   for (let i = 0; i < alpha.length; i++) {
-    if (alpha[i] < ALPHA_OPAQUE2)
+    if (alpha[i] < ALPHA_OPAQUE)
       continue;
     mask |= 1 << i;
     const at = i * 3;
@@ -7648,17 +6136,17 @@ function transparentCell(alpha, plane) {
     area: count / alpha.length
   };
 }
-function fittedCell(fit) {
-  const glyph = fit.glyph;
-  const fg = { r: fit.fg[0], g: fit.fg[1], b: fit.fg[2] };
+function fittedCell(fit2) {
+  const glyph = fit2.glyph;
+  const fg2 = { r: fit2.fg[0], g: fit2.fg[1], b: fit2.fg[2] };
   if (glyph === null || glyph.area >= 1)
-    return { char: "\u2588", fg, bg: KEEP, area: 1 };
-  const bg = { r: fit.bg[0], g: fit.bg[1], b: fit.bg[2] };
+    return { char: "\u2588", fg: fg2, bg: KEEP, area: 1 };
+  const bg2 = { r: fit2.bg[0], g: fit2.bg[1], b: fit2.bg[2] };
   if (glyph.area <= 0)
-    return { char: " ", fg: KEEP, bg, area: 0 };
-  return { char: glyph.char, fg, bg, area: glyph.area };
+    return { char: " ", fg: KEEP, bg: bg2, area: 0 };
+  return { char: glyph.char, fg: fg2, bg: bg2, area: glyph.area };
 }
-function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS2) {
+function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS) {
   let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis2.cols)));
   let rows = Math.max(1, Math.round(height * cols / (width * aspect)));
   if (rows > maxRows) {
@@ -7675,13 +6163,13 @@ function imageSample(sat, sampleX, sampleY, sampleCols, sampleRows) {
     r: Math.round(scratch2.r),
     g: Math.round(scratch2.g),
     b: Math.round(scratch2.b),
-    opaque: scratch2.a >= ALPHA_OPAQUE2
+    opaque: scratch2.a >= ALPHA_OPAQUE
   };
 }
 function quantizer(attempt) {
   if (attempt.palette)
     return (color) => {
-      const index = to2562(color.r, color.g, color.b);
+      const index = to256(color.r, color.g, color.b);
       return { tail: `5;${index}`, color: PALETTE_256[index] };
     };
   const levels = attempt.levels;
@@ -7707,32 +6195,32 @@ function escapeCount(fgTail, bgTail, pen) {
 }
 function emitCell(cell, pen, quantize, complement) {
   let char = cell.char;
-  let fg = resolveSlot(cell.fg, pen.fgTail, pen.fgColor, cell.area, quantize);
-  let bg = resolveSlot(cell.bg, pen.bgTail, pen.bgColor, 1 - cell.area, quantize);
+  let fg2 = resolveSlot(cell.fg, pen.fgTail, pen.fgColor, cell.area, quantize);
+  let bg2 = resolveSlot(cell.bg, pen.bgTail, pen.bgColor, 1 - cell.area, quantize);
   const swapped = complement.get(cell.char);
   if (swapped !== void 0 && typeof cell.fg === "object" && cell.fg !== null && typeof cell.bg === "object" && cell.bg !== null) {
     const altFg = resolveSlot(cell.bg, pen.fgTail, pen.fgColor, 1 - cell.area, quantize);
     const altBg = resolveSlot(cell.fg, pen.bgTail, pen.bgColor, cell.area, quantize);
-    if (escapeCount(altFg.tail, altBg.tail, pen) < escapeCount(fg.tail, bg.tail, pen)) {
+    if (escapeCount(altFg.tail, altBg.tail, pen) < escapeCount(fg2.tail, bg2.tail, pen)) {
       char = swapped;
-      fg = altFg;
-      bg = altBg;
+      fg2 = altFg;
+      bg2 = altBg;
     }
   }
   const parts = [];
-  if (fg.tail !== null && fg.tail !== pen.fgTail) {
-    parts.push(`38;${fg.tail}`);
-    pen.fgTail = fg.tail;
-    pen.fgColor = fg.color;
+  if (fg2.tail !== null && fg2.tail !== pen.fgTail) {
+    parts.push(`38;${fg2.tail}`);
+    pen.fgTail = fg2.tail;
+    pen.fgColor = fg2.color;
   }
-  if (bg.tail !== pen.bgTail) {
-    parts.push(bg.tail === null ? "49" : `48;${bg.tail}`);
-    pen.bgTail = bg.tail;
-    pen.bgColor = bg.color;
+  if (bg2.tail !== pen.bgTail) {
+    parts.push(bg2.tail === null ? "49" : `48;${bg2.tail}`);
+    pen.bgTail = bg2.tail;
+    pen.bgColor = bg2.color;
   }
   return parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
 }
-function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS2) {
+function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS) {
   const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis, cellAspect(), maxRows);
   const quantize = quantizer(attempt);
   const alphaPlane = ctx.samples.planes.get("2x3");
@@ -7758,14 +6246,14 @@ function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS2
       line += emitCell(cell, pen, quantize, ctx.complement);
     }
     if (pen.fgTail !== null)
-      line += FG_RESET2;
+      line += FG_RESET;
     if (pen.bgTail !== null)
-      line += BG_RESET3;
+      line += BG_RESET2;
     lines.push(line);
   }
   return { lines, score };
 }
-function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS2) {
+function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS) {
   const aspect = cellAspect();
   const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * maxRows * 2));
   const targetWidth = Math.max(1, Math.round(img.width / scale));
@@ -7779,17 +6267,17 @@ function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS2)
   const lines = [];
   for (let y = 0; y < pxRows; y += 2) {
     let line = "";
-    let fg = null;
-    let bg = null;
+    let fg2 = null;
+    let bg2 = null;
     const put = (char, wantFg, wantBg) => {
       const parts = [];
-      if (wantFg !== null && wantFg !== fg) {
+      if (wantFg !== null && wantFg !== fg2) {
         parts.push(`38;${wantFg}`);
-        fg = wantFg;
+        fg2 = wantFg;
       }
-      if (wantBg !== bg) {
+      if (wantBg !== bg2) {
         parts.push(wantBg === null ? "49" : `48;${wantBg}`);
-        bg = wantBg;
+        bg2 = wantBg;
       }
       line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
     };
@@ -7803,46 +6291,52 @@ function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS2)
       else if (top === null && bottom !== null)
         put("\u2584", bottom, null);
       else if (top === bottom)
-        put("\u2588", top, bg);
+        put("\u2588", top, bg2);
       else
         put("\u2580", top, bottom);
     }
-    if (fg !== null)
-      line += FG_RESET2;
-    if (bg !== null)
-      line += BG_RESET3;
+    if (fg2 !== null)
+      line += FG_RESET;
+    if (bg2 !== null)
+      line += BG_RESET2;
     lines.push(line);
   }
   return { lines, score: 0 };
 }
 function bestFittingRender(startCols, spec, render) {
   const WINDOW = 16;
-  const floor = Math.max(1, Math.min(MIN_COLS2, startCols));
+  const floor = Math.max(1, Math.min(MIN_COLS, startCols));
   let best = null;
   let bestScore = -Infinity;
+  const seen = /* @__PURE__ */ new Map();
   const consider = (cols) => {
+    const known = seen.get(cols);
+    if (known !== void 0)
+      return known;
     const attempt = render(cols);
-    if (costOf(attempt.lines, spec) > spec.total)
-      return false;
-    if (attempt.score > bestScore) {
+    const fits2 = costOf(attempt.lines, spec) <= spec.total;
+    seen.set(cols, fits2);
+    if (fits2 && attempt.score > bestScore) {
       best = attempt;
       bestScore = attempt.score;
     }
-    return true;
+    return fits2;
   };
   if (consider(startCols))
     return best;
-  for (let cols = startCols - 1; cols >= floor && cols > startCols - 1 - WINDOW; cols--)
-    consider(cols);
-  if (best)
-    return best;
-  for (let cols = Math.max(floor, startCols - WINDOW); cols >= floor; ) {
-    if (consider(cols))
-      return best;
-    if (cols === floor)
-      break;
-    cols = Math.max(floor, Math.floor(cols * 0.85));
+  if (!consider(floor))
+    return null;
+  let low = floor;
+  let high = startCols - 1;
+  while (low < high) {
+    const mid = low + high + 1 >> 1;
+    if (consider(mid))
+      low = mid;
+    else
+      high = mid - 1;
   }
+  for (let cols = Math.min(startCols - 1, low + WINDOW / 2); cols >= Math.max(floor, low - WINDOW); cols--)
+    consider(cols);
   return best;
 }
 function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
@@ -7852,7 +6346,7 @@ function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
     return null;
   const maxWidth = options.maxWidth ?? 80;
   const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS2));
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
   const analysis = analyzeMonochrome(img);
   const lines = widestAsciiRender(
     img,
@@ -7865,7 +6359,7 @@ function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
   const output = lines.join("\n");
   return output.length > 0 ? output : " ";
 }
-function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS2) {
+function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS) {
   const at = (cols) => {
     const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"], cellAspect(), maxRows);
     return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
@@ -7896,7 +6390,7 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   const mode = options.mode ?? resolveGlyphMode();
   const forceHalfBlocks = mode === "half";
   const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS2));
+  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
   if (mode === "ascii")
     return imageToMonochromeAscii(buffer, ext, options);
   if (mode === "braille")
@@ -7927,264 +6421,1593 @@ function imageToAscii(buffer, ext, widthOrOptions = 80) {
   return out.join("\n");
 }
 
-// src/runtime/output-transport.ts
-import fs3 from "node:fs";
-import os3 from "node:os";
-import path2 from "node:path";
-var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
-var HOOK_FIELD_CHAR_LIMIT = 1e4;
-var HOOK_RESPONSE_CHAR_BUDGET = HOOK_FIELD_CHAR_LIMIT;
-function responseWithMessage(data, systemMessage) {
-  return { ...data, systemMessage: CLEAR_LINE_PREFIX + systemMessage };
+// src/ansi/text.ts
+var OSC_SEQUENCE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
+var CSI_SEQUENCE = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]/g;
+var SGR_SEQUENCE = /\x1b\[([0-9;]*)m/g;
+function stripAnsi(value) {
+  return String(value).replace(OSC_SEQUENCE, "").replace(CSI_SEQUENCE, "");
 }
-function messageCost(systemMessage) {
-  return CLEAR_LINE_PREFIX.length + systemMessage.length;
+function sgrAttributes(raw) {
+  const values = (raw || "0").split(";");
+  const attributes = [];
+  for (let index = 0; index < values.length; index++) {
+    const code = values[index];
+    const extended = code === "38" || code === "48";
+    const length = !extended ? 1 : values[index + 1] === "2" ? 5 : values[index + 1] === "5" ? 3 : 1;
+    attributes.push(values.slice(index, index + length));
+    index += length - 1;
+  }
+  return attributes;
 }
-function fits(systemMessage) {
-  return messageCost(systemMessage) <= HOOK_RESPONSE_CHAR_BUDGET;
+var isBackground = ([code]) => {
+  const number = Number(code);
+  return number === 48 || number === 49 || number >= 40 && number <= 47 || number >= 100 && number <= 107;
+};
+function stripBackground(value) {
+  return String(value).replace(SGR_SEQUENCE, (_sequence, raw) => {
+    const kept = sgrAttributes(raw).filter((attribute) => !isBackground(attribute));
+    return kept.length ? `\x1B[${kept.flat().join(";")}m` : "";
+  });
 }
-function systemMessageHeadroom(data) {
-  const current = typeof data.systemMessage === "string" ? data.systemMessage : "";
-  return Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - messageCost(current));
+function reseatBackground(line, background) {
+  return String(line).replace(SGR_SEQUENCE, (_sequence, raw) => {
+    const kept = sgrAttributes(raw).flatMap((attribute) => attribute[0] === "49" ? [[background]] : Number(attribute[0]) === 0 ? [attribute, [background]] : [attribute]);
+    return `\x1B[${kept.flat().join(";")}m`;
+  });
 }
-var PERSISTED_OUTPUT_DIRECTORY = path2.join(os3.tmpdir(), "claude-code-hooks");
-var MAX_PERSISTED_OUTPUTS = 20;
-function persistCompleteOutput(content) {
-  try {
-    fs3.mkdirSync(PERSISTED_OUTPUT_DIRECTORY, { recursive: true });
-    const file = path2.join(PERSISTED_OUTPUT_DIRECTORY, `hook-output-${Date.now()}-${process.pid}.log`);
-    fs3.writeFileSync(file, content);
-    const stale = fs3.readdirSync(PERSISTED_OUTPUT_DIRECTORY).map((name) => {
-      const candidate = path2.join(PERSISTED_OUTPUT_DIRECTORY, name);
-      return { candidate, modified: fs3.statSync(candidate).mtimeMs };
-    }).sort((a, b) => b.modified - a.modified).slice(MAX_PERSISTED_OUTPUTS);
-    for (const entry of stale)
-      fs3.unlinkSync(entry.candidate);
-    return file;
-  } catch {
-    return null;
+function* tokens(input) {
+  for (let index = 0; index < input.length; ) {
+    CSI_SEQUENCE.lastIndex = index;
+    const sequence = CSI_SEQUENCE.exec(input);
+    if (sequence?.index === index) {
+      yield { text: sequence[0], visible: false };
+      index += sequence[0].length;
+      continue;
+    }
+    const codePoint = input.codePointAt(index);
+    const text = String.fromCodePoint(codePoint);
+    yield { text, visible: true };
+    index += text.length;
   }
 }
-function persistedPreview(plain) {
-  const file = persistCompleteOutput(plain);
-  const detail = file ? `full ${plain.length.toLocaleString("en-US")}-character hook output saved to ${file}` : `full hook output exceeded the ${HOOK_FIELD_CHAR_LIMIT.toLocaleString("en-US")}-character host limit`;
-  const marker = `
+function expandTabs(text, tabSize = 4) {
+  let column = 0;
+  let output = "";
+  for (const token of tokens(String(text))) {
+    if (!token.visible) {
+      output += token.text;
+      continue;
+    }
+    if (token.text === "	") {
+      const count = tabSize - column % tabSize;
+      output += " ".repeat(count);
+      column += count;
+    } else {
+      output += token.text;
+      column += 1;
+    }
+  }
+  return output;
+}
+function normalizeCardLine(line, keepBackground = false) {
+  const styledOnly = String(line).replace(OSC_SEQUENCE, "").replace(CSI_SEQUENCE, (sequence) => sequence.endsWith("m") ? sequence : "");
+  const seated = keepBackground ? styledOnly : stripBackground(styledOnly);
+  return expandTabs(seated.replace(/[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f\r]/g, ""));
+}
+function visibleWidth(value) {
+  return Array.from(expandTabs(stripAnsi(value))).length;
+}
+function wrapAnsi(text, width) {
+  if (width <= 0)
+    return [String(text)];
+  const lines = [];
+  let line = "";
+  let visible = 0;
+  for (const token of tokens(String(text))) {
+    if (token.visible && visible === width) {
+      lines.push(line);
+      line = "";
+      visible = 0;
+    }
+    line += token.text;
+    if (token.visible)
+      visible += 1;
+  }
+  lines.push(line);
+  return lines;
+}
+function truncateAnsi(text, maxVisible, ellipsis = "\u2026") {
+  let out = "";
+  let visible = 0;
+  for (const token of tokens(String(text))) {
+    if (token.visible && visible >= maxVisible)
+      break;
+    out += token.text;
+    if (token.visible)
+      visible += 1;
+  }
+  return out + "\x1B[0m" + ellipsis;
+}
+function truncateChars(text, maxChars, ellipsis = "\u2026") {
+  const reset = "\x1B[0m";
+  const room = maxChars - reset.length - ellipsis.length;
+  if (text.length <= maxChars)
+    return text;
+  let out = "";
+  for (const token of tokens(text)) {
+    if (out.length + token.text.length > room)
+      break;
+    out += token.text;
+  }
+  return out + reset + ellipsis;
+}
+function wrapText(text, width) {
+  if (width <= 0)
+    return text;
+  return String(text).split("\n").map((line) => {
+    const out = [];
+    let current = "";
+    for (const word of line.split(/ +/))
+      if (!current)
+        current = word;
+      else if (current.length + 1 + word.length <= width)
+        current += " " + word;
+      else {
+        out.push(current);
+        current = word;
+      }
+    out.push(current);
+    return out.join("\n");
+  }).join("\n");
+}
+function firstLine(value, maxLength) {
+  const line = String(value ?? "").split("\n")[0] ?? "";
+  return maxLength == null ? line : line.slice(0, maxLength);
+}
+function trimBlankEdges(text) {
+  return String(text).replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "");
+}
+function clampLines(text, maxLines) {
+  const lines = String(text).split("\n");
+  const keep = Math.max(0, Math.floor(maxLines));
+  return lines.length <= keep ? { text: String(text), omitted: 0 } : { text: lines.slice(0, keep).join("\n"), omitted: lines.length - keep };
+}
+var omittedNote = (omitted, label = "lines") => ink.note(`  \u2026 ${omitted.toLocaleString("en-US")} more ${label} omitted \u2026`);
+function collapse(text, maxLines, { label = "lines", paint = (head) => head } = {}) {
+  const { text: head, omitted } = clampLines(text, maxLines);
+  if (!omitted)
+    return paint(head);
+  return head ? paint(head) + "\n" + omittedNote(omitted, label) : omittedNote(omitted, label);
+}
+var FLAG_OPEN = {
+  bold: "1",
+  dim: "2",
+  italic: "3",
+  underline: "4",
+  blink: "5",
+  inverse: "7",
+  hidden: "8",
+  strike: "9",
+  overline: "53"
+};
+var FLAG_CLOSE = {
+  bold: "22",
+  dim: "22",
+  italic: "23",
+  underline: "24",
+  blink: "25",
+  inverse: "27",
+  hidden: "28",
+  strike: "29",
+  overline: "55"
+};
+var FLAGS = Object.keys(FLAG_OPEN);
+var OPEN_FLAG = new Map([...FLAGS.map((flag) => [FLAG_OPEN[flag], flag]), ["6", "blink"]]);
+var CLOSE_FLAGS = /* @__PURE__ */ new Map();
+for (const flag of FLAGS)
+  CLOSE_FLAGS.set(FLAG_CLOSE[flag], [...CLOSE_FLAGS.get(FLAG_CLOSE[flag]) ?? [], flag]);
+var BLANK_FLAGS = /* @__PURE__ */ new Set(["underline", "inverse", "strike", "overline"]);
+var PLAIN = { fg: null, bg: null, on: /* @__PURE__ */ new Set() };
+var isColor = (code, base) => code >= base && code <= base + 7 || code >= base + 60 && code <= base + 67;
+function applyCode(draft, code) {
+  const number = Number(code);
+  if (number === 0) {
+    draft.fg = null;
+    draft.bg = null;
+    draft.on.clear();
+  } else if (number === 39)
+    draft.fg = null;
+  else if (number === 49)
+    draft.bg = null;
+  else if (isColor(number, 30))
+    draft.fg = code;
+  else if (isColor(number, 40))
+    draft.bg = code;
+  else if (OPEN_FLAG.has(code))
+    draft.on.add(OPEN_FLAG.get(code));
+  else
+    for (const flag of CLOSE_FLAGS.get(code) ?? [])
+      draft.on.delete(flag);
+}
+function applySgr(style, params) {
+  const draft = { fg: style.fg, bg: style.bg, on: new Set(style.on) };
+  for (const attribute of sgrAttributes(params))
+    if (attribute.length === 1)
+      applyCode(draft, String(Number(attribute[0])));
+    else if (attribute[0] === "38")
+      draft.fg = attribute.join(";");
+    else
+      draft.bg = attribute.join(";");
+  return draft;
+}
+function flagChanges(from, to, counts) {
+  const closes = FLAGS.filter((flag) => counts(flag) && from.on.has(flag) && !to.on.has(flag)).map((flag) => FLAG_CLOSE[flag]);
+  const params = [...new Set(closes)];
+  const reopen = (flag) => !from.on.has(flag) || params.includes(FLAG_CLOSE[flag]);
+  for (const flag of FLAGS)
+    if (counts(flag) && to.on.has(flag) && reopen(flag))
+      params.push(FLAG_OPEN[flag]);
+  return params;
+}
+function colorChanges(from, to, blank) {
+  const params = [];
+  if (!blank && from.fg !== to.fg)
+    params.push(to.fg ?? "39");
+  if (from.bg !== to.bg)
+    params.push(to.bg ?? "49");
+  return params;
+}
+function transition(from, to, blank) {
+  const counts = (flag) => !blank || BLANK_FLAGS.has(flag);
+  const params = [...flagChanges(from, to, counts), ...colorChanges(from, to, blank)];
+  if (!params.length)
+    return "";
+  const reset = !blank && to.fg === null && to.bg === null && to.on.size === 0 && params.length > 1;
+  return reset ? "\x1B[0m" : `\x1B[${params.join(";")}m`;
+}
+function settle(from, to, blank) {
+  if (!blank)
+    return to;
+  const on = /* @__PURE__ */ new Set();
+  for (const flag of FLAGS)
+    if ((BLANK_FLAGS.has(flag) ? to : from).on.has(flag))
+      on.add(flag);
+  return { fg: from.fg, bg: to.bg, on };
+}
+var STREAM_TOKEN = /\x1b\[([0-9;]*)m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\n|( +)|[^\x1b\x9b\n ]+|[\s\S]/g;
+function compactAnsi(text) {
+  let out = "";
+  let current = PLAIN;
+  let desired = PLAIN;
+  for (const [token, sgr, spaces] of String(text).matchAll(STREAM_TOKEN))
+    if (sgr !== void 0)
+      desired = applySgr(desired, sgr);
+    else if (token === "\n") {
+      out += transition(current, PLAIN, false) + token;
+      current = PLAIN;
+    } else if (token.charCodeAt(0) === 27 || token.charCodeAt(0) === 155)
+      out += token;
+    else {
+      const blank = spaces !== void 0 && !current.on.has("inverse") && !desired.on.has("inverse");
+      out += transition(current, desired, blank) + token;
+      current = settle(current, desired, blank);
+    }
+  return out + transition(current, PLAIN, false);
+}
 
-  \u2026 preview split \u2014 ${detail} \u2026
-
-`;
-  const available = Math.max(0, HOOK_RESPONSE_CHAR_BUDGET - CLEAR_LINE_PREFIX.length - marker.length);
-  const headSize = Math.floor(available * 0.65);
-  const tailSize = available - headSize;
-  return plain.slice(0, headSize) + marker + plain.slice(-tailSize);
+// src/ansi/highlight.ts
+function isJSON(value) {
+  if (typeof value !== "string")
+    return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed[0] !== "{" && trimmed[0] !== "[")
+    return false;
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
 }
-function transportSafeMessage(systemMessage) {
-  if (fits(systemMessage))
-    return systemMessage;
-  const noBg = stripBackgroundAnsi(systemMessage);
-  if (fits(noBg))
-    return noBg;
-  const plain = stripAnsi(systemMessage);
-  return fits(plain) ? plain : persistedPreview(plain);
+function formatJSON(content) {
+  try {
+    return JSON.stringify(JSON.parse(content), null, 2);
+  } catch {
+    return content;
+  }
 }
-function serializeHookResponse(data) {
-  const systemMessage = typeof data.systemMessage === "string" && data.systemMessage.length > 0 ? data.systemMessage : null;
-  const message = systemMessage ? transportSafeMessage(systemMessage) : systemMessage;
-  const output = message === null ? { ...data } : responseWithMessage(data, message);
-  return {
-    json: JSON.stringify(output, null, 2),
-    systemMessage: typeof output.systemMessage === "string" ? output.systemMessage : null
-  };
+var EXT_TO_LANG = {
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  json: "json",
+  jsonc: "json",
+  json5: "json",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  env: "bash",
+  md: "markdown",
+  markdown: "markdown",
+  mdx: "markdown",
+  py: "python",
+  pyi: "python",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "yaml",
+  ini: "yaml",
+  diff: "diff",
+  patch: "diff",
+  html: "html",
+  htm: "html",
+  vue: "html",
+  svelte: "html",
+  xml: "xml",
+  svg: "xml",
+  plist: "xml",
+  css: "css",
+  scss: "css",
+  less: "css",
+  sql: "sql"
+};
+function langFromPath(filePath) {
+  const match = String(filePath ?? "").match(/\.([^./\s]+)$/);
+  return match ? EXT_TO_LANG[match[1].toLowerCase()] ?? null : null;
 }
-
-// src/render/file-preview.ts
-var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "webp"]);
-function extensionFromPath(filePath) {
-  const match = String(filePath ?? "").match(/\.([^./\\\s]+)$/);
-  return match ? `.${match[1].toLowerCase()}` : "";
+function shebangLanguage(content) {
+  const interpreter = content.match(/^#!\s*\S*?\/(?:env\s+)?([\w.-]+)/)?.[1];
+  if (!interpreter)
+    return null;
+  if (/^(ba|z|da|k|)sh$/.test(interpreter))
+    return "bash";
+  if (/^python/.test(interpreter))
+    return "python";
+  return /^(node|bun|deno)/.test(interpreter) ? "javascript" : null;
 }
-function isImageExtension(ext) {
-  return IMAGE_EXTENSIONS.has(String(ext ?? "").toLowerCase().replace(/^\./, ""));
-}
-function renderTextPreview(content, filePath) {
-  const lang = langFromPath(filePath) ?? detectContentLanguage(content);
+var CONTENT_CHECKS = [
+  ["diff", (c) => /^diff --git /m.test(c) || /^@@ -\d+(,\d+)? \+\d+(,\d+)? @@/m.test(c) || /^--- \S/m.test(c) && /^\+\+\+ \S/m.test(c)],
+  ["html", (_, head) => /^<!DOCTYPE html/i.test(head) || /^<(html|head|body)\b/i.test(head)],
+  ["xml", (_, head) => /^<\?xml/.test(head)],
+  ["sql", (c) => /^\s*(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE (TABLE|INDEX|VIEW)|ALTER TABLE)\b/im.test(c)],
+  ["python", (c) => /^\s*(def|class)\s+\w+.*:\s*$/m.test(c) || /^(from \w[\w.]* import|import \w+)\s*$/m.test(c)],
+  ["typescript", (c) => /^\s*(export\s+)?(interface|type|enum)\s+\w+/m.test(c) || /:\s*(string|number|boolean|void|unknown|never)\b/.test(c)],
+  ["javascript", (c) => /^(import|export)\s.*from\s+['"]/m.test(c) || /^\s*(const|let|var|function)\s+\w/m.test(c) || /=>\s*[{(]/.test(c)],
+  ["markdown", (c) => /^#{1,6}\s+\S/m.test(c) && (/^\s*[-*+]\s+\S/m.test(c) || /```/.test(c))]
+];
+function detectContentLanguage(content) {
   if (isJSON(content))
-    return simpleHighlight(formatJSON(content), "json");
-  return lang ? simpleHighlight(content, lang) : content;
+    return "json";
+  const shebang = shebangLanguage(content);
+  if (shebang)
+    return shebang;
+  const head = content.trimStart();
+  const match = CONTENT_CHECKS.find(([, test]) => test(content, head));
+  if (match)
+    return match[0];
+  const yamlKeys = content.match(/^[\w."'-]+:(\s+\S|$)/gm);
+  return yamlKeys && yamlKeys.length >= 2 && !/[{};]/.test(content) ? "yaml" : null;
 }
-function renderFilePreview(filePath, options = {}) {
-  const ext = extensionFromPath(filePath);
-  const maxWidth = options.maxWidth ?? getMaxContentWidth();
-  if (isImageExtension(ext))
-    try {
-      const ascii = imageToAscii(fs4.readFileSync(filePath), ext, {
-        maxWidth,
-        budget: imageBudget(options.budgetChars ?? previewBudgetChars())
-      });
-      if (ascii)
-        return { content: ascii, kind: "image" };
-    } catch {
+function detectOutputLanguage(text) {
+  return detectContentLanguage(text) ?? "output";
+}
+var WORD = /[\p{L}\p{N}_$]/u;
+var lineBefore = ({ src, at }) => src.slice(src.lastIndexOf("\n", at - 1) + 1, at);
+var atLineStart = (cursor) => cursor.at === 0 || cursor.src[cursor.at - 1] === "\n";
+var atLineHead = (cursor) => /^\s*$/.test(lineBefore(cursor));
+var afterSpace = (cursor) => cursor.at === 0 || /\s/.test(cursor.src[cursor.at - 1]);
+var wordBoundaryBefore = (cursor) => cursor.at === 0 || !WORD.test(cursor.src[cursor.at - 1]);
+function matchLength(rule2, cursor) {
+  if (typeof rule2.match === "function")
+    return rule2.match(cursor);
+  rule2.match.lastIndex = cursor.at;
+  return rule2.match.exec(cursor.src)?.[0].length ?? 0;
+}
+function scan(src, grammar, palette) {
+  const cursor = { src, at: 0, state: {}, prev: null };
+  let out = "";
+  let plain = "";
+  while (cursor.at < src.length) {
+    const rule2 = grammar.find((candidate) => (!candidate.when || candidate.when(cursor)) && matchLength(candidate, cursor) > 0);
+    if (!rule2) {
+      const character = src[cursor.at];
+      plain += character;
+      if (!/\s/.test(character))
+        cursor.prev = { type: "plain", text: character };
+      cursor.at += 1;
+      continue;
     }
-  const shape = (raw) => renderTextPreview(options.transform ? options.transform(raw) : raw, filePath);
-  if (options.readText !== false)
-    try {
-      return { content: shape(fs4.readFileSync(filePath, "utf8")), kind: "text" };
-    } catch {
+    const length = matchLength(rule2, cursor);
+    const text = src.slice(cursor.at, cursor.at + length);
+    const type = typeof rule2.type === "function" ? rule2.type(text, cursor) : rule2.type;
+    out += plain;
+    plain = "";
+    out += rule2.paint ? rule2.paint(text, cursor) : palette[type]?.(text) ?? text;
+    cursor.prev = { type, text };
+    cursor.at += length;
+  }
+  return out + plain;
+}
+var PALETTE = {
+  comment: ink.dim,
+  string: ink.str,
+  regex: source_default.red,
+  number: ink.num,
+  literal: ink.num,
+  keyword: ink.key,
+  key: ink.key,
+  call: source_default.magenta,
+  command: source_default.magenta,
+  decorator: source_default.magenta,
+  selector: source_default.magenta,
+  variable: ink.num,
+  flag: ink.num,
+  attr: ink.num,
+  operator: ink.dim,
+  punct: ink.punct,
+  marker: ink.num,
+  tag: ink.key,
+  heading: source_default.cyanBright,
+  quote: ink.note,
+  bold: source_default.bold,
+  italic: source_default.italic,
+  code: source_default.inverse
+};
+var classify2 = (sets, fallback, fold = false) => (text) => sets.find(([, words]) => words.has(fold ? text.toLowerCase() : text))?.[0] ?? fallback;
+var followedByCall = ({ src, at }, length) => /^\s*\(/.test(src.slice(at + length, at + length + 8));
+var JS_KEYWORDS = /* @__PURE__ */ new Set(["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "export", "from", "async", "await", "try", "catch", "finally", "throw", "new", "this", "super", "static", "interface", "type", "enum", "extends", "implements", "typeof", "instanceof", "in", "of", "yield", "switch", "case", "default", "break", "continue", "do", "void", "delete", "as", "declare", "namespace", "readonly", "keyof", "infer", "satisfies", "abstract", "public", "private", "protected", "override", "get", "set"]);
+var JS_LITERALS = /* @__PURE__ */ new Set(["true", "false", "null", "undefined", "NaN", "Infinity"]);
+var REGEX_AFTER_KEYWORD = /* @__PURE__ */ new Set(["return", "typeof", "case", "do", "else", "in", "of", "instanceof", "new", "delete", "void", "throw", "yield", "await"]);
+function regexAllowed({ prev }) {
+  if (!prev)
+    return true;
+  if (prev.type === "keyword")
+    return REGEX_AFTER_KEYWORD.has(prev.text);
+  return prev.type === "plain" && /[(,=:[!&|?{};+\-*%<>~^]/.test(prev.text) || prev.type === "operator";
+}
+function templateLength(src, start) {
+  let index = start + 1;
+  while (index < src.length) {
+    const character = src[index];
+    if (character === "\\") {
+      index += 2;
+      continue;
     }
-  return options.fallbackText == null ? null : { content: shape(options.fallbackText), kind: "text" };
+    if (character === "`")
+      return index + 1 - start;
+    if (character === "$" && src[index + 1] === "{") {
+      index = interpolationEnd(src, index + 2);
+      continue;
+    }
+    index += 1;
+  }
+  return src.length - start;
 }
-var SECTION_RESERVE = 700;
-function previewBudgetChars() {
-  return Math.max(1200, HOOK_RESPONSE_CHAR_BUDGET - SECTION_RESERVE);
+function interpolationEnd(src, start) {
+  let depth = 1;
+  let index = start;
+  while (index < src.length && depth > 0) {
+    const character = src[index];
+    if (character === "`") {
+      index += templateLength(src, index);
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      const quote = character;
+      index += 1;
+      while (index < src.length && src[index] !== quote && src[index] !== "\n")
+        index += src[index] === "\\" ? 2 : 1;
+    } else if (character === "{")
+      depth += 1;
+    else if (character === "}")
+      depth -= 1;
+    index += 1;
+  }
+  return index;
 }
-function charCost(text2) {
-  return text2.length;
+function paintTemplate(text) {
+  let out = "";
+  let index = 0;
+  let from = 0;
+  while (index < text.length) {
+    if (text[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    if (text[index] === "$" && text[index + 1] === "{") {
+      const end = interpolationEnd(text, index + 2);
+      out += ink.str(text.slice(from, index)) + ink.punct("${") + highlight(text.slice(index + 2, end - 1), "javascript") + ink.punct(text.slice(end - 1, end));
+      index = from = end;
+      continue;
+    }
+    index += 1;
+  }
+  return out + ink.str(text.slice(from));
 }
-var CARD_CHROME = 280;
-var CARD_PER_ROW = 105;
-function imageBudget(cardChars) {
+var JS_GRAMMAR = [
+  { type: "comment", match: /\/\*[\s\S]*?(?:\*\/|$)/y },
+  { type: "comment", match: /\/\/[^\n]*/y },
+  { type: "string", match: (cursor) => cursor.src[cursor.at] === "`" ? templateLength(cursor.src, cursor.at) : 0, paint: paintTemplate },
+  { type: "string", match: /"(?:[^"\\\n]|\\[\s\S])*"?|'(?:[^'\\\n]|\\[\s\S])*'?/y },
+  { type: "regex", match: /\/(?![*/])(?:[^/\\\n[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+\/[dgimsuvy]*/y, when: regexAllowed },
+  { type: "number", match: /(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|\d[\d_]*(?:\.[\d_]*)?(?:[eE][+-]?\d+)?)n?/y, when: wordBoundaryBefore },
+  {
+    type: (text, cursor) => JS_KEYWORDS.has(text) ? "keyword" : JS_LITERALS.has(text) ? "literal" : followedByCall(cursor, text.length) ? "call" : "plain",
+    match: /[\p{L}_$][\p{L}\p{N}_$]*/uy,
+    when: wordBoundaryBefore
+  }
+];
+var BASH_KEYWORDS = /* @__PURE__ */ new Set(["if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac", "in", "function", "select", "time", "return", "export", "local", "readonly", "declare", "typeset", "set", "unset", "shift", "source", "exit", "break", "continue", "trap", "eval", "exec"]);
+var COMMAND_AFTER = /* @__PURE__ */ new Set(["then", "else", "do", "if", "elif", "while", "until", "time", "exec", "eval"]);
+var COMMAND_AFTER_OPERATOR = /* @__PURE__ */ new Set(["&&", "||", "|", "|&", ";", "&", "$("]);
+function commandPosition(cursor) {
+  const { prev } = cursor;
+  if (!prev || atLineStart(cursor) || prev.type === "heredoc")
+    return true;
+  if (prev.type === "operator")
+    return COMMAND_AFTER_OPERATOR.has(prev.text);
+  if (prev.type === "keyword")
+    return COMMAND_AFTER.has(prev.text);
+  return prev.type === "plain" && /^[({`!]$/.test(prev.text);
+}
+var HEREDOC_OPEN = /<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/y;
+function heredocBodyLength(cursor) {
+  const pending = cursor.state.heredocs;
+  const delimiter = pending?.[0];
+  if (!delimiter || !atLineStart(cursor))
+    return 0;
+  const { src, at } = cursor;
+  let lineStart = at;
+  while (lineStart <= src.length) {
+    const lineEnd = src.indexOf("\n", lineStart);
+    const line = src.slice(lineStart, lineEnd === -1 ? src.length : lineEnd);
+    if (line.trim() === delimiter) {
+      pending.shift();
+      return lineStart + line.length - at;
+    }
+    if (lineEnd === -1)
+      break;
+    lineStart = lineEnd + 1;
+  }
+  pending.shift();
+  return src.length - at;
+}
+function paintHeredoc(text, cursor) {
+  const delimiterAt = text.lastIndexOf("\n") + 1;
+  const body = text.slice(0, delimiterAt);
+  const delimiter = text.slice(delimiterAt);
+  const closed = delimiter.trim() === cursor.state.lastDelimiter;
+  return closed ? highlight(body, detectContentLanguage(body)) + ink.dim(delimiter) : highlight(text, detectContentLanguage(text));
+}
+var BASH_GRAMMAR = [
+  { type: "heredoc", match: heredocBodyLength, paint: paintHeredoc },
+  { type: "comment", match: /#[^\n]*/y, when: afterSpace },
+  {
+    type: "operator",
+    match: (cursor) => {
+      HEREDOC_OPEN.lastIndex = cursor.at;
+      const match = HEREDOC_OPEN.exec(cursor.src);
+      if (!match)
+        return 0;
+      const pending = cursor.state.heredocs ?? (cursor.state.heredocs = []);
+      pending.push(match[2]);
+      cursor.state.lastDelimiter = match[2];
+      return match[0].length;
+    },
+    paint: (text) => ink.dim(text.slice(0, text.search(/[^<\-\s]/))) + ink.str(text.slice(text.search(/[^<\-\s]/)))
+  },
+  { type: "string", match: /\$?"(?:[^"\\]|\\[\s\S])*"?/y },
+  { type: "string", match: /\$'(?:[^'\\]|\\[\s\S])*'?|'[^']*'?/y },
+  { type: "variable", match: /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@#?*!$-]/y },
+  { type: "operator", match: /2>&1|&>|&&|\|\||>>|\|&|[|<>;&]|\$\(|\(\(|\)\)/y },
+  { type: "flag", match: /--?[A-Za-z][\w-]*(?==|\s|$)/y, when: (cursor) => cursor.at === 0 || /[\s=]/.test(cursor.src[cursor.at - 1]) },
+  { type: "number", match: /\d+(?![\w./-])/y, when: wordBoundaryBefore },
+  {
+    type: (text, cursor) => BASH_KEYWORDS.has(text) ? "keyword" : commandPosition(cursor) ? "command" : "plain",
+    match: /[A-Za-z_][\w.+-]*/y,
+    when: wordBoundaryBefore
+  }
+];
+var PY_KEYWORDS = /* @__PURE__ */ new Set(["def", "class", "import", "from", "return", "if", "elif", "else", "for", "while", "try", "except", "finally", "with", "as", "lambda", "yield", "async", "await", "pass", "break", "continue", "raise", "global", "nonlocal", "assert", "del", "in", "not", "and", "or", "is", "match", "case"]);
+var PY_LITERALS = /* @__PURE__ */ new Set(["None", "True", "False"]);
+var PY_GRAMMAR = [
+  { type: "comment", match: /#[^\n]*/y },
+  { type: "string", match: /[rRbBuUfF]{0,2}(?:"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$))/y, when: wordBoundaryBefore },
+  { type: "string", match: /[rRbBuUfF]{0,2}(?:"(?:[^"\\\n]|\\[\s\S])*"?|'(?:[^'\\\n]|\\[\s\S])*'?)/y, when: wordBoundaryBefore },
+  { type: "decorator", match: /@[\w.]+/y, when: atLineHead },
+  { type: "number", match: /(?:0[xXoObB][\da-fA-F_]+|\d[\d_]*(?:\.[\d_]*)?(?:[eE][+-]?\d+)?[jJ]?)/y, when: wordBoundaryBefore },
+  {
+    type: (text, cursor) => PY_KEYWORDS.has(text) ? "keyword" : PY_LITERALS.has(text) ? "literal" : followedByCall(cursor, text.length) ? "call" : "plain",
+    match: /[\p{L}_][\p{L}\p{N}_]*/uy,
+    when: wordBoundaryBefore
+  }
+];
+var JSON_GRAMMAR = [
+  { type: "key", match: /"(?:[^"\\]|\\.)*"(?=\s*:)/y },
+  { type: "string", match: /"(?:[^"\\]|\\.)*"?/y },
+  { type: "number", match: /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/y, when: wordBoundaryBefore },
+  { type: "literal", match: /true|false|null/y, when: wordBoundaryBefore },
+  { type: "punct", match: /[{}[\]:,]/y }
+];
+var YAML_GRAMMAR = [
+  { type: "comment", match: /#[^\n]*/y, when: afterSpace },
+  { type: "marker", match: /-(?=\s)/y, when: atLineHead },
+  { type: "key", match: /[\w."'/-][\w ."'/-]*(?=:(?:\s|$))/y, when: (cursor) => /^\s*(?:-\s+)?$/.test(lineBefore(cursor)) },
+  { type: "string", match: /"(?:[^"\\]|\\.)*"?|'[^']*'?/y },
+  { type: "literal", match: /(?:true|false|null|yes|no|~)(?=\s|$)/y, when: wordBoundaryBefore },
+  { type: "number", match: /-?\d+(?:\.\d+)?(?=\s|$)/y, when: wordBoundaryBefore }
+];
+var CSS_GRAMMAR = [
+  { type: "comment", match: /\/\*[\s\S]*?(?:\*\/|$)/y },
+  { type: "string", match: /"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?/y },
+  { type: "selector", match: /[^{};\n]+(?=\s*\{)/y, when: atLineHead },
+  { type: "key", match: /[\w-]+(?=\s*:)/y, when: (cursor) => atLineHead(cursor) || cursor.prev?.type === "punct" && /^[{;]$/.test(cursor.prev.text) },
+  { type: "number", match: /#[0-9a-fA-F]{3,8}(?![\w-])/y },
+  {
+    type: "number",
+    match: /\d*\.?\d+(?:px|em|rem|vh|vw|vmin|vmax|ch|ex|%|s|ms|deg|rad|turn|fr)?/y,
+    when: wordBoundaryBefore,
+    paint: (text) => {
+      const unit = text.match(/[a-z%]+$/i)?.[0] ?? "";
+      return ink.num(text.slice(0, text.length - unit.length)) + ink.punct(unit);
+    }
+  },
+  { type: "punct", match: /[{}:;,]/y }
+];
+var SQL_KEYWORDS = new Set("select from where insert into values update set delete create table index view alter drop join left right inner outer on as and or not null in is like order group by having limit offset distinct count sum avg min max union all exists between case when then else end primary foreign key references default unique constraint if returning with recursive".split(" "));
+var SQL_GRAMMAR = [
+  { type: "comment", match: /--[^\n]*/y },
+  { type: "comment", match: /\/\*[\s\S]*?(?:\*\/|$)/y },
+  { type: "string", match: /'(?:[^'\\]|\\.|'')*'?/y },
+  { type: "number", match: /\d+(?:\.\d+)?/y, when: wordBoundaryBefore },
+  { type: classify2([["keyword", SQL_KEYWORDS]], "plain", true), match: /[A-Za-z_]\w*/y, when: wordBoundaryBefore }
+];
+var inTag = (cursor) => cursor.state.inTag === true;
+var XML_GRAMMAR = [
+  { type: "comment", match: /<!--[\s\S]*?(?:-->|$)/y },
+  { type: "comment", match: /<!\[CDATA\[[\s\S]*?(?:\]\]>|$)/y },
+  {
+    type: "tag",
+    match: (cursor) => {
+      const match = /<[/?!]?[\w:.-]+/y.exec(cursor.src.slice(cursor.at));
+      if (!match)
+        return 0;
+      cursor.state.inTag = true;
+      return match[0].length;
+    },
+    paint: (text) => {
+      const name = text.match(/[\w:.-]+$/)[0];
+      return ink.punct(text.slice(0, text.length - name.length)) + ink.key(name);
+    }
+  },
+  {
+    type: "punct",
+    match: (cursor) => {
+      const match = /[/?]?>/y.exec(cursor.src.slice(cursor.at));
+      if (!match)
+        return 0;
+      cursor.state.inTag = false;
+      return match[0].length;
+    },
+    when: inTag
+  },
+  { type: "string", match: /"[^"]*"?|'[^']*'?/y, when: inTag },
+  { type: "attr", match: /[\w:.-]+(?=\s*=)/y, when: inTag },
+  { type: "punct", match: /=/y, when: inTag }
+];
+function paintFence(text) {
+  const [, info = "", body = ""] = /^(```[^\n]*\n)([\s\S]*?)(?:\n?```)?$/.exec(text) ?? [];
+  const language = info.slice(3).trim().split(/\s+/)[0] || null;
+  const closed = text.endsWith("```") && text.length > info.length + 2;
+  const inner = language ? highlight(body, EXT_TO_LANG[language] ?? language) : body;
+  const fence = info.trimEnd();
+  return ink.dim(fence) + info.slice(fence.length) + inner + (closed ? ink.dim(text.slice(info.length + body.length)) : "");
+}
+var MD_GRAMMAR = [
+  { type: "code", match: /```[^\n]*\n[\s\S]*?(?:\n```|$)/y, when: atLineStart, paint: paintFence },
+  { type: "heading", match: /#{1,6} [^\n]*/y, when: atLineStart },
+  { type: "quote", match: />[^\n]*/y, when: atLineStart },
+  { type: "marker", match: /(?:[-*+]|\d+\.)(?=\s)/y, when: atLineHead },
+  { type: "code", match: /`[^`\n]+`/y },
+  { type: "bold", match: /\*\*[^*\n]+\*\*|__[^_\n]+__/y, when: wordBoundaryBefore },
+  { type: "italic", match: /\*[^*\n]+\*|_[^_\n]+_/y, when: wordBoundaryBefore },
+  {
+    type: "link",
+    match: /\[[^\]\n]+\]\([^)\n]+\)/y,
+    paint: (text) => {
+      const [, label, url] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(text);
+      return ink.punct("[") + ink.accent(label) + ink.punct("](") + source_default.gray.underline(url) + ink.punct(")");
+    }
+  }
+];
+function highlightDiff(code) {
+  return code.split("\n").map((line) => {
+    if (/^(diff --git|index |new file|deleted file|similarity|rename )/.test(line))
+      return source_default.gray.bold(line);
+    if (/^(--- |\+\+\+ )/.test(line))
+      return source_default.bold(line);
+    if (/^@@ /.test(line))
+      return ink.key(line);
+    if (line.startsWith("+"))
+      return ink.ok(line);
+    return line.startsWith("-") ? ink.err(line) : line;
+  }).join("\n");
+}
+var SEVERITY = [
+  ["error", /\b(error|fatal|failed|failure|exception|traceback|panic|denied|refused|not permitted|no such file|cannot)\b/i],
+  ["warning", /\b(warn|warning|deprecated|no files found)\b/i],
+  ["success", /\b(success|succeeded|passed|completed?)\b|[✓✔]/i]
+];
+function severity(text) {
+  return SEVERITY.find(([, pattern]) => pattern.test(text))?.[0] ?? null;
+}
+var SEVERITY_INK = { error: ink.err, warning: ink.warn, success: ink.ok };
+var ANSI_SEQ = /\x1b\[[0-9;]*[a-zA-Z]/g;
+function replaceOutsideAnsi(input, pattern, replacer) {
+  if (!input.includes("\x1B"))
+    return input.replace(pattern, replacer);
+  let out = "";
+  let last = 0;
+  ANSI_SEQ.lastIndex = 0;
+  let match;
+  while (match = ANSI_SEQ.exec(input)) {
+    out += input.slice(last, match.index).replace(pattern, replacer) + match[0];
+    last = ANSI_SEQ.lastIndex;
+  }
+  return out + input.slice(last).replace(pattern, replacer);
+}
+var OUTPUT_URL_RE = /\bhttps?:\/\/[^\s)'"]+/g;
+var OUTPUT_PATH_RE = /(^|[\s('"=])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+(?::\d+(?::\d+)?)?)/g;
+var OUTPUT_METRIC_RE = /\b\d+(?:[.,]\d+)?\s?(?:ms|s|m|h|[KMGT]i?B|kb|mb|gb|%)\b/g;
+function highlightOutput(code) {
+  return code.split("\n").map((line) => {
+    const level = line.includes("\x1B") ? null : severity(line);
+    if (level)
+      return SEVERITY_INK[level](line);
+    let out = line;
+    out = replaceOutsideAnsi(out, OUTPUT_METRIC_RE, (match) => ink.num(match));
+    out = replaceOutsideAnsi(out, OUTPUT_URL_RE, (match) => ink.accent(match));
+    return replaceOutsideAnsi(out, OUTPUT_PATH_RE, (_m, lead, file) => lead + ink.accent(file));
+  }).join("\n");
+}
+var GRAMMARS = {
+  javascript: JS_GRAMMAR,
+  typescript: JS_GRAMMAR,
+  bash: BASH_GRAMMAR,
+  python: PY_GRAMMAR,
+  json: JSON_GRAMMAR,
+  yaml: YAML_GRAMMAR,
+  css: CSS_GRAMMAR,
+  sql: SQL_GRAMMAR,
+  html: XML_GRAMMAR,
+  xml: XML_GRAMMAR,
+  markdown: MD_GRAMMAR
+};
+var LINE_HIGHLIGHTERS = { diff: highlightDiff, output: highlightOutput };
+var HIGHLIGHT_LANGUAGES = [...Object.keys(GRAMMARS), ...Object.keys(LINE_HIGHLIGHTERS)];
+function highlight(code, language) {
+  if (!language)
+    return code;
+  const grammar = GRAMMARS[language];
+  if (grammar)
+    return scan(code, grammar, PALETTE);
+  return LINE_HIGHLIGHTERS[language]?.(code) ?? code;
+}
+function renderText(text, filePath, fallback = "output") {
+  const language = langFromPath(filePath) ?? detectContentLanguage(text) ?? fallback;
+  return highlight(language === "json" ? formatJSON(text) : text, language);
+}
+var META_STR_MAX = 200;
+function flattenString(value) {
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  return collapsed.length > META_STR_MAX ? collapsed.slice(0, META_STR_MAX - 1) + "\u2026" : collapsed;
+}
+function formatValue(value, depth = 0) {
+  if (value === null || value === void 0 || typeof value === "boolean" || typeof value === "number")
+    return ink.num(String(value));
+  if (typeof value === "string")
+    return ink.str(flattenString(value));
+  if (typeof value !== "object")
+    return String(value);
+  const pad2 = "  ".repeat(depth + 1);
+  const close = "  ".repeat(depth);
+  const items = Array.isArray(value) ? value.map((item) => formatValue(item, depth + 1)) : Object.entries(value).map(([key, item]) => ink.key(key) + ink.punct(": ") + formatValue(item, depth + 1));
+  const [open, shut] = Array.isArray(value) ? ["[", "]"] : ["{", "}"];
+  if (!items.length)
+    return ink.punct(`${open} ${shut}`);
+  const inline = ink.punct(open + " ") + items.join(ink.punct(", ")) + ink.punct(" " + shut);
+  if (stripAnsi(inline).length <= 50)
+    return inline;
+  return ink.punct(open + "\n") + items.map((item) => pad2 + item).join(ink.punct(",\n")) + "\n" + close + ink.punct(shut);
+}
+
+// src/tui/theme.ts
+var theme = (icon, color) => ({ icon, color });
+var SHELL = theme("\u276F", "magenta");
+var WRITE = theme("\u2295", "green");
+var EDIT = theme("\u0394", "green");
+var READ = theme("\u25A4", "blue");
+var SEARCH = theme("\u2315", "red");
+var WEB = theme("\u21CC", "cyan");
+var AGENT = theme("\u{F0495}", "cyan");
+var TASK = theme("\u2713", "blue");
+var PLAN = theme("\u224B", "cyan");
+var IMAGE = theme("\u25A9", "blue");
+var POWER = theme("\u23FB", "cyan");
+var DEFAULT = theme("\u{F0320}", "blue");
+var TOOL_THEMES = {
+  "Bash": SHELL,
+  "BashCommand": SHELL,
+  "Write": WRITE,
+  "FileWriteOrEdit": WRITE,
+  "Edit": EDIT,
+  "MultiEdit": EDIT,
+  "FileEdit": EDIT,
+  "apply_patch": EDIT,
+  "ApplyPatch": EDIT,
+  "Read": READ,
+  "ReadFiles": READ,
+  "read_page": READ,
+  "Glob": SEARCH,
+  "Grep": SEARCH,
+  "WebFetch": WEB,
+  "WebSearch": theme("\u2315", "cyan"),
+  "ToolSearch": theme("\u2315", "cyan"),
+  "query-docs": WEB,
+  "navigate": WEB,
+  "Task": AGENT,
+  "Agent": AGENT,
+  "TaskCreate": TASK,
+  "TaskUpdate": TASK,
+  "TaskList": TASK,
+  "TaskStop": theme("\u25A0", "red"),
+  "update_plan": PLAN,
+  "UpdatePlan": PLAN,
+  "TodoWrite": PLAN,
+  "TodoRead": PLAN,
+  "ExitPlanMode": POWER,
+  "Initialize": POWER,
+  "ContextSave": theme("\u29FA", "cyan"),
+  "AskUserQuestion": theme("?", "brightGreen"),
+  "view_image": IMAGE,
+  "ViewImage": IMAGE,
+  "ReadImage": IMAGE,
+  "spawn_agent": theme("\u2B21", "green"),
+  "wait_agent": theme("\u25F7", "gray"),
+  "followup_task": theme("\u21BB", "cyan"),
+  "send_message": theme("\u2192", "cyan"),
+  "interrupt_agent": theme("\u25A0", "red"),
+  "list_agents": theme("\u224B", "blue")
+};
+var THEME_BY_VERB = [
+  [/bash|command|exec|shell/i, SHELL],
+  [/write|edit|create/i, WRITE],
+  [/read|get|fetch|load/i, READ],
+  [/search|find|grep|query|glob/i, SEARCH]
+];
+var COLLABORATION_RE = /^collaboration(?:__|[._-])?(spawn_agent|wait_agent|followup_task|send_message|interrupt_agent|list_agents)$/i;
+function parseToolName(rawName) {
+  if (!rawName || typeof rawName !== "string")
+    return { server: null, tool: "Unknown", pretty: "Unknown" };
+  const collaboration2 = COLLABORATION_RE.exec(rawName);
+  if (collaboration2) {
+    const tool = collaboration2[1].toLowerCase();
+    return { server: "collaboration", tool, pretty: `collaboration \u25B8 ${tool.replace(/_/g, " ")}` };
+  }
+  const mcp = /^mcp__([^_].*?)__(.+)$/.exec(rawName);
+  if (mcp)
+    return { server: mcp[1], tool: mcp[2], pretty: `${mcp[1]} \u25B8 ${mcp[2].replace(/_/g, " ")}` };
+  return { server: null, tool: rawName, pretty: rawName };
+}
+function toolTheme(rawName) {
+  const { tool } = parseToolName(rawName);
+  return TOOL_THEMES[rawName] ?? TOOL_THEMES[tool] ?? THEME_BY_VERB.find(([pattern]) => pattern.test(tool))?.[1] ?? DEFAULT;
+}
+var BACKGROUND = {
+  blue: source_default.bgBlue,
+  green: source_default.bgGreen,
+  yellow: source_default.bgYellow,
+  red: source_default.bgRed,
+  magenta: source_default.bgMagenta,
+  cyan: source_default.bgCyan,
+  gray: source_default.bgGray,
+  white: source_default.bgWhite,
+  black: source_default.bgBlack,
+  brightBlue: source_default.bgBlueBright,
+  brightGreen: source_default.bgGreenBright,
+  brightYellow: source_default.bgYellowBright,
+  brightRed: source_default.bgRedBright,
+  brightMagenta: source_default.bgMagentaBright,
+  brightCyan: source_default.bgCyanBright,
+  brightGray: source_default.bgGray,
+  brightWhite: source_default.bgWhiteBright
+};
+var FOREGROUND = {
+  blue: source_default.blue,
+  green: source_default.green,
+  yellow: source_default.yellow,
+  red: source_default.red,
+  magenta: source_default.magenta,
+  cyan: source_default.cyan,
+  gray: source_default.gray,
+  white: source_default.white,
+  black: source_default.black,
+  brightBlue: source_default.blueBright,
+  brightGreen: source_default.greenBright,
+  brightYellow: source_default.yellowBright,
+  brightRed: source_default.redBright,
+  brightMagenta: source_default.magentaBright,
+  brightCyan: source_default.cyanBright,
+  brightGray: source_default.gray,
+  brightWhite: source_default.whiteBright
+};
+var bg = (color) => BACKGROUND[color] ?? source_default.bgBlue;
+var fg = (color) => FOREGROUND[color] ?? source_default.blue;
+
+// src/tui/badge.ts
+function badge({ label, color, icon }) {
+  return { kind: "badge", label: label ?? "", color: color ?? "cyan", icon: icon ?? null };
+}
+function toolBadge(toolName, overrides = {}) {
+  const theme2 = toolTheme(toolName);
+  return badge({
+    label: overrides.label ?? parseToolName(toolName).pretty,
+    color: overrides.color ?? theme2.color,
+    icon: overrides.icon === void 0 ? theme2.icon : overrides.icon
+  });
+}
+function isBadge(value) {
+  return typeof value === "object" && value !== null && value.kind === "badge";
+}
+function renderBadge({ label, color, icon }) {
+  return bg(color).black(` ${icon ? icon + " " : ""}${label} `);
+}
+function badgeRule({ color }, length, character = "\u2581") {
+  return fg(color)(character.repeat(Math.max(0, length)));
+}
+function renderBadges(...badges) {
+  return badges.filter((item) => Boolean(item)).map((item) => isBadge(item) ? renderBadge(item) : String(item)).join(" ");
+}
+var RUNNING_BADGE = badge({ label: "Running", color: "magenta", icon: "\u23CE " });
+var OUTPUT_BADGE = badge({ label: "Output", color: "brightGreen", icon: "\u2258" });
+var META_BADGE = badge({ label: "metadata", color: "gray", icon: "\u26C1" });
+
+// src/tui/card.ts
+import fs3 from "node:fs";
+import tty2 from "node:tty";
+
+// src/tui/tokens.ts
+var TUI_TOKENS = {
+  width: {
+    fallbackContent: 96,
+    maximumLayout: 100,
+    outerIndentMargin: 6,
+    divider: 60
+  },
+  card: {
+    background: "#302f32",
+    commandBackground: "#272629",
+    ruleFallback: "#4a4a4a",
+    border: "#5a595c",
+    horizontalPadding: 2,
+    minimumHairline: 4,
+    // Cards keep only their top rule. Content spans the whole measured width.
+    chromeColumns: 0
+  }
+};
+
+// src/tui/card.ts
+var list = (value) => value === void 0 ? [] : Array.isArray(value) ? [...value] : [value];
+var cachedColumns = null;
+function terminalColumns() {
+  if (cachedColumns !== null)
+    return cachedColumns;
+  const declared = process.stdout.columns || process.stderr.columns || Number(process.env.COLUMNS) || 0;
+  if (declared > 0)
+    return cachedColumns = declared;
+  try {
+    const stream = new tty2.WriteStream(fs3.openSync("/dev/tty", "r+"));
+    const columns = stream.columns || 0;
+    stream.destroy();
+    return cachedColumns = columns;
+  } catch {
+    return cachedColumns = 0;
+  }
+}
+function layoutWidthForTerminal(columns) {
+  const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width;
+  return Math.max(1, Math.min(maximumLayout, (columns > 0 ? columns : fallbackContent) - outerIndentMargin));
+}
+var getMaxLayoutWidth = () => layoutWidthForTerminal(terminalColumns());
+var horizontalPaddingFor = (layoutWidth) => Math.min(TUI_TOKENS.card.horizontalPadding, Math.max(0, Math.floor((layoutWidth - 1) / 2)));
+function getMaxContentWidth() {
+  const layoutWidth = getMaxLayoutWidth();
+  return Math.max(1, layoutWidth - horizontalPaddingFor(layoutWidth) * 2 - TUI_TOKENS.card.chromeColumns);
+}
+var EDGE_TOP = "\u2581";
+var renderBoxTopEdge = (width) => paint256.fg(TUI_TOKENS.card.border)(EDGE_TOP.repeat(Math.max(0, width)));
+var WIDTH_PERCENTILE = 0.9;
+var WIDTH_SLACK = 8;
+var TYPICAL_MINIMUM = 12;
+function typicalWidth(widths) {
+  if (!widths.length)
+    return 0;
+  const sorted = [...widths].sort((a, b) => a - b);
+  const widest = sorted.at(-1);
+  if (sorted.length < TYPICAL_MINIMUM)
+    return widest;
+  const typical = sorted[Math.floor((sorted.length - 1) * WIDTH_PERCENTILE)];
+  return Math.min(widest, typical + WIDTH_SLACK);
+}
+var fitTitle = (title, layoutWidth) => visibleWidth(title) > layoutWidth ? truncateAnsi(title, layoutWidth - 1) : title;
+function prepareRegion(region, layoutWidth) {
+  const background = region.background ?? TUI_TOKENS.card.background;
+  const fillParams = `48;5;${ansi256(background)}`;
   return {
-    total: Math.max(600, cardChars),
-    overhead: CARD_CHROME,
-    perRow: CARD_PER_ROW
+    background,
+    heading: fitTitle(renderBadges(...list(region.heading)), layoutWidth),
+    lines: trimBlankEdges(region.content).split("\n").map((line) => reseatBackground(normalizeCardLine(line, region.keepBackground), fillParams)),
+    trailingBlank: region.trailingBlank ?? false
   };
 }
-var BUDGET_LADDER = [0.75, 0.5, 0.3, 0.15];
-var GROWTH_ATTEMPTS = 3;
-var GROWTH_THRESHOLD = 0.94;
-var NO_ROOM = source_default.gray.italic("\u2026 image preview omitted \u2014 no room left in this message \u2026");
+function wrapRegions(regions, maxWidth) {
+  const lines = regions.flatMap((region) => region.lines);
+  const headings = regions.map((region) => visibleWidth(region.heading));
+  const contentWidth = Math.min(maxWidth, Math.max(typicalWidth(lines.map(visibleWidth)), ...headings));
+  return {
+    contentWidth,
+    regions: regions.map((region) => ({ ...region, lines: region.lines.flatMap((line) => wrapAnsi(line, contentWidth)) }))
+  };
+}
+function prepareBox({ content, minimumWidth = 0, footerText = "" }) {
+  const layoutWidth = getMaxLayoutWidth();
+  const padding = horizontalPaddingFor(layoutWidth);
+  const prepared = (typeof content === "string" ? [{ content }] : content).map((region) => prepareRegion(region, layoutWidth));
+  const { regions, contentWidth } = wrapRegions(prepared, getMaxContentWidth());
+  const width = Math.min(layoutWidth, Math.max(contentWidth + padding * 2, minimumWidth));
+  const rows = [];
+  let openedByBlank = false;
+  for (const region of regions) {
+    const fill = paint256.bg(region.background);
+    const frame = (line, left = padding) => fill(" ".repeat(left) + line + " ".repeat(Math.max(0, width - left - visibleWidth(line))));
+    if (!openedByBlank)
+      rows.push(fill(" ".repeat(width)));
+    if (region.heading)
+      rows.push(frame(region.heading, 0));
+    rows.push(...region.lines.map((line) => frame(line)));
+    if (region.trailingBlank)
+      rows.push(fill(" ".repeat(width)));
+    openedByBlank = region.trailingBlank;
+  }
+  const lastFill = paint256.bg(regions.at(-1)?.background ?? TUI_TOKENS.card.background);
+  const footerWidth = visibleWidth(footerText);
+  rows.push(footerWidth > 0 && footerWidth <= width ? lastFill(" ".repeat(width - footerWidth) + footerText) : lastFill(" ".repeat(width)));
+  return { lines: rows, width };
+}
+function renderBox(props) {
+  const box = prepareBox(props);
+  return ["", renderBoxTopEdge(box.width), ...box.lines, ""].join("\n");
+}
+function renderCard({ badges, content, minimumWidth = 0, footer }) {
+  const badgeList = list(badges);
+  const footerText = renderBadges(...list(footer));
+  const title = fitTitle(renderBadges(...badgeList), getMaxLayoutWidth());
+  const { minimumHairline } = TUI_TOKENS.card;
+  if (!title)
+    return renderBox({ content, footerText, minimumWidth: Math.max(minimumWidth, visibleWidth(footerText) + minimumHairline) });
+  const badgeWidth = visibleWidth(title);
+  const box = prepareBox({
+    content,
+    footerText,
+    minimumWidth: Math.max(minimumWidth, badgeWidth + minimumHairline, visibleWidth(footerText) + minimumHairline)
+  });
+  const ruleLength = Math.max(0, box.width - badgeWidth);
+  const ruleBadge = badgeList.find((item) => isBadge(item));
+  const rule2 = ruleBadge ? badgeRule(ruleBadge, ruleLength) : paint256.fg(TUI_TOKENS.card.ruleFallback)(EDGE_TOP.repeat(ruleLength));
+  return ["", title + rule2, ...box.lines, ""].join("\n");
+}
+function renderPathCard({ path: path9, content, details = null, badges = [], picture = false }) {
+  return renderCard({
+    badges: [badge({ label: displayPath(path9), color: "cyan", icon: "\u25A4" }), ...badges],
+    footer: details ? badge({ label: details, color: "gray", icon: "\u29D6" }) : void 0,
+    content: [{ content, keepBackground: picture }]
+  });
+}
+
+// src/tui/section.ts
+function section(badges, lines = []) {
+  const body = lines.filter((line) => Boolean(line));
+  return renderBadges(...Array.isArray(badges) ? badges : [badges]) + (body.length ? "\n\n" + body.join("\n") : "");
+}
+function stack(items) {
+  return items.filter((item) => Boolean(item)).map((item) => item.replace(/^\n+|\n+$/g, "")).join("\n\n");
+}
+var durationLine = (durationMs) => durationMs == null ? null : ink.dim(`\u0394 ${durationMs}ms`);
+function prose(text, limit = Infinity, indent = 0) {
+  const capped = text.length > limit ? text.slice(0, limit) + "..." : text;
+  return wrapText(capped, getMaxContentWidth() - indent);
+}
+var RULER_RE = /^(-{3,}|={3,}|─{3,}|═{3,})(.*)$/;
+function renderRuler(line) {
+  const match = RULER_RE.exec(stripAnsi(line).trim());
+  if (!match)
+    return null;
+  const character = "=\u2550".includes(match[1][0]) ? "\u2550" : "\u2500";
+  const text = match[2].replace(/[-=─═]{3,}\s*$/, "").trim();
+  if (!text)
+    return ink.dim(character.repeat(TUI_TOKENS.width.divider));
+  const label = ` ${text} `;
+  const remaining = Math.max(6, TUI_TOKENS.width.divider - label.length);
+  const left = Math.floor(remaining / 2);
+  return ink.dim(character.repeat(left)) + ink.strong(label) + ink.dim(character.repeat(remaining - left));
+}
+function splitRulerSections(text) {
+  const sections = [];
+  for (const line of String(text).split("\n")) {
+    const isRuler = renderRuler(line) !== null;
+    const current = sections.at(-1);
+    if (isRuler || !current)
+      sections.push({ content: line, beginsWithRuler: isRuler });
+    else
+      current.content += "\n" + line;
+  }
+  return sections;
+}
+
+// src/tui/table.ts
+var cellText = (cell) => cell == null ? "" : String(cell);
+function columnWidths(grid, columns, maxWidth, minWidth) {
+  const widths = Array.from({ length: columns }, (_, column) => Math.max(1, ...grid.map((row) => Math.max(0, ...(row[column] ?? "").split("\n").map(visibleWidth)))));
+  const frame = columns * 3 + 1;
+  let total = widths.reduce((sum, width) => sum + width, 0) + frame;
+  while (total > maxWidth) {
+    const widest = widths.indexOf(Math.max(...widths));
+    if (widths[widest] <= minWidth)
+      break;
+    widths[widest] = widths[widest] - 1;
+    total -= 1;
+  }
+  return widths;
+}
+var pad = (text, width) => text + " ".repeat(Math.max(0, width - visibleWidth(text)));
+function renderRow(cells, widths) {
+  const wrapped = widths.map((width, column) => (cells[column] ?? "").split("\n").flatMap((line) => wrapAnsi(line, width)));
+  const height = Math.max(1, ...wrapped.map((lines) => lines.length));
+  return Array.from({ length: height }, (_, line) => ink.punct("\u2502") + widths.map((width, column) => " " + pad(wrapped[column][line] ?? "", width) + " ").join(ink.punct("\u2502")) + ink.punct("\u2502"));
+}
+var rule = (widths, left, mid, right) => ink.punct(left + widths.map((width) => "\u2500".repeat(width + 2)).join(mid) + right);
+function renderTable({ head, rows, maxWidth = getMaxContentWidth(), minColumnWidth = 4 }) {
+  const body = rows.map((row) => row.map(cellText));
+  const header = head?.map((cell) => ink.strong(cellText(cell)));
+  const columns = Math.max(header?.length ?? 0, ...body.map((row) => row.length));
+  if (columns === 0)
+    return "";
+  const widths = columnWidths([...header ? [header] : [], ...body], columns, maxWidth, minColumnWidth);
+  const lines = [rule(widths, "\u250C", "\u252C", "\u2510")];
+  if (header)
+    lines.push(...renderRow(header, widths), rule(widths, "\u251C", "\u253C", "\u2524"));
+  for (const row of body)
+    lines.push(...renderRow(row, widths));
+  lines.push(rule(widths, "\u2514", "\u2534", "\u2518"));
+  return lines.join("\n");
+}
+function metadataTable(value, maxWidth) {
+  const entries = value && typeof value === "object" ? Object.entries(value) : [];
+  if (!entries.length)
+    return formatValue(value);
+  return renderTable({
+    head: ["key", "value"],
+    rows: entries.map(([key, item]) => [ink.key(key), formatValue(item)]),
+    maxWidth
+  });
+}
+
+// packages/ansi-headings/src/primitives.ts
+source_default.level = 3;
+
+// packages/ansi-headings/src/phrase.ts
+source_default.level = 3;
+
+// packages/ansi-headings/src/glyphs.json
+var glyphs_default = {
+  " ": [
+    "    ",
+    "    ",
+    "    "
+  ],
+  A: [
+    " \u2584\u2580\u2584",
+    " \u2588\u2580\u2588",
+    " \u2580 \u2580"
+  ],
+  B: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  C: [
+    " \u2584\u2580\u2580",
+    " \u2588  ",
+    " \u2580\u2580\u2580"
+  ],
+  D: [
+    " \u2588\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2580 "
+  ],
+  E: [
+    " \u2588\u2580\u2580",
+    " \u2588\u2580 ",
+    " \u2580\u2580\u2580"
+  ],
+  F: [
+    " \u2588\u2580\u2580",
+    " \u2588\u2580 ",
+    " \u2580  "
+  ],
+  G: [
+    " \u2584\u2580\u2580",
+    " \u2588 \u2584",
+    " \u2580\u2580\u2580"
+  ],
+  H: [
+    " \u2588 \u2588",
+    " \u2588\u2580\u2588",
+    " \u2580 \u2580"
+  ],
+  I: [
+    " \u2588",
+    " \u2588",
+    " \u2580"
+  ],
+  J: [
+    "   \u2588",
+    " \u2584 \u2588",
+    " \u2580\u2580 "
+  ],
+  K: [
+    " \u2588 \u2588",
+    " \u2588\u2580\u2584",
+    " \u2580 \u2580"
+  ],
+  L: [
+    " \u2588  ",
+    " \u2588  ",
+    " \u2580\u2580\u2580"
+  ],
+  M: [
+    " \u2588\u2588\u2584\u2588\u2584",
+    " \u2588 \u2588 \u2588",
+    " \u2580 \u2580 \u2580"
+  ],
+  N: [
+    " \u2588\u2584 \u2588",
+    " \u2588 \u2580\u2588",
+    " \u2580  \u2580"
+  ],
+  O: [
+    " \u2588\u2580\u2588",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2580"
+  ],
+  P: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580 ",
+    " \u2580  "
+  ],
+  Q: [
+    " \u2584\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2584"
+  ],
+  R: [
+    " \u2588\u2580\u2584",
+    " \u2588\u2580\u2584",
+    " \u2580 \u2580"
+  ],
+  S: [
+    " \u2584\u2580\u2580",
+    "  \u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  T: [
+    " \u2580\u2588\u2580",
+    "  \u2588 ",
+    "  \u2580 "
+  ],
+  U: [
+    " \u2588 \u2588",
+    " \u2588 \u2588",
+    " \u2580\u2580\u2580"
+  ],
+  V: [
+    " \u2588 \u2588",
+    " \u2588 \u2588",
+    "  \u2580 "
+  ],
+  W: [
+    " \u2588 \u2588 \u2588",
+    " \u2588 \u2588 \u2588",
+    "  \u2580 \u2580 "
+  ],
+  X: [
+    " \u2588\u2584\u2588",
+    " \u2584\u2588\u2584",
+    " \u2580 \u2580"
+  ],
+  Y: [
+    " \u2588 \u2588",
+    "  \u2588 ",
+    "  \u2580 "
+  ],
+  Z: [
+    " \u2580\u2580\u2588",
+    " \u2584\u2584 ",
+    " \u2580\u2580\u2580"
+  ],
+  "0": [
+    " \u2584\u2580\u2584",
+    " \u2588 \u2588",
+    " \u2580\u2584\u2580"
+  ],
+  "1": [
+    " \u2588 ",
+    " \u2588 ",
+    " \u2580 "
+  ],
+  "2": [
+    " \u2584\u2580\u2584",
+    "  \u2584\u2580",
+    " \u2580\u2580\u2580"
+  ],
+  "3": [
+    " \u2580\u2580\u2584",
+    "  \u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "4": [
+    " \u2588 \u2588",
+    " \u2580\u2580\u2588",
+    "   \u2580"
+  ],
+  "5": [
+    " \u2588\u2580\u2580",
+    " \u2580\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "6": [
+    " \u2584\u2580\u2580",
+    " \u2588\u2580\u2584",
+    " \u2580\u2580 "
+  ],
+  "7": [
+    " \u2580\u2580\u2588",
+    "  \u2584\u2580",
+    "  \u2588 "
+  ],
+  "8": [
+    " \u2584\u2580\u2584",
+    " \u2584\u2580\u2584",
+    "  \u2580 "
+  ],
+  "9": [
+    " \u2584\u2580\u2584",
+    "  \u2580\u2588",
+    "  \u2580 "
+  ],
+  "!": [
+    " \u2588 ",
+    " \u2580 ",
+    " \u2580 "
+  ],
+  "?": [
+    " \u2580\u2580\u2584",
+    "  \u2584\u2580",
+    "  \u2580 "
+  ],
+  ".": [
+    "   ",
+    "   ",
+    " \u2580 "
+  ],
+  ",": [
+    "    ",
+    "    ",
+    " \u2580\u2588 "
+  ],
+  ":": [
+    " \u2584 ",
+    "   ",
+    " \u2580 "
+  ],
+  ";": [
+    " \u2584\u2584 ",
+    "    ",
+    " \u2580\u2588 "
+  ],
+  "-": [
+    "     ",
+    " \u2584\u2584\u2584 ",
+    "     "
+  ],
+  _: [
+    "     ",
+    "     ",
+    " \u2580\u2580\u2580 "
+  ],
+  "/": [
+    "   \u2588 ",
+    "  \u2588  ",
+    " \u2580   "
+  ]
+};
+
+// packages/ansi-headings/src/headings.ts
+source_default.level = 3;
+var glyphs = glyphs_default;
+function renderGlyphRows(text, color) {
+  const chars = text.toUpperCase().split("");
+  const rows = ["  ", "  ", "  "];
+  for (const ch of chars) {
+    const glyph = glyphs[ch] ?? glyphs[" "];
+    rows[0] += glyph[0];
+    rows[1] += glyph[1];
+    rows[2] += glyph[2];
+  }
+  const colorize = source_default[color] ?? source_default.cyan;
+  return [colorize(rows[0]), colorize(rows[1]), colorize(rows[2])];
+}
+function renderHeading({ word, color = "cyan", event: event2, tone, width = 60, caption }) {
+  const glyphRows = renderGlyphRows(word, color);
+  const gutter = 2;
+  const composed = glyphRows.map((g, i) => g + " ".repeat(gutter)).join("\n");
+  return "\n" + composed;
+}
+var EMPTY_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588   \u2588", " \u2588\u2584\u2584\u2584\u2588"];
+var CHECKED_CHECKBOX_ROWS = [" \u2588\u2580\u2580\u2580\u2588", " \u2588\u2584 \u2588\u2588", " \u2588\u2584\u2588\u2584\u2588"];
+function wrapDescription(description, width) {
+  const lines = [];
+  for (const sourceLine of description.trim().split(/\r?\n/)) {
+    const words = sourceLine.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (Array.from(next).length <= width || !line) line = next;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+function renderCheckboxHeading(value, legacyColor = "green") {
+  const args = typeof value === "string" ? { caption: value, checked: true, color: legacyColor } : value;
+  const color = args.color ?? "green";
+  const colorize = source_default[color] ?? source_default.green;
+  const rows = (args.checked ? CHECKED_CHECKBOX_ROWS : EMPTY_CHECKBOX_ROWS).map((r) => colorize(r));
+  const gutter = 2;
+  const textIndent = Array.from(EMPTY_CHECKBOX_ROWS[0]).length + gutter;
+  const descriptionWidth = Math.max(20, (args.width ?? 60) - textIndent);
+  const description = args.description?.trim() ? wrapDescription(args.description, descriptionWidth) : [];
+  const slots = [
+    source_default.bold(colorize(args.caption)),
+    description[0] ? source_default.gray(description[0]) : "",
+    description[1] ? source_default.gray(description[1]) : ""
+  ];
+  const composed = rows.map((r, i) => r + " ".repeat(gutter) + slots[i]);
+  for (const line of description.slice(2)) {
+    composed.push(" ".repeat(textIndent) + source_default.gray(line));
+  }
+  return "\n" + composed.join("\n");
+}
+
+// src/render/file-card.ts
+var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".png", ".jpg", ".jpeg", ".webp"]);
+var extensionOf = (filePath) => path3.extname(String(filePath ?? "")).toLowerCase();
+var isImagePath = (filePath) => IMAGE_EXTENSIONS.has(extensionOf(filePath));
 var LINE_RANGE_RE = /:(\d+)(?:-(\d+)?)?$/;
 function stripLineRange(rawPath) {
-  const text2 = String(rawPath);
-  const match = LINE_RANGE_RE.exec(text2);
+  const text = String(rawPath);
+  const match = LINE_RANGE_RE.exec(text);
   if (!match)
-    return { path: text2, range: null };
+    return { path: text, range: null };
   return {
-    path: text2.slice(0, match.index),
+    path: text.slice(0, match.index),
     range: { start: Number(match[1]), end: match[2] ? Number(match[2]) : null }
   };
 }
-function formatRange({ start, end }) {
-  return end == null ? `line ${start}+` : `lines ${start}-${end}`;
-}
+var formatRange = ({ start, end }) => end == null ? `line ${start}+` : `lines ${start}-${end}`;
 function sliceToRange(content, { start, end }) {
   const lines = content.split("\n");
   return lines.slice(Math.max(0, start - 1), end ?? lines.length).join("\n");
 }
-function growImageCard(card, reRender, fitted, budget) {
-  let best = fitted;
-  let cost = charCost(best);
-  let aim = budget;
-  for (let attempt = 0; attempt < GROWTH_ATTEMPTS && cost < budget * GROWTH_THRESHOLD; attempt++) {
-    aim = Math.floor(aim * (budget / cost));
-    const art = reRender(aim);
-    if (!art)
-      break;
-    const candidate = card(art);
-    const candidateCost = charCost(candidate);
-    if (candidateCost > budget || candidateCost <= cost)
-      break;
-    best = candidate;
-    cost = candidateCost;
+function readFile(filePath) {
+  try {
+    return fs4.readFileSync(filePath);
+  } catch {
+    return null;
   }
-  return best;
 }
-function renderFittedFileCard(path8, content, kind, details, budget, reRender) {
-  const card = (body) => renderFileCard({ path: path8, content: body, details });
-  if (kind === "image" && reRender) {
-    let smallest = card(content);
-    if (charCost(smallest) <= budget)
-      return growImageCard(card, reRender, smallest, budget);
-    for (const share of BUDGET_LADDER) {
-      const art = reRender(Math.floor(budget * share));
-      if (!art)
-        continue;
-      const candidate = card(art);
-      if (charCost(candidate) <= budget)
-        return candidate;
-      if (charCost(candidate) < charCost(smallest))
-        smallest = candidate;
-    }
-    return charCost(smallest) <= budget ? smallest : card(NO_ROOM);
+var CARD_CHROME = 300;
+var CARD_PER_ROW = 34;
+var imageBudget = (chars) => ({ total: Math.max(600, chars), overhead: CARD_CHROME, perRow: CARD_PER_ROW });
+var NO_ROOM = ink.note("\u2026 image preview omitted \u2014 no room left in this message \u2026");
+function drawImage(data, ext, chars) {
+  try {
+    return imageToAscii(data, ext, { maxWidth: getMaxContentWidth(), budget: imageBudget(chars) });
+  } catch {
+    return null;
   }
-  const full = card(collapsePreview(content));
-  if (charCost(full) <= budget)
-    return full;
-  const total = content.split("\n").length;
-  let low = 0;
-  let high = total;
-  let best = card(collapsePreview(content, { maxLines: 0 }));
-  while (low <= high) {
-    const retained = Math.floor((low + high) / 2);
-    const candidate = card(collapsePreview(content, { maxLines: retained }));
-    if (charCost(candidate) <= budget) {
-      best = candidate;
-      low = retained + 1;
-    } else
-      high = retained - 1;
-  }
-  return best;
 }
-function renderFileResult(rawPath, options = {}) {
-  const { action, range: rangeOverride, budgetChars, ...previewOptions } = options;
+var imageBody = (data, ext) => (limit) => drawImage(data, ext, limit.chars) ?? NO_ROOM;
+function fileBody(filePath, options) {
+  const ext = extensionOf(filePath);
+  if (isImagePath(filePath)) {
+    const data = readFile(filePath);
+    if (data && drawImage(data, ext, 4e3))
+      return { kind: "image", draw: imageBody(data, ext) };
+  }
+  const raw = options.readText === false ? null : readFile(filePath)?.toString("utf8") ?? null;
+  const text = raw ?? options.fallbackText;
+  if (text == null)
+    return null;
+  const shaped = renderText(options.transform ? options.transform(text) : text, filePath);
+  const body = options.range ? sliceToRange(shaped, options.range) : shaped;
+  return { kind: "text", draw: (limit) => collapse(body, limit.lines) };
+}
+function fileCard(rawPath, options = {}) {
   const { path: filePath, range: pathRange } = stripLineRange(rawPath);
-  const range = rangeOverride ?? pathRange;
-  const cardBudget = budgetChars ?? previewBudgetChars();
-  const preview = renderFilePreview(filePath, { ...previewOptions, budgetChars: cardBudget });
-  if (!preview)
+  const range = options.range ?? pathRange;
+  const body = fileBody(filePath, { ...options, range });
+  if (!body)
     return null;
-  const body = range && preview.kind === "text" ? sliceToRange(preview.content, range) : preview.content;
-  const details = [action, range ? formatRange(range) : null].filter(Boolean).join("  ");
-  return renderFittedFileCard(
-    filePath,
-    body,
-    preview.kind,
-    details || null,
-    cardBudget,
-    preview.kind === "image" ? (bytes) => renderFilePreview(filePath, { ...previewOptions, budgetChars: bytes })?.content ?? null : void 0
-  );
+  const details = [options.action, range && body.kind === "text" ? formatRange(range) : null].filter(Boolean).join("  ") || null;
+  return (limit) => renderPathCard({
+    path: filePath,
+    content: body.draw(limit),
+    details,
+    badges: options.badges,
+    picture: body.kind === "image"
+  });
 }
-function collapsePreview(content, options = {}) {
-  return softCollapse(content, { label: "lines", ...options });
-}
-function renderInlineImageResult(data, ext, label, options = {}) {
-  const cardBudget = options.budgetChars ?? previewBudgetChars();
-  const maxWidth = getMaxContentWidth();
-  const render = (budgetChars) => {
-    try {
-      return imageToAscii(data, ext, { maxWidth, budget: imageBudget(budgetChars) }) ?? null;
-    } catch {
-      return null;
-    }
-  };
-  const art = render(cardBudget);
-  if (!art)
+function inlineImageCard(data, ext, label, action = null) {
+  if (!drawImage(data, ext, 4e3))
     return null;
-  return renderFittedFileCard(label, art, "image", options.action ?? null, cardBudget, render);
+  const draw = imageBody(data, ext);
+  return (limit) => renderPathCard({ path: label, content: draw(limit), details: action, picture: true });
 }
-
-// src/render/screenshot.ts
 var QUOTED_CANDIDATE_RE = /["']([^"'\n]+\.(?:png|jpe?g|webp))["']/gi;
 var CANDIDATE_RE = /[^\s"'`,;<>|()[\]{}]+\.(?:png|jpe?g|webp)/gi;
 var TRAILING_PUNCTUATION = /[.,;:!?)\]}'"`]+$/;
 function isReadableFile(candidate) {
   try {
-    return fs5.statSync(candidate).isFile();
+    return fs4.statSync(candidate).isFile();
   } catch {
     return false;
   }
 }
-function findImagePath(text2, cwd = process.cwd()) {
-  if (!text2)
+function findImagePath(text, cwd = process.cwd()) {
+  if (!text)
     return null;
-  const source = String(text2);
+  const source = String(text);
   const candidates = [
     ...Array.from(source.matchAll(QUOTED_CANDIDATE_RE), (match) => match[1]),
     ...Array.from(source.matchAll(CANDIDATE_RE), (match) => match[0])
   ];
-  for (const rawCandidate of candidates) {
-    const candidate = rawCandidate.replace(TRAILING_PUNCTUATION, "");
-    if (!isImageExtension(extensionFromPath(candidate)))
+  for (const raw of candidates) {
+    const candidate = raw.replace(TRAILING_PUNCTUATION, "");
+    if (!isImagePath(candidate))
       continue;
     const resolved = path3.isAbsolute(candidate) ? candidate : path3.resolve(cwd, candidate);
     if (isReadableFile(resolved))
@@ -8192,1185 +8015,47 @@ function findImagePath(text2, cwd = process.cwd()) {
   }
   return null;
 }
-var MIME_EXTENSIONS = {
-  png: ".png",
-  jpeg: ".jpg",
-  jpg: ".jpg",
-  webp: ".webp"
-};
-function imageBlock(value) {
-  if (!value || typeof value !== "object")
+var MIME_EXTENSIONS = { png: ".png", jpeg: ".jpg", jpg: ".jpg", webp: ".webp" };
+function inlineImageOf(value) {
+  const block = asRecord(value);
+  if (!block || block.type !== "image" && block.type !== "input_image")
     return null;
-  const block = value;
-  if (block.type !== "image" && block.type !== "input_image")
-    return null;
-  return block;
-}
-function encodedInlineImage(block) {
   const dataUrl = typeof block.image_url === "string" ? /^data:image\/([^;,]+);base64,(.+)$/s.exec(block.image_url) : null;
-  const encoded = typeof block.data === "string" ? block.data : dataUrl?.[2];
+  const encoded = pickString(block, "data") ?? dataUrl?.[2];
   if (!encoded)
     return null;
   const subtype = String(block.mimeType ?? `image/${dataUrl?.[1] ?? "png"}`).split("/")[1]?.toLowerCase() ?? "png";
-  return { encoded, subtype };
-}
-function decodeInlineImage({ encoded, subtype }) {
   const ext = MIME_EXTENSIONS[subtype];
-  if (!ext)
-    return null;
-  try {
-    return { data: Buffer.from(encoded, "base64"), ext };
-  } catch {
-    return null;
-  }
-}
-function inlineImageFrom(value) {
-  const block = imageBlock(value);
-  if (!block)
-    return null;
-  const encoded = encodedInlineImage(block);
-  return encoded ? decodeInlineImage(encoded) : null;
+  return ext ? { data: Buffer.from(encoded, "base64"), ext } : null;
 }
 function findInlineImage(result) {
-  if (!result || typeof result !== "object")
-    return null;
-  const direct = inlineImageFrom(result);
+  const direct = inlineImageOf(result);
   if (direct)
     return direct;
-  const content = result.content;
-  if (!Array.isArray(content))
-    return null;
-  for (const block of content) {
-    const image = inlineImageFrom(block);
-    if (image)
-      return image;
-  }
-  return null;
+  const content = asRecord(result)?.content;
+  return Array.isArray(content) ? content.map(inlineImageOf).find(Boolean) ?? null : null;
 }
-function renderScreenshot(result, text2, action = "screenshot") {
-  const file = findImagePath(text2);
+function screenshotCard(result, text, action = "screenshot") {
+  const file = findImagePath(text);
   if (file)
-    return renderFileResult(file, { action });
+    return fileCard(file, { action });
   const inline = findInlineImage(result);
-  if (inline)
-    return renderInlineImageResult(inline.data, inline.ext, `screenshot${inline.ext}`, { action });
-  return null;
+  return inline ? inlineImageCard(inline.data, inline.ext, `screenshot${inline.ext}`, action) : null;
 }
 
-// src/tools/bash.ts
-source_default.level = 3;
-function pushCommandRow(state, sep) {
-  state.rows.push({ text: state.current.replace(/^\s+|\s+$/g, ""), sep });
-  state.current = "";
-}
-function appendHeredocLine(state, line) {
-  if (state.heredoc === null)
-    return false;
-  state.current += (state.current ? "\n" : "") + line;
-  if (line.trim() === state.heredoc)
-    state.heredoc = null;
-  return true;
-}
-function consumeQuotedCharacter(state, line, index) {
-  if (!state.quote)
-    return null;
-  const character = line[index];
-  state.current += character;
-  if (state.quote === '"' && character === "\\" && index + 1 < line.length) {
-    state.current += line[index + 1];
-    return index + 1;
-  }
-  if (character === state.quote)
-    state.quote = null;
-  return index;
-}
-function consumeCommandSyntax(state, line, index) {
-  const character = line[index];
-  if (character === '"' || character === "'") {
-    state.quote = character;
-    state.current += character;
-    return index;
-  }
-  const here = line.slice(index).match(/^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-  if (here) {
-    state.current += here[0];
-    state.heredoc = here[2];
-    return index + here[0].length - 1;
-  }
-  if (character === ";") {
-    pushCommandRow(state, ";");
-    return index;
-  }
-  if ((character === "&" || character === "|") && line[index + 1] === character) {
-    pushCommandRow(state, character + character);
-    return index + 1;
-  }
-  return null;
-}
-function consumeCommandLine(state, line, lineIndex) {
-  if (appendHeredocLine(state, line))
-    return;
-  if (lineIndex > 0)
-    state.current += "\n";
-  for (let index = 0; index < line.length; index++) {
-    const quotedAt = consumeQuotedCharacter(state, line, index);
-    if (quotedAt !== null) {
-      index = quotedAt;
-      continue;
-    }
-    const syntaxAt = consumeCommandSyntax(state, line, index);
-    if (syntaxAt !== null) {
-      index = syntaxAt;
-      continue;
-    }
-    state.current += line[index];
-  }
-}
-function splitCommandRows(cmd) {
-  const state = { rows: [], current: "", quote: null, heredoc: null };
-  cmd.split("\n").forEach((line, index) => consumeCommandLine(state, line, index));
-  pushCommandRow(state, "");
-  return state.rows.filter((row) => row.text.length > 0);
-}
-function commandOf(input) {
-  const raw = input.command ?? input.action_json;
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
-}
-function renderCommand(cmd) {
-  return splitCommandRows(cmd).map(({ text: text2, sep }, i) => {
-    const body = simpleHighlight(text2, "bash") + (sep ? " " + source_default.gray(sep) : "");
-    return i === 0 ? source_default.gray("$ ") + body : body;
-  }).join("\n");
-}
-function metadataBadges(status, cwd, extra) {
-  const badges = [];
-  if (status !== null) {
-    const ok = /^(?:0|process exited|completed|success)$/i.test(status.trim());
-    badges.push(new Badge({ label: `exit ${status}`, color: ok ? "brightGreen" : "brightRed", icon: ok ? "\u2713" : "\u2A02" }));
-  }
-  if (cwd)
-    badges.push(new Badge({ label: shortenPath(cwd), color: "brightBlue", icon: "\u2302" }));
-  for (const [key, value] of Object.entries(extra))
-    badges.push(new Badge({ label: `${key} ${value}`, color: "brightCyan" }));
-  return badges;
-}
-function renderOutputSection(text2, language) {
-  const highlighted = simpleHighlight(language === "json" ? formatJSON(text2) : text2, language);
-  return softCollapse(
-    language === "diff" ? highlighted : highlighted.split("\n").map((line) => renderRuler(line) ?? line).join("\n")
-  );
-}
-function outputSections(stdout, language) {
-  if (!stdout.trim())
-    return [];
-  return language === "diff" ? [{ content: stdout, beginsWithRuler: false }] : splitRulerSections(stdout);
-}
-function attachFooter(specs, footer) {
-  if (!footer.length)
-    return;
-  if (specs.length)
-    specs.at(-1).footer = footer;
-  else
-    specs.push({ badges: OUTPUT_BADGE, content: "", footer });
-}
-function screenshotSpecs(cmd, footer) {
-  const specs = [];
-  if (cmd)
-    specs.push({ badges: RUNNING_BADGE, content: renderCommand(cmd) });
-  attachFooter(specs, footer);
-  return specs;
-}
-function outputSpecs(cmd, sections, language, footer) {
-  const specs = [];
-  let nextSection = 0;
-  if (cmd) {
-    const regions = [{
-      content: renderCommand(cmd),
-      background: TUI_TOKENS.card.commandBackground
-    }];
-    const first = sections[0];
-    if (first && !first.beginsWithRuler) {
-      regions[0].trailingBlank = true;
-      regions.push({ heading: OUTPUT_BADGE, content: renderOutputSection(first.content, language) });
-      nextSection = 1;
-    }
-    specs.push({ badges: RUNNING_BADGE, content: regions });
-  }
-  for (const section of sections.slice(nextSection))
-    specs.push({ badges: OUTPUT_BADGE, content: renderOutputSection(section.content, language) });
-  attachFooter(specs, footer);
-  return specs;
-}
-function renderBashCards(cmd, stdout, footer, screenshot) {
-  if (screenshot)
-    return [...screenshotSpecs(cmd, footer).map(renderCard), screenshot];
-  const language = detectOutputLanguage(stdout);
-  return outputSpecs(cmd, outputSections(stdout, language), language, footer).map(renderCard);
-}
-defineTool({
-  matches: ["Bash", "mcp__wcgw__BashCommand"],
-  post(_input, result, durationMs) {
-    const raw = extractResultText(result) ?? "";
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const cmd = commandOf(_input);
-    const { stdout, status, cwd, extra } = parseWcgwTrailer(raw);
-    const footer = metadataBadges(status, cwd, extra);
-    const operations = cmd ? agentBrowserOperations(splitCommandRows(cmd).map((row) => row.text)) : [];
-    const shot = operations.length ? renderScreenshot(result, stdout) : null;
-    const cards = renderBashCards(cmd, stdout, footer, shot);
-    if (cards.length)
-      lines.push(renderColumns({ items: cards }));
-    return { lines, extraBadges: operationBadges(operations) };
-  }
-});
-
-// src/tools/read.ts
-defineTool({
-  matches: "Read",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const filePath = input.file_path;
-    const fallbackText = extractResultText(result);
-    const rendered = filePath ? renderFileResult(filePath, { action: "read", fallbackText }) : fallbackText ? renderTextPreview(fallbackText) : null;
-    if (rendered)
-      lines.push(rendered);
-    return { lines };
-  }
-});
-
-// src/tools/edit.ts
-source_default.level = 3;
-var CONTEXT_LINES = 3;
-function editedSpan(result) {
-  const hunks = result?.structuredPatch;
-  if (!Array.isArray(hunks) || !hunks.length)
-    return null;
-  let start = Infinity;
-  let end = 0;
-  for (const hunk of hunks) {
-    const at = Number(hunk?.newStart);
-    if (!Number.isFinite(at))
-      continue;
-    const span = Number.isFinite(Number(hunk?.newLines)) ? Number(hunk.newLines) : 1;
-    start = Math.min(start, at);
-    end = Math.max(end, at + Math.max(span, 1) - 1);
-  }
-  if (!Number.isFinite(start) || end < start)
-    return null;
-  return { start: Math.max(1, start - CONTEXT_LINES), end: end + CONTEXT_LINES };
-}
-defineTool({
-  matches: ["Edit", "MultiEdit"],
-  post(input, result, durationMs, ctx) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const filePath = input.file_path ?? result?.filePath;
-    const box = filePath ? renderFileResult(filePath, {
-      action: ctx.toolName === "MultiEdit" ? "multi-edit" : "edit",
-      range: editedSpan(result)
-    }) : null;
-    if (box)
-      lines.push(box);
-    else {
-      const text2 = pickResultText(result);
-      if (text2)
-        lines.push(source_default.green("\u2713 ") + firstLine(text2, 120));
-    }
-    return { lines };
-  }
-});
-
-// src/tools/apply-patch.ts
-var SUCCESS_RESULT = /(?:^done!?$|success\.\s+updated the following files:|success\.\s+(?:added|deleted) the following files:)/im;
-defineTool({
-  matches: ["apply_patch", "ApplyPatch"],
-  post(_input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const text2 = extractResultText(result)?.trim() ?? "";
-    if (text2 && !SUCCESS_RESULT.test(text2)) {
-      const language = detectOutputLanguage(text2);
-      lines.push(renderCard({
-        badges: OUTPUT_BADGE,
-        content: softCollapse(simpleHighlight(text2, language))
-      }));
-    }
-    return { lines };
-  }
-});
-
-// src/tools/ask-user-question.ts
-function structuredAnswers(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    return [];
-  const answers = result.answers;
-  if (!answers || typeof answers !== "object" || Array.isArray(answers))
-    return [];
-  return Object.entries(answers).map(([question, value]) => ({
-    question,
-    answer: Array.isArray(value) ? value.map(String).join(", ") : String(value)
-  }));
-}
-function nativeAnswers(input, result) {
-  const text2 = extractResultText(result) ?? "";
-  return (input.questions ?? []).flatMap(({ question }) => {
-    if (!question)
-      return [];
-    const marker = `"${question}"="`;
-    const start = text2.indexOf(marker);
-    if (start < 0)
-      return [];
-    const valueStart = start + marker.length;
-    const end = text2.indexOf('"', valueStart);
-    return [{ question, answer: text2.slice(valueStart, end < 0 ? void 0 : end) }];
-  });
-}
-defineTool({
-  matches: "AskUserQuestion",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const answers = structuredAnswers(result);
-    if (!answers.length)
-      answers.push(...nativeAnswers(input, result));
-    if (!answers.length)
-      lines.push(source_default.green("\u2713 Answers recorded"));
-    for (const { question, answer } of answers) {
-      lines.push(source_default.gray("\xB7 ") + wrapText(question, getMaxContentWidth() - 2));
-      lines.push(source_default.green("\u2192 ") + wrapText(answer, getMaxContentWidth() - 2));
-    }
-    return {
-      lines,
-      extraBadges: [new Badge({
-        label: `${answers.length || (input.questions?.length ?? 0)} answer${answers.length === 1 ? "" : "s"}`,
-        color: "brightGreen",
-        icon: "\u2713"
-      })]
-    };
-  }
-});
-
-// src/tools/plan-update.ts
-function record(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function resultRecord(result) {
-  const direct = record(result);
-  if (direct)
-    return direct;
-  const text2 = extractResultText(result)?.trim();
-  if (!text2?.startsWith("{"))
-    return null;
-  try {
-    return record(JSON.parse(text2));
-  } catch {
-    return null;
-  }
-}
-function itemsFrom(value) {
-  if (!Array.isArray(value))
-    return [];
-  return value.flatMap((item) => {
-    const data = record(item);
-    const text2 = data?.step ?? data?.content ?? data?.activeForm;
-    if (typeof text2 !== "string" || !text2.trim())
-      return [];
-    return [{
-      text: text2.trim(),
-      status: String(data?.status ?? "pending").toLowerCase().replace(/-/g, "_")
-    }];
-  });
-}
-function appearance(status) {
-  if (status === "completed")
-    return { glyph: "\u2713", paint: source_default.green };
-  if (status === "in_progress")
-    return { glyph: "\u25B6", paint: source_default.yellow };
-  if (status === "blocked")
-    return { glyph: "\xD7", paint: source_default.red };
-  return { glyph: "\u25CB", paint: source_default.cyan };
-}
-defineTool({
-  matches: ["update_plan", "UpdatePlan", "TodoWrite", "TodoRead"],
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const resolved = resultRecord(result);
-    const inputItems = itemsFrom(input.plan ?? input.todos);
-    const plan = inputItems.length ? inputItems : itemsFrom(resolved?.plan ?? resolved?.todos);
-    const explanation = input.explanation ?? (typeof resolved?.explanation === "string" ? resolved.explanation : null);
-    if (explanation)
-      lines.push(source_default.gray(wrapText(explanation, getMaxContentWidth())));
-    for (const item of plan) {
-      const { glyph, paint } = appearance(item.status);
-      lines.push(paint(`${glyph} `) + wrapText(item.text, getMaxContentWidth() - 2));
-    }
-    if (!plan.length)
-      lines.push(source_default.gray("Plan updated"));
-    const completed = plan.filter((item) => item.status === "completed").length;
-    return {
-      lines,
-      extraBadges: plan.length ? [new Badge({
-        label: `${completed}/${plan.length} complete`,
-        color: completed === plan.length ? "brightGreen" : "brightYellow"
-      })] : []
-    };
-  }
-});
-
-// src/tools/tool-search.ts
-function record2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function parsedResult(result) {
-  if (typeof result !== "string")
-    return result;
-  const text2 = extractResultText(result)?.trim() ?? "";
-  if (!text2.startsWith("{") && !text2.startsWith("["))
-    return result;
-  try {
-    return JSON.parse(text2);
-  } catch {
-    return result;
-  }
-}
-function namesFrom(result, query) {
-  const parsed = parsedResult(result);
-  const data = record2(parsed);
-  const candidates = Array.isArray(parsed) ? parsed : Array.isArray(data?.matches) ? data.matches : Array.isArray(data?.content) ? data.content : [];
-  const names = candidates.flatMap((candidate) => {
-    if (typeof candidate === "string")
-      return [candidate];
-    const item = record2(candidate);
-    const name = item?.tool_name ?? item?.toolName ?? item?.name;
-    return typeof name === "string" ? [name] : [];
-  });
-  const fallback = query.startsWith("select:") ? query.slice("select:".length).split(",").map((value) => value.trim()).filter(Boolean) : [];
-  const deferred = typeof data?.total_deferred_tools === "number" ? data.total_deferred_tools : null;
-  return { names: [...new Set(names.length ? names : fallback)], deferred };
-}
-defineTool({
-  matches: "ToolSearch",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const { names, deferred } = namesFrom(result, input.query ?? "");
-    for (const name of names)
-      lines.push(source_default.green("\u2713 ") + parseToolName(name).pretty);
-    if (!names.length)
-      lines.push(source_default.gray("No tools loaded"));
-    return {
-      lines,
-      extraBadges: [
-        new Badge({ label: `${names.length} loaded`, color: names.length ? "brightGreen" : "gray" }),
-        deferred == null ? null : new Badge({ label: `${deferred} deferred`, color: "gray" })
-      ].filter((badge) => badge !== null)
-    };
-  }
-});
-
-// src/tools/view-image.ts
-defineTool({
-  matches: ["view_image", "ViewImage"],
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const filePath = input.path ?? input.file_path;
-    const rendered = (filePath ? renderFileResult(filePath, { action: "view", readText: false }) : null) ?? renderScreenshot(result, extractResultText(result), "view");
-    if (rendered)
-      lines.push(rendered);
-    return { lines };
-  }
-});
-
-// src/tools/collaboration.ts
-var OPERATIONS = [
-  "spawn_agent",
-  "wait_agent",
-  "followup_task",
-  "send_message",
-  "interrupt_agent",
-  "list_agents"
-];
-function asRecord(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function operationOf(rawName) {
-  const normalized = rawName.replace(/^collaboration(?:__|[._-])?/i, "").toLowerCase();
-  return OPERATIONS.find((operation) => operation === normalized) ?? null;
-}
-function parsedResult2(result) {
-  const direct = asRecord(result);
-  if (direct)
-    return direct;
-  const text2 = extractResultText(result)?.trim();
-  if (!text2?.startsWith("{"))
-    return null;
-  try {
-    return asRecord(JSON.parse(text2));
-  } catch {
-    return null;
-  }
-}
-function stringField(record3, ...keys) {
-  for (const key of keys) {
-    const value = record3?.[key];
-    if (typeof value === "string" && value.trim())
-      return value.trim();
-  }
-  return null;
-}
-function targetOf(input, result) {
-  return stringField(result, "task_name", "agent_name", "target") ?? stringField(input, "task_name", "target", "agent_name");
-}
-function statusBadge(label, color = "gray") {
-  return label ? new Badge({ label: label.replace(/_/g, " "), color }) : null;
-}
-function spawnView(input, result) {
-  const target = targetOf(input, result) ?? "agent";
-  return {
-    lines: [source_default.green("\u2713 ") + `started ${target}`],
-    badges: [
-      statusBadge(stringField(input, "agent_type"), "green"),
-      statusBadge(stringField(input, "model"), "gray")
-    ].filter((badge) => badge !== null)
-  };
-}
-function waitView(result) {
-  const timedOut = result?.timed_out === true;
-  const message = stringField(result, "message") ?? (timedOut ? "No agents completed yet" : "Agent update received");
-  return {
-    lines: [timedOut ? source_default.gray(message) : source_default.green("\u2713 ") + message],
-    badges: [new Badge({ label: timedOut ? "timed out" : "update", color: timedOut ? "gray" : "green" })]
-  };
-}
-function interactionView(operation, input, result) {
-  const target = targetOf(input, result) ?? "agent";
-  if (operation === "interrupt_agent") {
-    const previous = stringField(result, "previous_status", "status");
-    return {
-      lines: [source_default.red("\u25A0 ") + `interrupted ${target}`],
-      badges: [statusBadge(previous, "gray")].filter((badge) => badge !== null)
-    };
-  }
-  return {
-    lines: [source_default.cyan("\u2192 ") + `${operation === "followup_task" ? "follow-up" : "message"} sent to ${target}`],
-    badges: []
-  };
-}
-function agentListView(result) {
-  const agents = Array.isArray(result?.agents) ? result.agents : [];
-  const lines = agents.flatMap((agent) => {
-    const data = asRecord(agent);
-    const name = stringField(data, "agent_name", "task_name", "name");
-    const status = stringField(data, "agent_status", "status");
-    return name ? [`${source_default.cyan("\xB7 ")}${name}${status ? source_default.gray(` \u2014 ${status.replace(/_/g, " ")}`) : ""}`] : [];
-  });
-  return {
-    lines: lines.length ? lines : [source_default.gray("No active agents")],
-    badges: [new Badge({ label: `${lines.length} agent${lines.length === 1 ? "" : "s"}`, color: lines.length ? "blue" : "gray" })]
-  };
-}
-function collaborationView(operation, input, result) {
-  if (operation === "spawn_agent")
-    return spawnView(input, result);
-  if (operation === "wait_agent")
-    return waitView(result);
-  if (operation === "list_agents")
-    return agentListView(result);
-  return interactionView(operation, input, result);
-}
-defineTool({
-  matches: (rawName) => operationOf(rawName) !== null,
-  post(input, result, durationMs, context) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const operation = operationOf(context.toolName) ?? "list_agents";
-    const view = collaborationView(operation, input, parsedResult2(result));
-    lines.push(...view.lines.map((line) => wrapText(line, getMaxContentWidth())));
-    return { lines, extraBadges: view.badges };
-  }
-});
-
-// src/parsers/search-replace.ts
-function parseSearchReplaceBlocks(content) {
-  if (typeof content !== "string")
-    return [];
-  const blocks = [];
-  const re = /<<<<<<< SEARCH\r?\n([\s\S]*?)=======\r?\n([\s\S]*?)>>>>>>> REPLACE/g;
-  let m;
-  while ((m = re.exec(content)) !== null)
-    blocks.push({ search: m[1] ?? "", replace: m[2] ?? "" });
-  return blocks;
-}
-
-// src/tools/wcgw-file.ts
-source_default.level = 3;
-var FAILURE_RE = /\b(error|failed|failure|denied|not permitted|cannot|no such file)\b/i;
-defineTool({
-  matches: ["mcp__wcgw__FileWriteOrEdit", "mcp__wcgw__FileEdit"],
-  // wcgw answers with an MCP text block ("Success"), never the file itself, so
-  // re-read the target from disk and render it the way Write's post hook does.
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const text2 = extractResultText(result);
-    const status = text2 ? firstLine(text2, 200) : null;
-    const failed = status ? FAILURE_RE.test(status) : false;
-    if (status)
-      lines.push((failed ? source_default.red("\u2A02 ") : source_default.green("\u2713 ")) + status);
-    const action = parseSearchReplaceBlocks(input.text_or_search_replace_blocks).length ? "edit" : "write";
-    const box = input.file_path ? renderFileResult(input.file_path, { action }) : null;
-    if (box)
-      lines.push(box);
-    else if (!status && text2)
-      lines.push(renderCard({ badges: OUTPUT_BADGE, content: text2 }));
-    return { lines };
-  }
-});
-
-// src/tools/wcgw-read.ts
-source_default.level = 3;
-function toPathList(input) {
-  const raw = input.file_paths ?? input.file_path ?? [];
-  const list = Array.isArray(raw) ? raw : [raw];
-  return list.map((p) => String(p)).filter(Boolean);
-}
-function renderInlineContents(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    return [];
-  const res = result;
-  const fileContents = res["file-contents-numbered"] ?? res.file_contets_numbered ?? res["file-contents"] ?? res.output;
-  const lines = [];
-  if (fileContents && typeof fileContents === "object")
-    return renderInlineFiles(fileContents);
-  if (typeof fileContents === "string" && fileContents.length)
-    return [collapsePreview(fileContents)];
-  return [];
-}
-function renderInlineFiles(files) {
-  const lines = [];
-  for (const [filePath, content] of Object.entries(files)) {
-    if (typeof content !== "string")
-      continue;
-    const preview = renderFilePreview(filePath, { fallbackText: content, readText: false });
-    const rendered = preview?.content ?? content;
-    lines.push(renderFileCard({
-      path: filePath,
-      content: collapsePreview(rendered)
-    }));
-  }
-  return lines;
-}
-defineTool({
-  matches: ["mcp__wcgw__ReadFiles", "mcp__wcgw__ReadImage"],
-  // Same deal as FileWriteOrEdit: the MCP payload is opaque, so each requested
-  // path is rendered straight off disk in the Write post-hook's box layout —
-  // which also gets images rendered as ascii for free.
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const paths = toPathList(input);
-    const budgetChars = Math.floor(previewBudgetChars() / Math.max(1, paths.length));
-    let missed = 0;
-    for (const rawPath of paths) {
-      const box = renderFileResult(rawPath, { action: "read", budgetChars });
-      if (box)
-        lines.push(box);
-      else {
-        missed += 1;
-        lines.push(source_default.red("\u2A02 ") + source_default.bold("Path: ") + stripLineRange(rawPath).path);
-      }
-    }
-    if (!paths.length || missed === paths.length) {
-      const inline = renderInlineContents(result);
-      if (inline.length)
-        lines.push(...inline);
-      else {
-        const text2 = extractResultText(result);
-        if (text2)
-          lines.push(renderCard({ badges: OUTPUT_BADGE, content: collapsePreview(text2) }));
-      }
-    }
-    return { lines };
-  }
-});
-
-// src/tools/wcgw-init.ts
-source_default.level = 3;
-defineTool({
-  matches: "mcp__wcgw__Initialize",
-  post(_input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const text2 = pickResultText(result, ["text", "output"]);
-    if (text2) {
-      const summary = String(text2).split("\n").slice(0, 3).join("\n");
-      lines.push(source_default.green("\u23FB ") + summary);
-    }
-    return { lines };
-  }
-});
-
-// src/tools/wcgw-ctx.ts
-import path4 from "node:path";
-source_default.level = 3;
-var SAVED_PATH_RE = /(\/[^\s"']*\.txt)/;
-function savedContextPath(input, resultText) {
-  const fromResult = resultText ? SAVED_PATH_RE.exec(resultText)?.[1] : null;
-  if (fromResult)
-    return fromResult;
-  if (!input.id)
-    return null;
-  const dataHome = process.env.XDG_DATA_HOME || path4.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
-  return path4.join(dataHome, "wcgw", "memory", `${input.id}.txt`);
-}
-var RELEVANT_FILES_MARKER = "\n# Relevant Files:";
-function dropInlinedFiles(raw) {
-  const at = raw.indexOf(RELEVANT_FILES_MARKER);
-  if (at === -1)
-    return raw;
-  const omitted = raw.slice(at + RELEVANT_FILES_MARKER.length).split("\n").length;
-  return raw.slice(0, at) + `
-# Relevant Files: ${omitted} lines of inlined file content`;
-}
-defineTool({
-  matches: "mcp__wcgw__ContextSave",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const text2 = extractResultText(result);
-    const saved = savedContextPath(input, text2);
-    const prose2 = text2?.trim() && text2.trim() !== saved ? firstLine(text2.trim(), 200) : null;
-    if (prose2) {
-      const failed = /\b(error|warning|no files found)\b/i.test(prose2);
-      lines.push((failed ? source_default.yellow("\u26A0 ") : source_default.green("\u29FA ")) + prose2);
-    }
-    const box = saved ? renderFileResult(saved, { action: "context save", transform: dropInlinedFiles }) : null;
-    if (box)
-      lines.push(box);
-    else if (text2 && !prose2)
-      lines.push(source_default.green("\u29FA ") + firstLine(text2, 200));
-    return { lines };
-  }
-});
-
-// src/tools/agent.ts
-function resultRecord2(result) {
-  if (result && typeof result === "object" && !Array.isArray(result))
-    return result;
-  const text2 = extractResultText(result)?.trim();
-  if (!text2?.startsWith("{"))
-    return null;
-  try {
-    return JSON.parse(text2);
-  } catch {
-    return null;
-  }
-}
-function agentBadges(status, model, id) {
-  return [
-    status ? new Badge({ label: status.replace(/_/g, " "), color: /fail|error|stop/.test(status) ? "red" : "green" }) : null,
-    model ? new Badge({ label: model, color: "blue" }) : null,
-    id == null ? null : new Badge({ label: String(id), color: "gray" })
-  ].filter((badge) => badge !== null);
-}
-function stringValue(record3, key) {
-  const value = record3?.[key];
-  return typeof value === "string" ? value : null;
-}
-function agentView(result) {
-  const record3 = resultRecord2(result);
-  return {
-    status: stringValue(record3, "status"),
-    model: stringValue(record3, "resolvedModel"),
-    id: record3?.agentId ?? record3?.agent_id ?? record3?.taskId ?? record3?.task_id,
-    outputFile: stringValue(record3, "outputFile")
-  };
-}
-defineTool({
-  matches: ["Agent", "Task"],
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    if (input.description)
-      lines.push(wrapText(input.description, getMaxContentWidth()));
-    const view = agentView(result);
-    if (view.outputFile)
-      lines.push(shortenPath(view.outputFile));
-    return {
-      lines,
-      extraBadges: agentBadges(view.status, view.model, view.id)
-    };
-  }
-});
-
-// src/tools/exit-plan.ts
-defineTool({
-  matches: "ExitPlanMode",
-  post(_input, _result, _durationMs) {
-    const heading = renderHeading({
-      word: "YEET FAFO",
-      color: "cyan",
-      event: "stop"
-    });
-    return {
-      lines: heading.split("\n")
-    };
-  }
-});
-
-// src/tools/task-shared.ts
-source_default.level = 3;
-function asRecord2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function text(record3, ...keys) {
-  if (!record3)
-    return void 0;
-  for (const key of keys) {
-    const value = record3[key];
-    if (typeof value === "string" && value.trim())
-      return value.trim();
-  }
-  return void 0;
-}
-function normalizeStatus(value, fallback = "pending") {
-  const normalized = String(value ?? fallback).trim().toLowerCase().replace(/-/g, "_");
-  return normalized || fallback;
-}
-function normalizeTask(value, fallback = {}, fallbackStatus = "pending") {
-  const task = asRecord2(value);
-  const subject = taskSubject(task, fallback);
-  if (!subject)
-    return null;
-  return buildTask(task, fallback, subject, fallbackStatus);
-}
-function buildTask(task, fallback, subject, fallbackStatus) {
-  const id = task?.id ?? task?.taskId ?? fallback.id ?? fallback.task_id;
-  const description = text(task, "description", "details") ?? text(fallback, "description", "details");
-  return { ...typeof id === "string" || typeof id === "number" ? { id } : {}, subject, ...description ? { description } : {}, status: normalizeStatus(task?.status ?? fallback.status, fallbackStatus) };
-}
-function taskSubject(task, fallback) {
-  return text(task, "subject", "title", "name") ?? text(fallback, "subject", "title", "name");
-}
-function taskFromResult(input, result, fallbackStatus) {
-  const record3 = asRecord2(result);
-  const nested = record3?.task ?? record3?.item ?? result;
-  return normalizeTask(nested, input, fallbackStatus);
-}
-function parseMaybeJson(value) {
-  if (typeof value !== "string")
-    return value;
-  const trimmed = value.trim();
-  if (!trimmed || !trimmed.startsWith("[") && !trimmed.startsWith("{"))
-    return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
-  }
-}
-function tasksFromResult(result) {
-  let candidate = parseMaybeJson(result);
-  const record3 = asRecord2(candidate);
-  if (record3)
-    candidate = parseMaybeJson(
-      record3.tasks ?? record3.items ?? record3.result ?? record3.output ?? record3.content
-    );
-  if (!Array.isArray(candidate))
-    return [];
-  return candidate.map((item) => normalizeTask(item)).filter((task) => task !== null);
-}
-function taskAppearance(status) {
-  switch (normalizeStatus(status)) {
-    case "completed":
-      return { caption: "TASK COMPLETED", checked: true, color: "green" };
-    case "in_progress":
-      return { caption: "TASK STARTED", checked: false, color: "yellow" };
-    case "blocked":
-      return { caption: "TASK BLOCKED", checked: false, color: "red" };
-    case "cancelled":
-    case "canceled":
-      return { caption: "TASK CANCELLED", checked: false, color: "gray" };
-    case "pending":
-    case "todo":
-      return { caption: "TASK QUEUED", checked: false, color: "cyan" };
-    default:
-      return { caption: "TASK UPDATED", checked: false, color: "blue" };
-  }
-}
-function renderTask(task, captionOverride) {
-  const appearance2 = taskAppearance(task.status);
-  const caption = captionOverride ?? appearance2.caption;
-  const heading = renderCheckboxHeading({
-    caption,
-    checked: appearance2.checked,
-    color: appearance2.color,
-    description: task.description
-  });
-  const subjectLabel = task.id == null ? task.subject : `#${task.id}  ${task.subject}`;
-  return [
-    ...heading.split("\n"),
-    "",
-    renderBadges(new Badge({ label: subjectLabel, color: appearance2.color }))
-  ];
-}
-
-// src/tools/task-create.ts
-defineTool({
-  matches: "TaskCreate",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const task = taskFromResult(input, result, "pending");
-    if (task)
-      lines.push(...renderTask(task, "ADDED TASK"));
-    return { lines };
-  }
-});
-
-// src/tools/task-update.ts
-function statusFrom(input, result) {
-  const resultRecord4 = result && typeof result === "object" ? result : null;
-  const inputRecord = input && typeof input === "object" ? input : null;
-  const change = resultRecord4?.statusChange;
-  const to = change && typeof change === "object" ? change.to : void 0;
-  return to ?? resultRecord4?.status ?? inputRecord?.status ?? "";
-}
-defineTool({
-  matches: "TaskUpdate",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const normalizedStatus = normalizeStatus(statusFrom(input, result), "updated");
-    const task = taskFromResult(input, result, normalizedStatus);
-    if (task)
-      lines.push(...renderTask({ ...task, status: normalizedStatus }));
-    else {
-      const record3 = result && typeof result === "object" && !Array.isArray(result) ? result : null;
-      const id = record3?.taskId ?? record3?.task_id ?? input.taskId ?? input.task_id ?? input.id;
-      const appearance2 = taskAppearance(normalizedStatus);
-      lines.push(renderBadges(
-        new Badge({ label: appearance2.caption, color: appearance2.color, icon: appearance2.checked ? "\u2713" : "\u21BB" }),
-        id == null ? null : new Badge({ label: `#${String(id)}`, color: "gray" })
-      ));
-    }
-    return { lines };
-  }
-});
-
-// src/tools/task-list.ts
-defineTool({
-  matches: "TaskList",
-  post(_input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const tasks = tasksFromResult(result);
-    for (const [index, task] of tasks.entries()) {
-      if (index > 0)
-        lines.push("");
-      lines.push(...renderTask(task));
-    }
-    if (!tasks.length)
-      lines.push(source_default.gray("No tasks"));
-    return { lines };
-  }
-});
-
-// src/tools/task-stop.ts
-function resultRecord3(result) {
-  if (result && typeof result === "object" && !Array.isArray(result))
-    return result;
-  const text2 = extractResultText(result)?.trim();
-  if (!text2?.startsWith("{"))
-    return null;
-  try {
-    return JSON.parse(text2);
-  } catch {
-    return null;
-  }
-}
-defineTool({
-  matches: "TaskStop",
-  post(input, result, durationMs) {
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    lines.push(source_default.red("\u25A0 ") + source_default.bold.red("TASK STOPPED"));
-    const data = resultRecord3(result);
-    const id = data?.task_id ?? data?.taskId ?? input.task_id ?? input.taskId;
-    const type = typeof data?.task_type === "string" ? data.task_type : null;
-    return {
-      lines,
-      extraBadges: [
-        id == null ? null : new Badge({ label: String(id), color: "brightRed" }),
-        type ? new Badge({ label: type, color: "gray" }) : null
-      ].filter((badge) => badge !== null)
-    };
-  }
-});
-
-// src/tools/browser.ts
-defineTool({
-  matches: (rawName) => /^mcp__playwright__browser_/i.test(rawName),
-  post(_input, result, durationMs, ctx) {
-    const operation = playwrightOperation(ctx.toolName);
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    const text2 = extractResultText(result);
-    const shot = renderScreenshot(result, text2);
-    if (shot) {
-      lines.push(shot);
-      return {
-        lines,
-        isJson: false,
-        extraBadges: operationBadges(operation ? [operation] : [])
-      };
-    }
-    if (text2?.trim()) {
-      const language = detectOutputLanguage(text2);
-      const formatted = language === "json" ? formatJSON(text2) : text2;
-      lines.push(renderCard({
-        badges: OUTPUT_BADGE,
-        content: softCollapse(simpleHighlight(formatted, language))
-      }));
-    } else if (result && typeof result === "object")
-      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
-    return {
-      lines,
-      isJson: !text2?.trim(),
-      extraBadges: operationBadges(operation ? [operation] : [])
-    };
-  }
-});
-
-// src/tools/generic.ts
-source_default.level = 3;
-var TOOL_PRIMARY_OUTPUT_KEYS = {
-  Read: ["content", "output", "text"],
-  Edit: ["diff", "result", "output"],
-  MultiEdit: ["diff", "result", "output"],
-  Write: ["file_path", "result"],
-  Bash: ["stdout", "output"],
-  Glob: ["filenames", "result", "output"],
-  Grep: ["filenames", "result", "output"],
-  // WebFetch answers `{ code, codeText, url, durationMs, result }` — without
-  // `result` first, the whole response falls through to the metadata card and
-  // the actual answer gets flattened to one truncated line.
-  WebFetch: ["result", "content", "output", "text"],
-  WebSearch: ["results", "output", "text"],
-  Task: ["description", "result", "output"],
-  Agent: ["description", "result", "output"],
-  TodoRead: ["todos", "result", "output"],
-  TodoWrite: ["result", "output"],
-  ToolSearch: ["results", "output", "text"],
-  ExitPlanMode: ["plan", "result"],
-  NotebookRead: ["output", "content"],
-  NotebookEdit: ["result", "output"]
-};
-function renderArrayLike(res) {
-  const isArrayLike = Array.isArray(res) || res["0"]?.type;
-  if (!isArrayLike)
-    return null;
-  const parts = [];
-  for (const block of Array.isArray(res) ? res : Object.values(res)) {
-    const b = block;
-    if (b.type === "text" && b.text)
-      parts.push(b.text);
-    else if (b.type === "image" || b.type === "base64")
-      parts.push(source_default.yellow("[Image Data]"));
-    else if (typeof block === "string")
-      parts.push(block);
-    else if (b.output)
-      parts.push(b.output);
-  }
-  return parts.length ? parts.join("\n\n") : null;
-}
-function renderContentParts(res, primary) {
-  const keys = ["stdout", "output", "content", "text", "message", "error", "stderr", "file-contents-numbered", "file_contets_numbered", "file-contents", "filePath", "type"];
-  return keys.filter((key) => res[key] != null).flatMap((key) => {
-    let value = res[key];
-    if (primary && primary.includes(String(value).slice(0, 20)))
-      return [];
-    if (value && typeof value === "object") {
-      const object = value;
-      value = object.text ?? object.output ?? object.content ?? JSON.stringify(object, null, 2);
-    }
-    const rendered = key === "stderr" || key === "error" ? source_default.red(`\u2A02 ${key.toUpperCase()}:`) + "\n" + value : key === "filePath" ? source_default.cyan("\u{F021A} ") + source_default.bold("Path: ") + value : key === "type" ? source_default.cyan("\u29D6 ") + source_default.bold("Action: ") + value : String(value);
-    delete res[key];
-    return [rendered];
-  });
-}
-function deconstructToolResult(toolName, result) {
-  if (!result || typeof result !== "object")
-    return { primary: typeof result === "string" ? result : null, metadata: null };
-  const res = JSON.parse(JSON.stringify(result));
-  const { tool } = parseToolName(toolName);
-  let primary = "";
-  const arrayPrimary = renderArrayLike(res);
-  if (arrayPrimary)
-    return { primary: arrayPrimary, metadata: null };
-  const toolKeys = TOOL_PRIMARY_OUTPUT_KEYS[tool] ?? [];
-  for (const key of toolKeys) {
-    const v = res[key];
-    if (v != null) {
-      primary = typeof v === "object" ? JSON.stringify(v, null, 2) : String(v);
-      delete res[key];
-      break;
-    }
-  }
-  const parts = primary ? [primary, ...renderContentParts(res, primary)] : renderContentParts(res, primary);
-  primary = parts.join("\n\n");
-  const metadata = Object.keys(res).length ? res : null;
-  return { primary: primary || null, metadata };
-}
-defineGenericTool({
-  post(_input, result, durationMs, ctx) {
-    const rawTool = ctx.toolName;
-    const { primary, metadata } = deconstructToolResult(rawTool, result);
-    const lines = [];
-    pushDurationLine(lines, durationMs);
-    if (primary) {
-      let formatted = primary;
-      if (typeof primary === "string") {
-        if (isJSON(primary))
-          formatted = simpleHighlight(formatJSON(primary), "json");
-        else if (isCode(primary))
-          formatted = simpleHighlight(primary, detectLanguage(primary, rawTool));
-      }
-      lines.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(formatted) }));
-      if (metadata && Object.keys(metadata).length)
-        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }));
-    } else if (result && typeof result === "object")
-      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }));
-    const operation = playwrightOperation(rawTool);
-    return {
-      lines,
-      isJson: !primary,
-      extraBadges: operationBadges(operation ? [operation] : [])
-    };
-  }
-});
-
-// src/hooks/index.ts
-import fs8 from "node:fs";
-import path7 from "node:path";
-
-// src/runtime/debug.ts
+// src/render/welcome.ts
 import fs6 from "node:fs";
 import path5 from "node:path";
+import { fileURLToPath } from "node:url";
+
+// src/runtime/debug.ts
+import fs5 from "node:fs";
+import path4 from "node:path";
 var HOME = process.env.HOME || process.env.USERPROFILE || "";
-var DEBUG_LOG = path5.join(HOME, ".claude", "debug.log");
+var DEBUG_LOG = path4.join(HOME, ".claude", "debug.log");
 function detailValue(value) {
   if (value instanceof Error)
-    return {
-      name: value.name,
-      message: value.message,
-      stack: value.stack,
-      cause: value.cause
-    };
+    return { name: value.name, message: value.message, stack: value.stack, cause: value.cause };
   try {
     JSON.stringify(value);
     return value;
@@ -9379,10 +8064,11 @@ function detailValue(value) {
   }
 }
 function formatDebugEntry(scope, parts, timestamp = /* @__PURE__ */ new Date()) {
-  const first = parts[0];
+  const [first] = parts;
+  const labelled = typeof first === "string";
   return `[${timestamp.toISOString()}] [${scope}] ${JSON.stringify({
-    stage: typeof first === "string" ? first : "log",
-    details: parts.slice(typeof first === "string" ? 1 : 0).map(detailValue),
+    stage: labelled ? first : "log",
+    details: parts.slice(labelled ? 1 : 0).map(detailValue),
     pid: process.pid,
     ppid: process.ppid,
     runtime: `${process.release.name}@${process.version}`,
@@ -9395,526 +8081,1169 @@ function formatDebugEntry(scope, parts, timestamp = /* @__PURE__ */ new Date()) 
 }
 function debugLog(scope, ...parts) {
   try {
-    fs6.mkdirSync(path5.dirname(DEBUG_LOG), { recursive: true });
-    fs6.appendFileSync(DEBUG_LOG, formatDebugEntry(scope, parts) + "\n");
+    fs5.mkdirSync(path4.dirname(DEBUG_LOG), { recursive: true });
+    fs5.appendFileSync(DEBUG_LOG, formatDebugEntry(scope, parts) + "\n");
   } catch {
   }
-}
-
-// src/registry/hook-registry.ts
-var REGISTRY2 = /* @__PURE__ */ new Map();
-function defineHook(def) {
-  REGISTRY2.set(def.event, def);
-}
-function dispatchHook(event, raw) {
-  const def = REGISTRY2.get(event);
-  if (!def) {
-    debugLog("dispatchHook", "no-handler", event);
-    return {};
-  }
-  const ctx = { event };
-  try {
-    const input = def.parse(raw);
-    return def.handle(input, ctx);
-  } catch (e) {
-    const detail = e instanceof Error ? e.stack ?? e.message : String(e);
-    debugLog("dispatchHook", "handler-error", event, detail);
-    return {};
-  }
-}
-
-// src/hooks/_normalize.ts
-function asObject(raw) {
-  return raw && typeof raw === "object" ? raw : {};
-}
-function pickString(o, ...keys) {
-  for (const k of keys) {
-    const v = o[k];
-    if (typeof v === "string")
-      return v;
-  }
-  return void 0;
-}
-function pickNumber(o, ...keys) {
-  for (const k of keys) {
-    const v = o[k];
-    if (typeof v === "number")
-      return v;
-  }
-  return null;
-}
-function pickBool(o, ...keys) {
-  for (const k of keys) {
-    const v = o[k];
-    if (typeof v === "boolean")
-      return v;
-  }
-  return false;
-}
-function pickAny(o, ...keys) {
-  for (const k of keys)
-    if (o[k] !== void 0)
-      return o[k];
-  return void 0;
-}
-function injectToolDiscriminator(toolName, input) {
-  const obj = input && typeof input === "object" ? { ...input } : typeof input === "string" ? { input } : {};
-  obj.__tool = toolName;
-  return obj;
-}
-
-// src/render/render-tool.ts
-function renderToolSection({
-  toolName,
-  input,
-  result,
-  durationMs = null,
-  extraTopBadges = []
-}) {
-  const def = getToolDefinition(toolName);
-  const ctx = { toolName };
-  const section = def.post(input, result, durationMs, ctx);
-  const main = new Badge({ toolName });
-  const badges = [main, ...extraTopBadges, ...section.extraBadges ?? []];
-  return renderSection({ badges, lines: section.lines });
 }
 
 // src/render/welcome.ts
-import fs7 from "node:fs";
-import path6 from "node:path";
-import { fileURLToPath } from "node:url";
 var RESERVE = 8;
+var MAX_COLS = 100;
 var HOME2 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var WELCOME_ASSET = path6.join("assets", "welcome.png");
-var ASCII_DIR = path6.join(HOME2, "Documents", "Prompts", "anime-ascii");
+var WELCOME_ASSET = path5.join("assets", "welcome.png");
+var ASCII_DIR = path5.join(HOME2, "Documents", "Prompts", "anime-ascii");
 function findAsset() {
   const candidates = [];
-  const declared = process.env.CLAUDE_PLUGIN_ROOT;
-  if (declared)
-    candidates.push(path6.join(declared, WELCOME_ASSET));
+  if (process.env.CLAUDE_PLUGIN_ROOT)
+    candidates.push(path5.join(process.env.CLAUDE_PLUGIN_ROOT, WELCOME_ASSET));
   let dir;
   try {
-    dir = path6.dirname(fileURLToPath(import.meta.url));
+    dir = path5.dirname(fileURLToPath(import.meta.url));
   } catch {
     dir = process.cwd();
   }
-  for (let i = 0; i < 6; i++) {
-    candidates.push(path6.join(dir, WELCOME_ASSET));
-    const parent = path6.dirname(dir);
+  for (let depth = 0; depth < 6; depth++) {
+    candidates.push(path5.join(dir, WELCOME_ASSET));
+    const parent = path5.dirname(dir);
     if (parent === dir)
       break;
     dir = parent;
   }
-  for (const candidate of candidates)
+  return candidates.find((candidate) => {
     try {
-      if (fs7.statSync(candidate).isFile())
-        return candidate;
+      return fs6.statSync(candidate).isFile();
     } catch {
+      return false;
     }
-  return null;
+  }) ?? null;
 }
 function welcomeImagePath() {
   const override = process.env.CLAUDE_HOOKS_WELCOME_IMAGE;
   if (override)
-    return fs7.existsSync(override) ? override : null;
+    return fs6.existsSync(override) ? override : null;
   return findAsset();
 }
-function charBudget(total) {
-  return { total };
-}
-function fits2(art, spec) {
-  return costOf(art.split("\n"), spec) <= spec.total;
-}
-var MAX_COLS = 100;
-function renderWelcomeImage(spec) {
+var fits = (art, spec) => costOf(art.split("\n"), spec) <= spec.total;
+function welcomeImage(spec) {
   const file = welcomeImagePath();
   if (!file)
     return null;
   try {
-    const art = imageToAsciiSimple(fs7.readFileSync(file), path6.extname(file), Math.min(MAX_COLS, getMaxLayoutWidth()));
-    return art && fits2(art, spec) ? art : null;
-  } catch (e) {
-    debugLog("SessionStart", "render-welcome-image", e.message);
+    const art = imageToAscii(fs6.readFileSync(file), path5.extname(file), {
+      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
+      budget: spec
+    });
+    return art && fits(art, spec) ? art : null;
+  } catch (error) {
+    debugLog("SessionStart", "render-welcome-image", error.message);
     return null;
   }
 }
-function loadAsciiArt(spec) {
+function asciiArt(spec) {
   try {
-    if (!fs7.existsSync(ASCII_DIR))
+    if (!fs6.existsSync(ASCII_DIR))
       return null;
-    const files = fs7.readdirSync(ASCII_DIR).filter((f) => f.endsWith(".txt"));
+    const files = fs6.readdirSync(ASCII_DIR).filter((name) => name.endsWith(".txt"));
     for (const pick of files.sort(() => Math.random() - 0.5)) {
-      const art = fs7.readFileSync(path6.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
-      if (fits2(art, spec))
+      const art = fs6.readFileSync(path5.join(ASCII_DIR, pick), "utf8").replace(/\s+$/, "");
+      if (fits(art, spec))
         return art;
     }
-  } catch (e) {
-    debugLog("SessionStart", "load-ascii", e.message);
+  } catch (error) {
+    debugLog("SessionStart", "load-ascii", error.message);
   }
   return null;
 }
 function renderWelcome(headroom) {
   if (headroom <= RESERVE)
     return "";
-  const spec = charBudget(headroom - RESERVE);
-  const art = renderWelcomeImage(spec) ?? loadAsciiArt(spec);
+  const spec = { total: headroom - RESERVE };
+  const art = welcomeImage(spec) ?? asciiArt(spec);
   return art ? `
 ${art}
 ` : "";
 }
 
-// src/hooks/index.ts
-source_default.level = 3;
-var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
-var SYSTEM_PROMPT_PATH = path7.join(HOME3, "system-prompt.md");
-function prose(text2, limit) {
-  const capped = text2.length > limit ? text2.slice(0, limit) + "..." : text2;
-  return source_default.gray(wrapText(capped, getMaxContentWidth()));
+// src/runtime/transport.ts
+import fs7 from "node:fs";
+import os3 from "node:os";
+import path6 from "node:path";
+
+// src/render/fit.ts
+var MAX_LINES = 4e3;
+var unlimited = (chars) => ({ lines: MAX_LINES, chars });
+var share = (limit, count) => ({ lines: limit.lines, chars: Math.floor(limit.chars / Math.max(1, count)) });
+var constant = (text) => () => text;
+function fit(render, budget) {
+  const draw = typeof render === "string" ? constant(compactAnsi(render)) : (limit) => compactAnsi(render(limit));
+  const full = draw(unlimited(budget));
+  if (full.length <= budget)
+    return { text: full, full, shrunk: false };
+  const at = (scale) => ({
+    lines: Math.round(MAX_LINES * scale),
+    chars: Math.floor(budget * scale)
+  });
+  let low = 0;
+  let high = 1;
+  let best = typeof render === "string" ? full : draw(at(0));
+  for (let step = 0; step < 14 && typeof render !== "string"; step++) {
+    const mid = (low + high) / 2;
+    const candidate = draw(at(mid));
+    if (candidate.length <= budget) {
+      best = candidate;
+      low = mid;
+    } else
+      high = mid;
+  }
+  const text = best.length <= budget ? best : truncateChars(best, budget);
+  return { text, full, shrunk: true };
 }
-function loadSystemPrompt() {
+
+// src/runtime/transport.ts
+var HOOK_FIELD_CHAR_LIMIT = 1e4;
+var CLEAR_LINE_PREFIX = "\x1B[1A\x1B[2K\r";
+var POINTER_RESERVE = 200;
+var MESSAGE_BUDGET = HOOK_FIELD_CHAR_LIMIT - CLEAR_LINE_PREFIX.length;
+var PERSIST_DIR = path6.join(os3.tmpdir(), "claude-code-hooks");
+var PERSIST_MAX = 20;
+function persist(content) {
   try {
-    if (fs8.existsSync(SYSTEM_PROMPT_PATH))
-      return fs8.readFileSync(SYSTEM_PROMPT_PATH, "utf8");
-  } catch (e) {
-    debugLog("SessionStart", "load-system-prompt", e.message);
+    fs7.mkdirSync(PERSIST_DIR, { recursive: true });
+    const file = path6.join(PERSIST_DIR, `hook-output-${Date.now()}-${process.pid}.log`);
+    fs7.writeFileSync(file, content);
+    fs7.readdirSync(PERSIST_DIR).map((name) => path6.join(PERSIST_DIR, name)).sort((a, b) => fs7.statSync(b).mtimeMs - fs7.statSync(a).mtimeMs).slice(PERSIST_MAX).forEach((stale) => fs7.unlinkSync(stale));
+    return file;
+  } catch {
+    return null;
+  }
+}
+function pointer(full) {
+  const file = persist(stripAnsi(full));
+  const size = full.length.toLocaleString("en-US");
+  return ink.note(file ? `  \u2026 full ${size}-character output saved to ${file}` : `  \u2026 full ${size}-character output exceeded the ${HOOK_FIELD_CHAR_LIMIT.toLocaleString("en-US")}-character host limit`);
+}
+function resolveMessage(message) {
+  if (message === void 0 || message === "")
+    return null;
+  const { text, full, shrunk } = fit(message, MESSAGE_BUDGET - POINTER_RESERVE);
+  return shrunk ? `${text}
+${pointer(full)}` : text;
+}
+function serializeHook(output) {
+  const { systemMessage: message, ...rest } = output;
+  const resolved = resolveMessage(message);
+  const systemMessage = resolved === null ? null : CLEAR_LINE_PREFIX + resolved;
+  const body = systemMessage === null ? rest : { ...rest, systemMessage };
+  return { json: JSON.stringify(body, null, 2), systemMessage };
+}
+
+// src/tools/kit.ts
+var named = (...names) => (toolName) => names.includes(toolName);
+var matching = (pattern) => (toolName) => pattern.test(toolName);
+function outputCard(text, limit, language = null) {
+  const resolved = language ?? detectOutputLanguage(text);
+  const body = resolved === "json" ? formatJSON(text) : text;
+  return renderCard({
+    badges: OUTPUT_BADGE,
+    content: collapse(body, limit.lines, { paint: (head) => highlight(head, resolved) })
+  });
+}
+function metaCard(value, limit) {
+  return renderCard({ badges: META_BADGE, content: collapse(metadataTable(value), limit.lines) });
+}
+function statusLine(text, maxLength = 200) {
+  const line = firstLine(text.trim(), maxLength);
+  const level = severity(line);
+  const glyph = level === "error" ? "\u2A02 " : level === "warning" ? "\u26A0 " : "\u2713 ";
+  return (level ? SEVERITY_INK[level] : ink.ok)(glyph) + line;
+}
+
+// src/tools/agents.ts
+var statusBadge = (label, color) => label ? badge({ label: label.replace(/_/g, " "), color }) : null;
+var agent = {
+  id: "agent",
+  match: named("Agent", "Task"),
+  render({ input, result }) {
+    const record = resultRecord(result);
+    const status = pickString(record, "status");
+    const outputFile = pickString(record, "outputFile");
+    return {
+      lines: [
+        pickString(input, "description")?.trim() ? prose(pickString(input, "description")) : null,
+        outputFile ? displayPath(outputFile) : null
+      ],
+      badges: [
+        statusBadge(status, status && /fail|error|stop/.test(status) ? "red" : "green"),
+        statusBadge(pickString(record, "resolvedModel"), "blue"),
+        statusBadge(pickId(record, "agentId", "agent_id", "taskId", "task_id"), "gray")
+      ]
+    };
+  }
+};
+var targetOf = (input, result) => pickString(result, "task_name", "agent_name", "target") ?? pickString(input, "task_name", "target", "agent_name") ?? "agent";
+var VIEWS = {
+  spawn_agent: (input, result) => ({
+    lines: [ink.ok("\u2713 ") + `started ${targetOf(input, result)}`],
+    badges: [statusBadge(pickString(input, "agent_type"), "green"), statusBadge(pickString(input, "model"), "gray")]
+  }),
+  wait_agent: (_input, result) => {
+    const timedOut = result?.timed_out === true;
+    const message = pickString(result, "message") ?? (timedOut ? "No agents completed yet" : "Agent update received");
+    return {
+      lines: [timedOut ? ink.dim(message) : ink.ok("\u2713 ") + message],
+      badges: [badge({ label: timedOut ? "timed out" : "update", color: timedOut ? "gray" : "green" })]
+    };
+  },
+  followup_task: (input, result) => ({ lines: [ink.key("\u2192 ") + `follow-up sent to ${targetOf(input, result)}`] }),
+  send_message: (input, result) => ({ lines: [ink.key("\u2192 ") + `message sent to ${targetOf(input, result)}`] }),
+  interrupt_agent: (input, result) => ({
+    lines: [ink.err("\u25A0 ") + `interrupted ${targetOf(input, result)}`],
+    badges: [statusBadge(pickString(result, "previous_status", "status"), "gray")]
+  }),
+  list_agents: (_input, result) => {
+    const agents = Array.isArray(result?.agents) ? result.agents : [];
+    const lines = agents.flatMap((entry) => {
+      const data = asRecord(entry);
+      const name = pickString(data, "agent_name", "task_name", "name");
+      const status = pickString(data, "agent_status", "status");
+      return name ? [ink.key("\xB7 ") + name + (status ? ink.dim(` \u2014 ${status.replace(/_/g, " ")}`) : "")] : [];
+    });
+    return {
+      lines: lines.length ? lines : [ink.dim("No active agents")],
+      badges: [badge({ label: `${lines.length} agent${lines.length === 1 ? "" : "s"}`, color: lines.length ? "blue" : "gray" })]
+    };
+  }
+};
+var operationOf = (toolName) => {
+  const { server, tool } = parseToolName(toolName);
+  return server === "collaboration" && tool in VIEWS ? tool : null;
+};
+var collaboration = {
+  id: "collaboration",
+  match: (toolName) => operationOf(toolName) !== null,
+  render({ name, input, result }) {
+    const view = VIEWS[operationOf(name) ?? "list_agents"](input, resultRecord(result));
+    return { ...view, lines: view.lines.map((line) => line ? prose(line) : line) };
+  }
+};
+var AGENT_RENDERERS = [agent, collaboration];
+
+// src/lib/shell.ts
+var HEREDOC_OPEN2 = /^<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1/;
+function flush(state, sep) {
+  state.rows.push({ text: state.current.trim(), sep });
+  state.current = "";
+}
+function consumeQuoted(state, line, index) {
+  const character = line[index];
+  state.current += character;
+  if (state.quote === '"' && character === "\\" && index + 1 < line.length) {
+    state.current += line[index + 1];
+    return index + 1;
+  }
+  if (character === state.quote)
+    state.quote = null;
+  return index;
+}
+function consumeSyntax(state, line, index) {
+  const character = line[index];
+  if (character === '"' || character === "'") {
+    state.quote = character;
+    state.current += character;
+    return index;
+  }
+  const here = HEREDOC_OPEN2.exec(line.slice(index));
+  if (here) {
+    state.current += here[0];
+    state.heredoc = here[2];
+    return index + here[0].length - 1;
+  }
+  if (character === ";") {
+    flush(state, ";");
+    return index;
+  }
+  if ((character === "&" || character === "|") && line[index + 1] === character) {
+    flush(state, character + character);
+    return index + 1;
+  }
+  state.current += character;
+  return index;
+}
+function consumeLine(state, line, lineIndex) {
+  if (state.heredoc !== null) {
+    state.current += (state.current ? "\n" : "") + line;
+    if (line.trim() === state.heredoc)
+      state.heredoc = null;
+    return;
+  }
+  if (lineIndex > 0)
+    state.current += "\n";
+  for (let index = 0; index < line.length; index++)
+    index = state.quote ? consumeQuoted(state, line, index) : consumeSyntax(state, line, index);
+}
+function splitCommandRows(command) {
+  const state = { rows: [], current: "", quote: null, heredoc: null };
+  String(command).split("\n").forEach((line, index) => consumeLine(state, line, index));
+  flush(state, "");
+  return state.rows.filter((row) => row.text.length > 0);
+}
+function shellWords(command) {
+  const words = [];
+  let current = "";
+  let quote = null;
+  for (let index = 0; index < command.length; index++) {
+    const character = command[index];
+    if (quote) {
+      if (quote === '"' && character === "\\" && index + 1 < command.length)
+        current += command[++index];
+      else if (character === quote)
+        quote = null;
+      else
+        current += character;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (current)
+        words.push(current);
+      current = "";
+      continue;
+    }
+    current += character === "\\" && index + 1 < command.length ? command[++index] : character;
+  }
+  if (current)
+    words.push(current);
+  return words;
+}
+var TRAILER_SEP = /\n---\s*\n/;
+var TRAILER_KV = /^([a-z_][a-z0-9_ ]*?)\s*=\s*(.*)$/;
+function parseWcgwTrailer(raw) {
+  const separator = TRAILER_SEP.exec(raw);
+  if (!separator)
+    return { stdout: raw, status: null, cwd: null, extra: {} };
+  const fields = Object.fromEntries(
+    raw.slice(separator.index + separator[0].length).split("\n").map((line) => TRAILER_KV.exec(line.trim())).filter((match) => match !== null).map((match) => [match[1].trim(), match[2].trim()])
+  );
+  const { status = null, cwd = null, ...extra } = fields;
+  return { stdout: raw.slice(0, separator.index), status, cwd, extra };
+}
+var AGENT_BROWSER_VALUE_OPTIONS = /* @__PURE__ */ new Set([
+  "--session",
+  "--session-name",
+  "--profile",
+  "--state",
+  "--headers",
+  "--executable-path",
+  "--extension",
+  "--init-script",
+  "--enable",
+  "--args",
+  "--user-agent",
+  "--proxy",
+  "--proxy-bypass",
+  "--hide-scrollbars",
+  "--provider",
+  "--device",
+  "--screenshot-dir",
+  "--screenshot-quality",
+  "--screenshot-format",
+  "--cdp",
+  "--color-scheme",
+  "--download-path",
+  "--max-output",
+  "--allowed-domains",
+  "--action-policy",
+  "--confirm-actions",
+  "--engine",
+  "--model",
+  "--config",
+  "-p"
+]);
+function agentBrowserOperation(segment) {
+  const words = shellWords(segment);
+  const start = words.findIndex((word) => (word.split("/").pop() ?? word) === "agent-browser");
+  if (start < 0)
+    return null;
+  for (let index = start + 1; index < words.length; index++) {
+    const word = words[index];
+    if (word === "--")
+      return words[index + 1] ?? null;
+    if (!word.startsWith("-"))
+      return word;
+    if (!word.includes("=") && AGENT_BROWSER_VALUE_OPTIONS.has(word))
+      index++;
   }
   return null;
 }
-defineHook({
-  event: "PreToolUse",
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName = pickString(o, "tool_name", "toolName") ?? "Unknown";
-    return {
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, pickAny(o, "tool_input", "toolInput") ?? {}),
-      sessionId: pickString(o, "session_id", "sessionId")
-    };
-  },
-  handle() {
-    return {};
-  }
-});
-defineHook({
-  event: "SessionStart",
-  parse(raw) {
-    const o = asObject(raw);
-    const source = pickString(o, "source") ?? "startup";
-    return {
-      source,
-      model: pickString(o, "model"),
-      agentType: pickString(o, "agent_type", "agentType")
-    };
-  },
-  handle(input) {
-    const systemPrompt = loadSystemPrompt();
-    const badges = [
-      new Badge({ label: `Session:${input.source}`, color: "green", icon: "\u23FB" }),
-      input.model ? new Badge({ label: input.model, color: "gray" }) : null
-    ];
-    const lines = [source_default.green("Session started")];
-    if (input.agentType)
-      lines.push(source_default.gray("Agent: ") + input.agentType);
-    if (systemPrompt)
-      lines.push(source_default.cyan("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH);
-    const isWake = input.source === "compact";
-    const heading = renderHeading({
-      word: isWake ? "WAKE UP" : "BEGIN AGAIN",
-      color: "cyan",
-      event: isWake ? "wakeup" : "start"
-    });
-    const response = {
-      hookSpecificOutput: {
-        hookEventName: "SessionStart",
-        ...systemPrompt ? { additionalContext: systemPrompt } : {}
-      },
-      systemMessage: heading + renderSection({ badges, lines })
-    };
-    return {
-      ...response,
-      systemMessage: renderWelcome(systemMessageHeadroom(response)) + response.systemMessage
-    };
-  }
-});
-defineHook({
-  event: "SessionEnd",
-  parse() {
-    return {};
-  },
-  handle() {
-    const heading = renderHeading({ word: "BYE", color: "red", event: "bye" });
-    const badge = new Badge({ label: "SessionEnd", color: "red", icon: "\u23FC" });
-    return { systemMessage: heading + renderSection({ badges: badge }) };
-  }
-});
-defineHook({
-  event: "Stop",
-  parse() {
-    return {};
-  },
-  handle() {
-    const heading = renderHeading({ word: "STOP", color: "red", event: "stop" });
-    const badge = new Badge({ label: "Stop", color: "red", icon: "\u25A0" });
-    return { systemMessage: heading + renderSection({ badges: badge }) };
-  }
-});
-defineHook({
-  event: "SubagentStart",
-  parse(raw) {
-    const o = asObject(raw);
-    return {
-      agentId: pickString(o, "agent_id", "agentId"),
-      agentType: pickString(o, "agent_type", "agentType")
-    };
-  },
-  handle(input) {
-    const heading = renderHeading({ word: "BEGIN", color: "green", event: "agent" });
-    const main = new Badge({ label: "SubagentStart", color: "green", icon: "\u2B21" });
-    const extras = [];
-    if (input.agentType)
-      extras.push(new Badge({ label: input.agentType, color: "gray" }));
-    return { systemMessage: heading + renderSection({ badges: [main, ...extras] }) };
-  }
-});
-defineHook({
-  event: "SubagentStop",
-  parse(raw) {
-    const o = asObject(raw);
-    return { agentType: pickString(o, "agent_type", "agentType") };
-  },
-  handle(input) {
-    const badges = [
-      new Badge({ label: "SubagentStop", color: "green", icon: "\u231F" }),
-      new Badge({
-        label: input.agentType ?? "Main Process",
-        color: "gray"
-      })
-    ];
-    return {
-      systemMessage: renderHeading({ word: "GOIN ASLEEP", color: "green", event: "agent" }) + renderSection({ badges })
-    };
-  }
-});
-defineHook({
-  event: "PreCompact",
-  parse(raw) {
-    const o = asObject(raw);
-    return {
-      trigger: pickString(o, "trigger"),
-      customInstructions: pickString(o, "custom_instructions", "customInstructions")
-    };
-  },
-  handle(input) {
-    const heading = renderHeading({ word: "COMPACT", color: "yellow", event: "compact" });
-    const badges = [
-      new Badge({ label: "PreCompact", color: "yellow", icon: "\u27F3" }),
-      input.trigger ? new Badge({ label: input.trigger, color: "gray" }) : null
-    ];
-    const lines = input.customInstructions ? [prose(input.customInstructions, 200)] : [];
-    return { systemMessage: heading + renderSection({ badges, lines }) };
-  }
-});
-defineHook({
-  event: "PostCompact",
-  parse(raw) {
-    const o = asObject(raw);
-    return { summary: pickString(o, "summary", "compact_summary") };
-  },
-  handle(input) {
-    const heading = renderHeading({ word: "COMPACT", color: "yellow", event: "compact" });
-    const badge = new Badge({ label: "PostCompact", color: "yellow", icon: "\u27F3" });
-    const lines = input.summary ? [prose(input.summary, 200)] : [];
-    return { systemMessage: heading + renderSection({ badges: badge, lines }) };
-  }
-});
-defineHook({
-  event: "InstructionsLoaded",
-  parse(raw) {
-    const o = asObject(raw);
-    return {
-      filePath: pickString(o, "file_path", "filePath") ?? "",
-      memoryType: pickString(o, "memory_type", "memoryType") ?? "Unknown",
-      loadReason: pickString(o, "load_reason", "loadReason") ?? ""
-    };
-  },
-  handle(input) {
-    const badges = [
-      new Badge({ label: `Instructions:${input.memoryType}`, color: "cyan", icon: "\u2713" }),
-      input.loadReason ? new Badge({ label: input.loadReason, color: "gray" }) : null
-    ];
-    const lines = [];
-    if (input.filePath)
-      lines.push(source_default.gray("File: ") + input.filePath);
-    return { systemMessage: renderSection({ badges, lines }) };
-  }
-});
-defineHook({
-  event: "UserPromptSubmit",
-  parse(raw) {
-    const o = asObject(raw);
-    return {
-      prompt: pickString(o, "prompt", "user_prompt", "userPrompt") ?? "",
-      cwd: pickString(o, "cwd")
-    };
-  },
-  handle(input) {
-    const badge = new Badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" });
-    const lines = [];
-    if (input.prompt)
-      lines.push(prose(input.prompt, 200));
-    const imagePath = findImagePath(input.prompt, input.cwd);
-    if (imagePath) {
-      const occupied = renderSection({ badges: badge, lines });
-      const image = renderFileResult(imagePath, {
-        action: "prompt image",
-        budgetChars: systemMessageHeadroom({ systemMessage: occupied })
-      });
-      if (image)
-        lines.push(image);
+function agentBrowserOperations(command) {
+  const operations = splitCommandRows(command).map((row) => agentBrowserOperation(row.text)).filter((operation) => operation !== null);
+  return [...new Set(operations)];
+}
+function playwrightOperation(toolName) {
+  return toolName.match(/playwright.*__browser_(.+)$/i)?.[1]?.replace(/_/g, " ") ?? null;
+}
+
+// src/tools/bash.ts
+function commandOf(input) {
+  const raw = pickString(input, "command") ?? (typeof input.action_json === "string" ? input.action_json : null);
+  return raw?.trim() || null;
+}
+function renderCommand(command) {
+  return splitCommandRows(command).map(({ text, sep }, index) => (index === 0 ? ink.dim("$ ") : "") + highlight(text, "bash") + (sep ? " " + ink.dim(sep) : "")).join("\n");
+}
+var EXIT_OK = /^(?:0|process exited|completed|success)$/i;
+function footerBadges(status, cwd, extra) {
+  const ok = status !== null && EXIT_OK.test(status.trim());
+  return [
+    ...status !== null ? [badge({ label: `exit ${status}`, color: ok ? "brightGreen" : "brightRed", icon: ok ? "\u2713" : "\u2A02" })] : [],
+    ...cwd ? [badge({ label: displayPath(cwd), color: "brightBlue", icon: "\u2302" })] : [],
+    ...Object.entries(extra).map(([key, value]) => badge({ label: `${key} ${value}`, color: "brightCyan" }))
+  ];
+}
+var operationBadges = (operations) => operations.map((operation) => badge({ label: operation, color: "brightBlue", icon: "\u0192" }));
+function renderOutput(text, language) {
+  const painted = highlight(text, language);
+  return language === "diff" ? painted : painted.split("\n").map((line) => renderRuler(line) ?? line).join("\n");
+}
+function outputSections(stdout, language) {
+  if (!stdout.trim())
+    return [];
+  return language === "diff" ? [{ content: stdout, beginsWithRuler: false }] : splitRulerSections(stdout);
+}
+function withFooter(specs, footer) {
+  if (!footer.length)
+    return specs;
+  if (!specs.length)
+    return [{ badges: OUTPUT_BADGE, content: "", footer }];
+  return specs.map((spec, index) => index === specs.length - 1 ? { ...spec, footer } : spec);
+}
+function withOmitted(specs, omitted) {
+  if (!omitted)
+    return specs;
+  const note = omittedNote(omitted);
+  const last = specs.at(-1);
+  if (!last)
+    return [{ badges: OUTPUT_BADGE, content: note }];
+  const content = typeof last.content === "string" ? last.content + "\n" + note : last.content.map((region, index) => index === last.content.length - 1 ? { ...region, content: region.content + "\n" + note } : region);
+  return [...specs.slice(0, -1), { ...last, content }];
+}
+function outputSpecs(command, stdout, language, limit) {
+  const { text: head, omitted } = clampLines(stdout, limit.lines);
+  const sections = outputSections(head, language);
+  const specs = [];
+  let next = 0;
+  if (command) {
+    const regions = [{ content: renderCommand(command), background: TUI_TOKENS.card.commandBackground }];
+    const first = sections[0];
+    if (first && !first.beginsWithRuler) {
+      regions[0].trailingBlank = true;
+      regions.push({ heading: OUTPUT_BADGE, content: renderOutput(first.content, language) });
+      next = 1;
     }
-    return { systemMessage: renderSection({ badges: badge, lines }) };
+    specs.push({ badges: RUNNING_BADGE, content: regions });
   }
-});
-defineHook({
-  event: "UserPromptExpansion",
-  parse(raw) {
-    const o = asObject(raw);
-    const expanded = pickString(o, "expanded_prompt", "expandedPrompt", "expanded", "prompt") ?? "";
-    if (!expanded)
-      debugLog("UserPromptExpansion", "unknown-shape", Object.keys(o));
+  for (const section2 of sections.slice(next))
+    specs.push({ badges: OUTPUT_BADGE, content: renderOutput(section2.content, language) });
+  return withOmitted(specs, omitted);
+}
+function renderCards(command, stdout, footer, screenshot, limit) {
+  if (screenshot) {
+    const specs = command ? [{ badges: RUNNING_BADGE, content: renderCommand(command) }] : [];
+    return [...withFooter(specs, footer).map(renderCard), screenshot(limit)];
+  }
+  const language = detectOutputLanguage(stdout);
+  const body = language === "json" ? formatJSON(stdout) : stdout;
+  return withFooter(outputSpecs(command, body, language, limit), footer).map(renderCard);
+}
+var bash = {
+  id: "bash",
+  match: named("Bash", "mcp__wcgw__BashCommand"),
+  render({ input, result }, limit) {
+    const command = commandOf(input);
+    const { stdout, status, cwd, extra } = parseWcgwTrailer(resultText(result) ?? "");
+    const operations = command ? agentBrowserOperations(command) : [];
+    const screenshot = operations.length ? screenshotCard(result, stdout) : null;
+    const cards = renderCards(command, stdout, footerBadges(status, cwd, extra), screenshot, limit);
+    return { lines: [stack(cards)], badges: operationBadges(operations) };
+  }
+};
+
+// src/tools/browser.ts
+var browser = {
+  id: "browser",
+  match: matching(/^mcp__playwright__browser_/i),
+  render({ name, result }, limit) {
+    const operation = playwrightOperation(name);
+    const text = resultText(result);
+    const shot = screenshotCard(result, text);
+    const body = shot ? shot(limit) : text?.trim() ? outputCard(text, limit) : result && typeof result === "object" ? metaCard(result, limit) : null;
+    return { lines: [body], badges: operationBadges(operation ? [operation] : []) };
+  }
+};
+
+// src/tools/files.ts
+import path7 from "node:path";
+var pathOf = (input) => pickString(input, "file_path", "filePath", "path");
+var read = {
+  id: "read",
+  match: named("Read"),
+  render({ input, result }, limit) {
+    const filePath = pathOf(input);
+    const text = resultText(result);
+    const card = filePath ? fileCard(filePath, { action: "read", fallbackText: text }) : null;
+    return { lines: [card ? card(limit) : text ? outputCard(text, limit) : null] };
+  }
+};
+var write = {
+  id: "write",
+  match: named("Write"),
+  render({ input, result }, limit) {
+    const filePath = pathOf(input) ?? pickString(result, "filePath");
+    const card = filePath ? fileCard(filePath, { action: "write" }) : null;
+    return { lines: [card ? card(limit) : filePath ? statusLine(`wrote ${filePath}`) : null] };
+  }
+};
+var CONTEXT_LINES = 3;
+function editedSpan(result) {
+  const hunks = asRecord(result)?.structuredPatch;
+  if (!Array.isArray(hunks) || !hunks.length)
+    return null;
+  const spans = hunks.flatMap((hunk) => {
+    const start = Number(asRecord(hunk)?.newStart);
+    const count = Number(asRecord(hunk)?.newLines);
+    return Number.isFinite(start) ? [{ start, end: start + Math.max(Number.isFinite(count) ? count : 1, 1) - 1 }] : [];
+  });
+  if (!spans.length)
+    return null;
+  return {
+    start: Math.max(1, Math.min(...spans.map((span) => span.start)) - CONTEXT_LINES),
+    end: Math.max(...spans.map((span) => span.end)) + CONTEXT_LINES
+  };
+}
+var edit = {
+  id: "edit",
+  match: named("Edit", "MultiEdit"),
+  render({ name, input, result }, limit) {
+    const filePath = pathOf(input) ?? pickString(result, "filePath");
+    const card = filePath ? fileCard(filePath, { action: name === "MultiEdit" ? "multi-edit" : "edit", range: editedSpan(result) }) : null;
+    const text = resultText(result);
+    return { lines: [card ? card(limit) : text ? statusLine(text, 120) : null] };
+  }
+};
+var viewImage = {
+  id: "view-image",
+  match: named("view_image", "ViewImage"),
+  render({ input, result }, limit) {
+    const filePath = pathOf(input);
+    const card = (filePath ? fileCard(filePath, { action: "view", readText: false }) : null) ?? screenshotCard(result, resultText(result), "view");
+    return { lines: [card?.(limit)] };
+  }
+};
+var SEARCH_REPLACE_RE = /<<<<<<< SEARCH\r?\n[\s\S]*?=======\r?\n[\s\S]*?>>>>>>> REPLACE/;
+var wcgwFile = {
+  id: "wcgw-file",
+  match: named("mcp__wcgw__FileWriteOrEdit", "mcp__wcgw__FileEdit"),
+  render({ input, result }, limit) {
+    const text = resultText(result);
+    const filePath = pathOf(input);
+    const action = SEARCH_REPLACE_RE.test(String(input.text_or_search_replace_blocks ?? "")) ? "edit" : "write";
+    const card = filePath ? fileCard(filePath, { action }) : null;
     return {
-      expandedPrompt: expanded,
-      originalPrompt: pickString(o, "original_prompt", "originalPrompt")
+      lines: [
+        text?.trim() ? statusLine(text) : null,
+        card ? card(limit) : text && !text.trim() ? null : !card && text ? outputCard(text, limit) : null
+      ]
+    };
+  }
+};
+function pathList(input) {
+  const raw = pickAny(input, "file_paths", "file_path", "path") ?? [];
+  return (Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean);
+}
+function inlineContents(result, limit) {
+  const record = asRecord(result);
+  const contents = pickAny(record, "file-contents-numbered", "file_contets_numbered", "file-contents", "output");
+  if (typeof contents === "string")
+    return contents ? [outputCard(contents, limit)] : [];
+  const files = asRecord(contents);
+  if (!files)
+    return [];
+  return Object.entries(files).filter((entry) => typeof entry[1] === "string").map(([filePath, content]) => renderPathCard({
+    path: filePath,
+    content: collapse(renderText(content, filePath), limit.lines)
+  }));
+}
+var wcgwRead = {
+  id: "wcgw-read",
+  match: named("mcp__wcgw__ReadFiles", "mcp__wcgw__ReadImage"),
+  render({ input, result }, limit) {
+    const paths = pathList(input);
+    const each = share(limit, paths.length);
+    const cards = paths.map((rawPath) => fileCard(rawPath, { action: "read" })?.(each) ?? ink.err("\u2A02 ") + ink.strong("Path: ") + stripLineRange(rawPath).path);
+    const missed = cards.filter((card) => card.includes("\u2A02 ")).length;
+    if (paths.length && missed < paths.length)
+      return { lines: cards };
+    const inline = inlineContents(result, limit);
+    const text = resultText(result);
+    return { lines: [...cards, ...inline.length ? inline : text ? [outputCard(text, limit)] : []] };
+  }
+};
+var SAVED_PATH_RE = /(\/[^\s"']*\.txt)/;
+function savedContextPath(input, text) {
+  const fromResult = text ? SAVED_PATH_RE.exec(text)?.[1] : null;
+  if (fromResult)
+    return fromResult;
+  const id = pickString(input, "id");
+  if (!id)
+    return null;
+  const dataHome = process.env.XDG_DATA_HOME || path7.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
+  return path7.join(dataHome, "wcgw", "memory", `${id}.txt`);
+}
+var RELEVANT_FILES_MARKER = "\n# Relevant Files:";
+function dropInlinedFiles(raw) {
+  const at = raw.indexOf(RELEVANT_FILES_MARKER);
+  if (at === -1)
+    return raw;
+  const omitted = raw.slice(at + RELEVANT_FILES_MARKER.length).split("\n").length;
+  return raw.slice(0, at) + `
+# Relevant Files: ${omitted} lines of inlined file content`;
+}
+var wcgwContext = {
+  id: "wcgw-context",
+  match: named("mcp__wcgw__ContextSave"),
+  render({ input, result }, limit) {
+    const text = resultText(result)?.trim() || null;
+    const saved = savedContextPath(input, text);
+    const status = text && text !== saved ? statusLine(text) : null;
+    const card = saved ? fileCard(saved, { action: "context save", transform: dropInlinedFiles }) : null;
+    return {
+      lines: [
+        status,
+        card ? card(limit) : text && !status ? ink.ok("\u29FA ") + firstLine(text, 200) : null
+      ]
+    };
+  }
+};
+var FILE_RENDERERS = [read, write, edit, viewImage, wcgwFile, wcgwRead, wcgwContext];
+
+// src/tools/generic.ts
+var PRIMARY_KEYS = {
+  Read: ["content", "output", "text"],
+  Glob: ["filenames", "result", "output"],
+  Grep: ["filenames", "result", "output"],
+  // WebFetch answers `{ code, codeText, url, durationMs, result }`.
+  WebFetch: ["result", "content", "output", "text"],
+  ExitPlanMode: ["plan", "result"],
+  NotebookRead: ["output", "content"],
+  NotebookEdit: ["result", "output"]
+};
+var CONTENT_KEYS = ["stdout", "output", "content", "text", "message", "result", "error", "stderr", "filePath", "type"];
+var LABELLED = {
+  error: (value) => ink.err("\u2A02 ERROR:") + "\n" + value,
+  stderr: (value) => ink.err("\u2A02 STDERR:") + "\n" + value,
+  filePath: (value) => ink.key("\u{F021A} ") + ink.strong("Path: ") + value,
+  type: (value) => ink.key("\u29D6 ") + ink.strong("Action: ") + value
+};
+var asText = (value) => typeof value === "object" && value !== null ? resultText(value) ?? JSON.stringify(value, null, 2) : String(value);
+function takeContent(rest, primary) {
+  const parts = primary === null ? [] : [primary];
+  for (const key of CONTENT_KEYS) {
+    if (rest[key] == null)
+      continue;
+    const value = asText(rest[key]);
+    if (!primary?.includes(value.slice(0, 20)))
+      parts.push(LABELLED[key]?.(value) ?? value);
+    delete rest[key];
+  }
+  return parts;
+}
+function deconstruct(toolName, result) {
+  if (typeof result === "string")
+    return { primary: result, metadata: null };
+  if (Array.isArray(result) || asRecord(result)?.["0"])
+    return { primary: resultText(result), metadata: null };
+  const record = asRecord(result);
+  if (!record)
+    return { primary: null, metadata: null };
+  const rest = { ...record };
+  const primaryKey = (PRIMARY_KEYS[parseToolName(toolName).tool] ?? []).find((key) => rest[key] != null);
+  const primary = primaryKey ? asText(rest[primaryKey]) : null;
+  if (primaryKey)
+    delete rest[primaryKey];
+  const parts = takeContent(rest, primary);
+  return {
+    primary: parts.join("\n\n") || null,
+    metadata: Object.keys(rest).length ? rest : null
+  };
+}
+var generic = {
+  id: "generic",
+  match: () => true,
+  render({ name, result }, limit) {
+    const { primary, metadata } = deconstruct(name, result);
+    return {
+      lines: [
+        primary ? outputCard(primary, limit) : null,
+        metadata ? metaCard(metadata, limit) : null,
+        !primary && !metadata && pickAny(result) === void 0 && result && typeof result === "object" ? metaCard(result, limit) : null
+      ]
+    };
+  }
+};
+
+// src/tools/misc.ts
+function structuredAnswers(result) {
+  const answers = asRecord(asRecord(result)?.answers);
+  return answers ? Object.entries(answers).map(([question, value]) => ({ question, answer: Array.isArray(value) ? value.map(String).join(", ") : String(value) })) : [];
+}
+function nativeAnswers(questions, result) {
+  const text = resultText(result) ?? "";
+  return questions.flatMap((question) => {
+    const marker = `"${question}"="`;
+    const start = text.indexOf(marker);
+    if (start < 0)
+      return [];
+    const from = start + marker.length;
+    const end = text.indexOf('"', from);
+    return [{ question, answer: text.slice(from, end < 0 ? void 0 : end) }];
+  });
+}
+var askUserQuestion = {
+  id: "ask-user-question",
+  match: named("AskUserQuestion"),
+  render({ input, result }) {
+    const questions = Array.isArray(input.questions) ? input.questions.map((item) => pickString(item, "question")).filter((q) => q !== null) : [];
+    const answers = structuredAnswers(result);
+    const resolved = answers.length ? answers : nativeAnswers(questions, result);
+    return {
+      lines: resolved.length ? resolved.flatMap(({ question, answer }) => [ink.dim("\xB7 ") + prose(question, Infinity, 2), ink.ok("\u2192 ") + prose(answer, Infinity, 2)]) : [ink.ok("\u2713 Answers recorded")],
+      badges: [badge({ label: `${resolved.length || questions.length} answer${resolved.length === 1 ? "" : "s"}`, color: "brightGreen", icon: "\u2713" })]
+    };
+  }
+};
+function loadedToolNames(result, query) {
+  const parsed = parseJsonish(result);
+  const record = asRecord(parsed);
+  const candidates = Array.isArray(parsed) ? parsed : [record?.matches, record?.content].find(Array.isArray) ?? [];
+  const names = candidates.flatMap((candidate) => typeof candidate === "string" ? [candidate] : [pickString(candidate, "tool_name", "toolName", "name")].filter((name) => name !== null));
+  const selected = query.startsWith("select:") ? query.slice(7).split(",").map((name) => name.trim()).filter(Boolean) : [];
+  const deferred = typeof record?.total_deferred_tools === "number" ? record.total_deferred_tools : null;
+  return { names: [...new Set(names.length ? names : selected)], deferred };
+}
+var toolSearch = {
+  id: "tool-search",
+  match: named("ToolSearch"),
+  render({ input, result }) {
+    const { names, deferred } = loadedToolNames(result, pickString(input, "query") ?? "");
+    return {
+      lines: names.length ? names.map((name) => ink.ok("\u2713 ") + parseToolName(name).pretty) : [ink.dim("No tools loaded")],
+      badges: [
+        badge({ label: `${names.length} loaded`, color: names.length ? "brightGreen" : "gray" }),
+        deferred === null ? null : badge({ label: `${deferred} deferred`, color: "gray" })
+      ]
+    };
+  }
+};
+var PATCH_SUCCESS = /(?:^done!?$|success\.\s+(?:updated|added|deleted) the following files:)/im;
+var applyPatch = {
+  id: "apply-patch",
+  match: named("apply_patch", "ApplyPatch"),
+  render({ result }, limit) {
+    const text = resultText(result)?.trim() ?? "";
+    return { lines: [text && !PATCH_SUCCESS.test(text) ? outputCard(text, limit) : null] };
+  }
+};
+var wcgwInit = {
+  id: "wcgw-init",
+  match: named("mcp__wcgw__Initialize"),
+  render({ result }) {
+    const text = pickString(result, "text", "output") ?? resultText(result);
+    return { lines: [text ? ink.ok("\u23FB ") + text.split("\n").slice(0, 3).join("\n") : null] };
+  }
+};
+var MISC_RENDERERS = [askUserQuestion, toolSearch, applyPatch, wcgwInit];
+
+// src/tools/tasks.ts
+var normalizeStatus = (value, fallback = "pending") => String(value ?? fallback).trim().toLowerCase().replace(/-/g, "_") || fallback;
+function normalizeTask(value, fallback = {}, fallbackStatus = "pending") {
+  const task = asRecord(value);
+  const subject = pickString(task, "subject", "title", "name") ?? pickString(fallback, "subject", "title", "name");
+  if (!subject)
+    return null;
+  const description = pickString(task, "description", "details") ?? pickString(fallback, "description", "details");
+  return {
+    id: pickId(task, "id", "taskId") ?? pickId(fallback, "id", "task_id"),
+    subject,
+    ...description ? { description } : {},
+    status: normalizeStatus(pickAny(task, "status") ?? pickAny(fallback, "status"), fallbackStatus)
+  };
+}
+var taskFromResult = (input, result, fallbackStatus) => normalizeTask(pickAny(asRecord(result), "task", "item") ?? result, input, fallbackStatus);
+function tasksFromResult(result) {
+  const parsed = parseJsonish(result);
+  const record = asRecord(parsed);
+  const candidate = record ? parseJsonish(pickAny(record, "tasks", "items", "result", "output", "content")) : parsed;
+  return Array.isArray(candidate) ? candidate.map((item) => normalizeTask(item)).filter((task) => task !== null) : [];
+}
+var APPEARANCE = {
+  completed: { caption: "TASK COMPLETED", checked: true, color: "green" },
+  in_progress: { caption: "TASK STARTED", checked: false, color: "yellow" },
+  blocked: { caption: "TASK BLOCKED", checked: false, color: "red" },
+  cancelled: { caption: "TASK CANCELLED", checked: false, color: "gray" },
+  canceled: { caption: "TASK CANCELLED", checked: false, color: "gray" },
+  pending: { caption: "TASK QUEUED", checked: false, color: "cyan" },
+  todo: { caption: "TASK QUEUED", checked: false, color: "cyan" }
+};
+var taskAppearance = (status) => APPEARANCE[normalizeStatus(status)] ?? { caption: "TASK UPDATED", checked: false, color: "blue" };
+function renderTask(task, caption) {
+  const look = taskAppearance(task.status);
+  const heading = renderCheckboxHeading({
+    caption: caption ?? look.caption,
+    checked: look.checked,
+    color: look.color,
+    description: task.description
+  });
+  const label = task.id == null ? task.subject : `#${task.id}  ${task.subject}`;
+  return [...heading.split("\n"), "", renderBadges(badge({ label, color: look.color }))];
+}
+var taskCreate = {
+  id: "task-create",
+  match: named("TaskCreate"),
+  render({ input, result }) {
+    const task = taskFromResult(input, result, "pending");
+    return { lines: task ? renderTask(task, "ADDED TASK") : [] };
+  }
+};
+var taskUpdate = {
+  id: "task-update",
+  match: named("TaskUpdate"),
+  render({ input, result }) {
+    const record = asRecord(result);
+    const status = normalizeStatus(pickAny(asRecord(record?.statusChange), "to") ?? pickAny(record, "status") ?? pickAny(input, "status"), "updated");
+    const task = taskFromResult(input, result, status);
+    if (task)
+      return { lines: renderTask({ ...task, status }) };
+    const id = pickId(record, "taskId", "task_id") ?? pickId(input, "taskId", "task_id", "id");
+    const look = taskAppearance(status);
+    return {
+      lines: [renderBadges(
+        badge({ label: look.caption, color: look.color, icon: look.checked ? "\u2713" : "\u21BB" }),
+        id === null ? null : badge({ label: `#${id}`, color: "gray" })
+      )]
+    };
+  }
+};
+var taskList = {
+  id: "task-list",
+  match: named("TaskList"),
+  render({ result }) {
+    const tasks = tasksFromResult(result);
+    return { lines: tasks.length ? tasks.flatMap((task, index) => [...index ? [""] : [], ...renderTask(task)]) : [ink.dim("No tasks")] };
+  }
+};
+var taskStop = {
+  id: "task-stop",
+  match: named("TaskStop"),
+  render({ input, result }) {
+    const record = resultRecord(result);
+    const id = pickId(record, "task_id", "taskId") ?? pickId(input, "task_id", "taskId");
+    const type = pickString(record, "task_type");
+    return {
+      lines: [ink.err("\u25A0 ") + source_default.bold.red("TASK STOPPED")],
+      badges: [
+        id === null ? null : badge({ label: id, color: "brightRed" }),
+        type ? badge({ label: type, color: "gray" }) : null
+      ]
+    };
+  }
+};
+function planItems(value) {
+  if (!Array.isArray(value))
+    return [];
+  return value.flatMap((item) => {
+    const text = pickString(item, "step", "content", "activeForm");
+    return text ? [{ text: text.trim(), status: normalizeStatus(pickAny(item, "status")) }] : [];
+  });
+}
+var PLAN_GLYPH = {
+  completed: ["\u2713", ink.ok],
+  in_progress: ["\u25B6", ink.warn],
+  blocked: ["\xD7", ink.err]
+};
+var planUpdate = {
+  id: "plan-update",
+  match: named("update_plan", "UpdatePlan", "TodoWrite", "TodoRead"),
+  render({ input, result }) {
+    const record = resultRecord(result);
+    const fromInput = planItems(pickAny(input, "plan", "todos"));
+    const plan = fromInput.length ? fromInput : planItems(pickAny(record, "plan", "todos"));
+    const explanation = pickString(input, "explanation") ?? pickString(record, "explanation");
+    const completed = plan.filter((item) => item.status === "completed").length;
+    return {
+      lines: [
+        explanation ? ink.dim(prose(explanation)) : null,
+        ...plan.map(({ text, status }) => {
+          const [glyph, paint] = PLAN_GLYPH[status] ?? ["\u25CB", ink.key];
+          return paint(`${glyph} `) + prose(text, Infinity, 2);
+        }),
+        plan.length ? null : ink.dim("Plan updated")
+      ],
+      badges: plan.length ? [badge({ label: `${completed}/${plan.length} complete`, color: completed === plan.length ? "brightGreen" : "brightYellow" })] : []
+    };
+  }
+};
+var exitPlan = {
+  id: "exit-plan",
+  match: named("ExitPlanMode"),
+  render: () => ({ lines: renderHeading({ word: "YEET FAFO", color: "cyan", event: "stop" }).split("\n") })
+};
+var TASK_RENDERERS = [taskCreate, taskUpdate, taskList, taskStop, planUpdate, exitPlan];
+
+// src/tools/web.ts
+function collectLinks(value, seen = /* @__PURE__ */ new Set(), out = []) {
+  const record = asRecord(value);
+  if (record && typeof record.url === "string" && /^https?:/.test(record.url)) {
+    if (!seen.has(record.url)) {
+      seen.add(record.url);
+      out.push({ title: pickString(record, "title", "name") ?? record.url, url: record.url });
+    }
+    return out;
+  }
+  if (Array.isArray(value))
+    value.forEach((item) => collectLinks(item, seen, out));
+  else if (record)
+    Object.values(record).forEach((item) => collectLinks(item, seen, out));
+  else if (typeof value === "string")
+    collectLinks(linksInText(value), seen, out);
+  return out;
+}
+var LINKS_LINE_RE = /^Links:\s*(\[[\s\S]*?\])\s*$/m;
+var linksInText = (text) => {
+  const match = LINKS_LINE_RE.exec(text);
+  return match ? parseJsonish(match[1]) : null;
+};
+function summaries(value) {
+  const parts = Array.isArray(value) ? value : [value];
+  return parts.filter((part) => typeof part === "string").map((part) => part.replace(LINKS_LINE_RE, "").replace(/^Web search results for query:.*$/m, "").trim()).filter(Boolean);
+}
+function linkTable(links, limit) {
+  const table = renderTable({
+    head: ["#", "title", "url"],
+    rows: links.map((link, index) => [ink.num(String(index + 1)), link.title, source_default.gray.underline(link.url)])
+  });
+  return renderCard({ badges: OUTPUT_BADGE, content: collapse(table, limit.lines, { label: "rows" }) });
+}
+var webSearch = {
+  id: "web-search",
+  match: named("WebSearch"),
+  render({ input, result }, limit) {
+    const record = asRecord(result);
+    const payload = record?.results ?? record ?? resultText(result);
+    const links = collectLinks(payload);
+    const query = pickString(input, "query") ?? pickString(record, "query");
+    const seconds = typeof record?.durationSeconds === "number" ? record.durationSeconds : null;
+    return {
+      lines: [
+        query ? ink.dim("\u2315 ") + query : null,
+        links.length ? linkTable(links, limit) : null,
+        ...summaries(payload).map((text) => ink.dim(prose(text, 600)))
+      ],
+      badges: [
+        badge({ label: `${links.length} result${links.length === 1 ? "" : "s"}`, color: links.length ? "brightGreen" : "gray" }),
+        seconds === null ? null : badge({ label: `${seconds.toFixed(1)}s`, color: "gray" })
+      ]
+    };
+  }
+};
+var WEB_RENDERERS = [webSearch];
+
+// src/tools/index.ts
+var RENDERERS = [
+  bash,
+  ...FILE_RENDERERS,
+  ...TASK_RENDERERS,
+  ...AGENT_RENDERERS,
+  ...WEB_RENDERERS,
+  ...MISC_RENDERERS,
+  browser,
+  generic
+];
+var rendererFor = (toolName) => RENDERERS.find((renderer) => renderer.match(toolName)) ?? generic;
+var renderTool = (view) => (limit) => {
+  const { lines, badges = [] } = rendererFor(view.name).render(view, limit);
+  return section([toolBadge(view.name), ...badges], [durationLine(view.durationMs), ...lines]);
+};
+
+// src/hooks.ts
+var HOME3 = process.env.HOME ?? process.env.USERPROFILE ?? "";
+var SYSTEM_PROMPT_PATH = path8.join(HOME3, "system-prompt.md");
+function loadSystemPrompt() {
+  try {
+    return fs8.existsSync(SYSTEM_PROMPT_PATH) ? fs8.readFileSync(SYSTEM_PROMPT_PATH, "utf8") : null;
+  } catch (error) {
+    debugLog("SessionStart", "load-system-prompt", error.message);
+    return null;
+  }
+}
+var quoted = (text, limit) => ink.dim(prose(text, limit));
+var banner = (word, color, event2, badges, lines = []) => renderHeading({ word, color, event: event2 }) + section(badges, lines);
+function toolView(raw) {
+  const input = pickAny(raw, "tool_input", "toolInput");
+  return {
+    name: pickString(raw, "tool_name", "toolName") ?? "Unknown",
+    // Freeform tools such as apply_patch put their payload directly in `tool_input`.
+    input: asRecord(input) ?? (typeof input === "string" ? { input } : {}),
+    result: pickAny(raw, "tool_response", "tool_result", "toolResult") ?? null,
+    durationMs: pickNumber(raw, "duration_ms", "durationMs")
+  };
+}
+var HOOKS = {
+  // Registered so Codex receives a valid no-op; policy stays host-owned.
+  PreToolUse: () => ({}),
+  PostToolBatch: () => ({}),
+  SessionStart: (raw) => {
+    const source = pickString(raw, "source") ?? "startup";
+    const model = pickString(raw, "model");
+    const agentType = pickString(raw, "agent_type", "agentType");
+    const systemPrompt = loadSystemPrompt();
+    const isWake = source === "compact";
+    const body = banner(isWake ? "WAKE UP" : "BEGIN AGAIN", "cyan", isWake ? "wakeup" : "start", [
+      badge({ label: `Session:${source}`, color: "green", icon: "\u23FB" }),
+      model ? badge({ label: model, color: "gray" }) : null
+    ], [
+      ink.ok("Session started"),
+      agentType ? ink.dim("Agent: ") + agentType : null,
+      systemPrompt ? ink.key("\u2713 ") + "System prompt loaded from: " + SYSTEM_PROMPT_PATH : null
+    ]);
+    return {
+      hookSpecificOutput: { hookEventName: "SessionStart", ...systemPrompt ? { additionalContext: systemPrompt } : {} },
+      // The art gets whatever the fixed part of the banner leaves of the limit.
+      systemMessage: (limit) => renderWelcome(limit.chars - body.length) + body
     };
   },
-  handle(input) {
-    const badge = new Badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" });
-    const lines = [];
-    if (input.expandedPrompt)
-      lines.push(prose(input.expandedPrompt, 300));
-    return { systemMessage: renderSection({ badges: badge, lines }) };
-  }
-});
-defineHook({
-  event: "PostToolBatch",
-  parse(raw) {
-    return asObject(raw);
+  SessionEnd: () => ({ systemMessage: banner("BYE", "red", "bye", [badge({ label: "SessionEnd", color: "red", icon: "\u23FC" })]) }),
+  Stop: () => ({ systemMessage: banner("STOP", "red", "stop", [badge({ label: "Stop", color: "red", icon: "\u25A0" })]) }),
+  SubagentStart: (raw) => {
+    const agentType = pickString(raw, "agent_type", "agentType");
+    return {
+      systemMessage: banner("BEGIN", "green", "agent", [
+        badge({ label: "SubagentStart", color: "green", icon: "\u2B21" }),
+        agentType ? badge({ label: agentType, color: "gray" }) : null
+      ])
+    };
   },
-  handle() {
+  SubagentStop: (raw) => ({
+    systemMessage: banner("GOIN ASLEEP", "green", "agent", [
+      badge({ label: "SubagentStop", color: "green", icon: "\u231F" }),
+      badge({ label: pickString(raw, "agent_type", "agentType") ?? "Main Process", color: "gray" })
+    ])
+  }),
+  PreCompact: (raw) => {
+    const trigger = pickString(raw, "trigger");
+    const instructions = pickString(raw, "custom_instructions", "customInstructions");
+    return {
+      systemMessage: banner("COMPACT", "yellow", "compact", [
+        badge({ label: "PreCompact", color: "yellow", icon: "\u27F3" }),
+        trigger ? badge({ label: trigger, color: "gray" }) : null
+      ], [instructions ? quoted(instructions, 200) : null])
+    };
+  },
+  PostCompact: (raw) => {
+    const summary = pickString(raw, "summary", "compact_summary");
+    return {
+      systemMessage: banner(
+        "COMPACT",
+        "yellow",
+        "compact",
+        [badge({ label: "PostCompact", color: "yellow", icon: "\u27F3" })],
+        [summary ? quoted(summary, 200) : null]
+      )
+    };
+  },
+  InstructionsLoaded: (raw) => {
+    const filePath = pickString(raw, "file_path", "filePath");
+    const loadReason = pickString(raw, "load_reason", "loadReason");
+    return {
+      systemMessage: section([
+        badge({ label: `Instructions:${pickString(raw, "memory_type", "memoryType") ?? "Unknown"}`, color: "cyan", icon: "\u2713" }),
+        loadReason ? badge({ label: loadReason, color: "gray" }) : null
+      ], [filePath ? ink.dim("File: ") + filePath : null])
+    };
+  },
+  UserPromptSubmit: (raw) => {
+    const prompt = pickString(raw, "prompt", "user_prompt", "userPrompt") ?? "";
+    const badges = [badge({ label: "UserPromptSubmit", color: "yellow", icon: "\u270E" })];
+    const lines = [prompt ? quoted(prompt, 200) : null];
+    const imagePath = findImagePath(prompt, pickString(raw, "cwd") ?? process.cwd());
+    const image = imagePath ? fileCard(imagePath, { action: "prompt image" }) : null;
+    return { systemMessage: image ? (limit) => section(badges, [...lines, image(limit)]) : section(badges, lines) };
+  },
+  UserPromptExpansion: (raw) => {
+    const expanded = pickString(raw, "expanded_prompt", "expandedPrompt", "expanded", "prompt");
+    if (!expanded)
+      debugLog("UserPromptExpansion", "unknown-shape", Object.keys(raw));
+    return {
+      systemMessage: section(
+        [badge({ label: "UserPromptExpansion", color: "magenta", icon: "\u2731" })],
+        [expanded ? quoted(expanded, 300) : null]
+      )
+    };
+  },
+  PostToolUseFailure: (raw) => {
+    const view = toolView(raw);
+    const error = pickAny(raw, "error", "tool_result") ?? "Unknown error";
+    const text = typeof error === "string" ? error : pickString(error, "message") ?? JSON.stringify(error, null, 2);
+    return {
+      hookSpecificOutput: { hookEventName: "PostToolUseFailure", additionalContext: typeof error === "string" ? error : JSON.stringify(error) },
+      systemMessage: section([
+        toolBadge(view.name, { color: "red", icon: "\u2A02" }),
+        pickBool(raw, "is_interrupt", "isInterrupt") ? badge({ label: "INTERRUPT", color: "yellow" }) : null
+      ], [ink.err("\u2A02 ") + source_default.bold.red("Tool failed:"), text, durationLine(view.durationMs)])
+    };
+  },
+  PostToolUse: (raw) => ({ systemMessage: renderTool(toolView(raw)) })
+};
+function handleHook(event2, raw) {
+  try {
+    return HOOKS[event2](asRecord(raw) ?? {});
+  } catch (error) {
+    debugLog("handleHook", "handler-error", event2, error instanceof Error ? error.stack ?? error.message : String(error));
     return {};
   }
-});
-defineHook({
-  event: "PostToolUseFailure",
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName = pickString(o, "tool_name", "toolName") ?? "Unknown";
-    const rawInput = pickAny(o, "tool_input", "toolInput") ?? {};
-    const errorRaw = pickAny(o, "error", "tool_result") ?? "Unknown error";
-    const error = typeof errorRaw === "string" || errorRaw && typeof errorRaw === "object" ? errorRaw : "Unknown error";
-    return {
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput),
-      error,
-      isInterrupt: pickBool(o, "is_interrupt", "isInterrupt"),
-      durationMs: pickNumber(o, "duration_ms", "durationMs")
-    };
-  },
-  handle(input) {
-    const badges = [
-      new Badge({ toolName: input.toolName, color: "red", icon: "\u2A02" }),
-      input.isInterrupt ? new Badge({ label: "INTERRUPT", color: "yellow" }) : null
-    ];
-    const lines = [source_default.red("\u2A02 ") + source_default.bold.red("Tool failed:")];
-    const err = input.error;
-    if (typeof err === "string")
-      lines.push(err);
-    else if (typeof err === "object" && err && typeof err.message === "string")
-      lines.push(err.message);
-    else
-      lines.push(JSON.stringify(err, null, 2));
-    pushDurationLine(lines, input.durationMs);
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PostToolUseFailure",
-        additionalContext: typeof err === "string" ? err : JSON.stringify(err)
-      },
-      systemMessage: renderSection({ badges, lines })
-    };
-  }
-});
-defineHook({
-  event: "PostToolUse",
-  parse(raw) {
-    const o = asObject(raw);
-    const toolName = pickString(o, "tool_name", "toolName") ?? "Unknown";
-    const rawInput = pickAny(o, "tool_input", "toolInput") ?? {};
-    const toolResponse = pickAny(o, "tool_response", "tool_result", "toolResult") ?? null;
-    return {
-      toolResponse,
-      toolName,
-      toolInput: injectToolDiscriminator(toolName, rawInput),
-      sessionId: pickString(o, "session_id", "sessionId"),
-      durationMs: pickNumber(o, "duration_ms", "durationMs")
-    };
-  },
-  handle(input) {
-    const systemMessage = renderToolSection({
-      toolName: input.toolName,
-      input: input.toolInput,
-      result: input.toolResponse,
-      durationMs: input.durationMs
-    });
-    return { systemMessage };
-  }
-});
+}
 
 // src/runtime/io.ts
-function readInput() {
+function readStdin() {
   return new Promise((resolve) => {
     const chunks = [];
     process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => chunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8")));
+    process.stdin.on("data", (chunk) => chunks.push(String(chunk)));
     process.stdin.on("end", () => {
       const raw = chunks.join("");
-      if (!raw.trim()) {
-        resolve(null);
-        return;
-      }
+      if (!raw.trim())
+        return resolve(null);
       try {
         resolve(JSON.parse(raw));
-      } catch (e) {
-        debugLog("readInput", "parse-fail", e.message, raw.slice(0, 200));
+      } catch (error) {
+        debugLog("readStdin", "parse-fail", error.message, raw.slice(0, 200));
         resolve(null);
       }
     });
   });
 }
-function writeOutput(data, { mirrorSystemMessageToStderr = true } = {}) {
-  const response = serializeHookResponse(data);
-  if (mirrorSystemMessageToStderr && response.systemMessage)
-    process.stderr.write(response.systemMessage + "\n");
-  process.stdout.write(response.json);
+function writeResponse(json, systemMessage, { mirrorToStderr: mirrorToStderr2 }) {
+  if (mirrorToStderr2 && systemMessage)
+    process.stderr.write(systemMessage + "\n");
+  process.stdout.write(json);
   process.exit(0);
 }
 
-// src/runtime/run-hook.ts
-async function runHook(name, handler) {
-  const mirrorSystemMessageToStderr = name !== "PostToolUse";
-  try {
-    const data = await readInput();
-    const out = await handler(data ?? {}) ?? {};
-    writeOutput({ ...out }, { mirrorSystemMessageToStderr });
-  } catch (err) {
-    const detail = err instanceof Error ? err.stack ?? err.message : String(err);
-    debugLog(name, "CRASH", detail);
-    writeOutput({}, { mirrorSystemMessageToStderr });
-  }
-  process.exit(0);
-}
-
-// src/types/hook-events.ts
-var HOOK_EVENT_NAMES = [
+// src/types.ts
+var HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
@@ -9930,15 +9259,22 @@ var HOOK_EVENT_NAMES = [
   "SubagentStop",
   "Stop"
 ];
-function isHookEventName(x) {
-  return typeof x === "string" && HOOK_EVENT_NAMES.includes(x);
+function isHookEvent(value) {
+  return typeof value === "string" && HOOK_EVENTS.includes(value);
 }
 
-// hooks/bin/bind.ts
-var argEvent = process.argv[2];
-if (!isHookEventName(argEvent)) {
-  debugLog("bind", "unknown-event", String(argEvent));
-  process.stdout.write("{}");
-  process.exit(0);
+// src/main.ts
+var event = process.argv[2];
+if (!isHookEvent(event)) {
+  debugLog("main", "unknown-event", String(event));
+  writeResponse("{}", null, { mirrorToStderr: false });
 }
-await runHook(argEvent, (raw) => dispatchHook(argEvent, raw));
+var mirrorToStderr = event !== "PostToolUse";
+try {
+  const raw = await readStdin();
+  const { json, systemMessage } = serializeHook(handleHook(event, raw));
+  writeResponse(json, systemMessage, { mirrorToStderr });
+} catch (error) {
+  debugLog(event, "CRASH", error instanceof Error ? error.stack ?? error.message : String(error));
+  writeResponse("{}", null, { mirrorToStderr });
+}

@@ -3,16 +3,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { PNG } from 'pngjs'
-import * as toolsIndex from '../src/tools/index.ts'
-import * as hooksIndex from '../src/hooks/index.ts'
 
 
-void toolsIndex
-void hooksIndex
-
-import { dispatchHook } from '../src/registry/hook-registry.ts'
-import { findImagePath, findInlineImage, renderScreenshot } from '../src/render/screenshot.ts'
-import { stripAnsi } from '../src/render/primitives.ts'
+import { renderHook } from '../src/hooks.ts'
+import { findImagePath, findInlineImage, screenshotCard } from '../src/render/file-card.ts'
+import { stripAnsi } from '../src/ansi/text.ts'
 
 // Glyphs only the image renderer emits. The card's own frame is drawn from
 // U+2581/2591/2594/258F/2595, so none of those may appear here or every card
@@ -50,7 +45,7 @@ afterAll(() => {
 })
 
 function messageOf (payload: unknown): string {
-  const out = dispatchHook('PostToolUse', payload as never) as { systemMessage?: string } | null
+  const out = renderHook('PostToolUse', payload as never) as { systemMessage?: string } | null
   return out?.systemMessage ?? ''
 }
 
@@ -95,7 +90,7 @@ describe('finding the picture in a result', () => {
   })
 
   test('renders nothing for a result that names no picture', () => {
-    expect(renderScreenshot({ content: [{ type: 'text', text: 'await page.goto("/")' }]}, 'no image here')).toBeNull()
+    expect(screenshotCard({ content: [{ type: 'text', text: 'await page.goto("/")' }]}, 'no image here')).toBeNull()
   })
 })
 

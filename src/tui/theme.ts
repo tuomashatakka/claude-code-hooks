@@ -1,93 +1,83 @@
-import chalk from 'chalk'
 import type { ChalkInstance } from 'chalk'
-import type { BadgeColor } from '../types/claude-code.ts'
+import { chalk } from '../ansi/chalk.ts'
+import type { BadgeColor } from '../types.ts'
 
 
-chalk.level = 3
-
-export const TOOL_ICONS: Record<string, string> = {
-  'Bash':                              '❯',
-  'Write':                             '⊕',
-  'Edit':                              'Δ',
-  'Read':                              '▤',
-  'Glob':                              '⌕',
-  'Grep':                              '⌕',
-  'Task':                              '󰒕',
-  'Agent':                             '󰒕',
-  'WebFetch':                          '⇌',
-  'WebSearch':                         '⌕',
-  'TaskCreate':                        '✓',
-  'TaskUpdate':                        '✓',
-  'TaskList':                          '✓',
-  'TaskStop':                          '■',
-  'apply_patch':                       'Δ',
-  'ApplyPatch':                        'Δ',
-  'ToolSearch':                        '⌕',
-  'AskUserQuestion':                   '?',
-  'view_image':                        '▩',
-  'ViewImage':                         '▩',
-  'update_plan':                       '≋',
-  'UpdatePlan':                        '≋',
-  'TodoWrite':                         '≋',
-  'TodoRead':                          '≋',
-  'ExitPlanMode':                      '⏻',
-  'mcp__wcgw__BashCommand':            '❯',
-  'mcp__wcgw__FileWriteOrEdit':        '⊕',
-  'mcp__wcgw__FileEdit':               'Δ',
-  'mcp__wcgw__ReadFiles':              '▤',
-  'mcp__wcgw__ReadImage':              '▩',
-  'mcp__wcgw__Initialize':             '⏻',
-  'mcp__wcgw__ContextSave':            '⧺',
-  'mcp__context7__query-docs':         '⇌',
-  'mcp__context7__resolve-library-id': '⇌',
-  'mcp__claude-in-chrome__navigate':   '⇌',
-  'mcp__claude-in-chrome__read_page':  '▤',
-  'spawn_agent':                       '⬡',
-  'wait_agent':                        '◷',
-  'followup_task':                     '↻',
-  'send_message':                      '→',
-  'interrupt_agent':                   '■',
-  'list_agents':                       '≋',
-  'default':                           '󰌠',
+export interface ToolTheme {
+  icon:  string;
+  color: BadgeColor;
 }
 
-export const TOOL_COLORS: Record<string, BadgeColor> = {
-  Bash:                       'magenta',
-  Write:                      'green',
-  Edit:                       'green',
-  Read:                       'blue',
-  Task:                       'cyan',
-  Agent:                      'cyan',
-  Glob:                       'red',
-  Grep:                       'red',
-  WebFetch:                   'cyan',
-  WebSearch:                  'cyan',
-  TaskStop:                   'red',
-  ToolSearch:                 'cyan',
-  AskUserQuestion:            'brightGreen',
-  view_image:                 'blue',
-  ViewImage:                  'blue',
-  update_plan:                'cyan',
-  UpdatePlan:                 'cyan',
-  TodoWrite:                  'cyan',
-  TodoRead:                   'cyan',
-  apply_patch:                'green',
-  ApplyPatch:                 'green',
-  mcp__wcgw__BashCommand:     'magenta',
-  mcp__wcgw__FileWriteOrEdit: 'green',
-  mcp__wcgw__FileEdit:        'green',
-  mcp__wcgw__ReadFiles:       'blue',
-  mcp__wcgw__ReadImage:       'blue',
-  mcp__wcgw__Initialize:      'cyan',
-  mcp__wcgw__ContextSave:     'cyan',
-  spawn_agent:                'green',
-  wait_agent:                 'gray',
-  followup_task:              'cyan',
-  send_message:               'cyan',
-  interrupt_agent:            'red',
-  list_agents:                'blue',
-  default:                    'blue',
+const theme = (icon: string, color: BadgeColor): ToolTheme => ({ icon, color })
+
+const SHELL   = theme('❯', 'magenta')
+const WRITE   = theme('⊕', 'green')
+const EDIT    = theme('Δ', 'green')
+const READ    = theme('▤', 'blue')
+const SEARCH  = theme('⌕', 'red')
+const WEB     = theme('⇌', 'cyan')
+const AGENT   = theme('󰒕', 'cyan')
+const TASK    = theme('✓', 'blue')
+const PLAN    = theme('≋', 'cyan')
+const IMAGE   = theme('▩', 'blue')
+const POWER   = theme('⏻', 'cyan')
+const DEFAULT = theme('󰌠', 'blue')
+
+/** Exact tool names (raw or with the `mcp__server__` prefix stripped). */
+const TOOL_THEMES: Record<string, ToolTheme> = {
+  'Bash':            SHELL,
+  'BashCommand':     SHELL,
+  'Write':           WRITE,
+  'FileWriteOrEdit': WRITE,
+  'Edit':            EDIT,
+  'MultiEdit':       EDIT,
+  'FileEdit':        EDIT,
+  'apply_patch':     EDIT,
+  'ApplyPatch':      EDIT,
+  'Read':            READ,
+  'ReadFiles':       READ,
+  'read_page':       READ,
+  'Glob':            SEARCH,
+  'Grep':            SEARCH,
+  'WebFetch':        WEB,
+  'WebSearch':       theme('⌕', 'cyan'),
+  'ToolSearch':      theme('⌕', 'cyan'),
+  'query-docs':      WEB,
+  'navigate':        WEB,
+  'Task':            AGENT,
+  'Agent':           AGENT,
+  'TaskCreate':      TASK,
+  'TaskUpdate':      TASK,
+  'TaskList':        TASK,
+  'TaskStop':        theme('■', 'red'),
+  'update_plan':     PLAN,
+  'UpdatePlan':      PLAN,
+  'TodoWrite':       PLAN,
+  'TodoRead':        PLAN,
+  'ExitPlanMode':    POWER,
+  'Initialize':      POWER,
+  'ContextSave':     theme('⧺', 'cyan'),
+  'AskUserQuestion': theme('?', 'brightGreen'),
+  'view_image':      IMAGE,
+  'ViewImage':       IMAGE,
+  'ReadImage':       IMAGE,
+  'spawn_agent':     theme('⬡', 'green'),
+  'wait_agent':      theme('◷', 'gray'),
+  'followup_task':   theme('↻', 'cyan'),
+  'send_message':    theme('→', 'cyan'),
+  'interrupt_agent': theme('■', 'red'),
+  'list_agents':     theme('≋', 'blue'),
 }
+
+/** Unknown tools are themed by what their name says they do. */
+const THEME_BY_VERB: ReadonlyArray<[RegExp, ToolTheme]> = [
+  [ /bash|command|exec|shell/i, SHELL ],
+  [ /write|edit|create/i, WRITE ],
+  [ /read|get|fetch|load/i, READ ],
+  [ /search|find|grep|query|glob/i, SEARCH ],
+]
+
+const COLLABORATION_RE = /^collaboration(?:__|[._-])?(spawn_agent|wait_agent|followup_task|send_message|interrupt_agent|list_agents)$/i
 
 export interface ParsedToolName {
   server: string | null;
@@ -99,61 +89,27 @@ export function parseToolName (rawName: string | null | undefined): ParsedToolNa
   if (!rawName || typeof rawName !== 'string')
     return { server: null, tool: 'Unknown', pretty: 'Unknown' }
 
-  const collaboration = rawName.match(/^collaboration(?:__|[._-])?(spawn_agent|wait_agent|followup_task|send_message|interrupt_agent|list_agents)$/i)
+  const collaboration = COLLABORATION_RE.exec(rawName)
   if (collaboration) {
     const tool = collaboration[1]!.toLowerCase()
     return { server: 'collaboration', tool, pretty: `collaboration ▸ ${tool.replace(/_/g, ' ')}` }
   }
-  if (rawName.startsWith('mcp__')) {
-    const rest = rawName.slice(5)
-    const idx  = rest.indexOf('__')
-    if (idx > 0) {
-      const server     = rest.slice(0, idx)
-      const tool       = rest.slice(idx + 2)
-      const prettyTool = tool.replace(/_/g, ' ')
-      return { server, tool, pretty: `${server} ▸ ${prettyTool}` }
-    }
-  }
+
+  const mcp = (/^mcp__([^_].*?)__(.+)$/).exec(rawName)
+  if (mcp)
+    return { server: mcp[1]!, tool: mcp[2]!, pretty: `${mcp[1]} ▸ ${mcp[2]!.replace(/_/g, ' ')}` }
   return { server: null, tool: rawName, pretty: rawName }
 }
 
-export function getToolIcon (rawName: string): string {
-  if (TOOL_ICONS[rawName])
-    return TOOL_ICONS[rawName]!
-
+export function toolTheme (rawName: string): ToolTheme {
   const { tool } = parseToolName(rawName)
-  if (TOOL_ICONS[tool])
-    return TOOL_ICONS[tool]!
-  if ((/bash|command|exec|shell/i).test(tool))
-    return TOOL_ICONS.Bash!
-  if ((/write|edit|create/i).test(tool))
-    return TOOL_ICONS.Write!
-  if ((/read|get|fetch|load/i).test(tool))
-    return TOOL_ICONS.Read!
-  if ((/search|find|grep|query|glob/i).test(tool))
-    return TOOL_ICONS.Grep!
-  return TOOL_ICONS.default!
+  return TOOL_THEMES[rawName] ??
+    TOOL_THEMES[tool] ??
+    THEME_BY_VERB.find(([ pattern ]) => pattern.test(tool))?.[1] ??
+    DEFAULT
 }
 
-export function getToolColor (rawName: string): BadgeColor {
-  if (TOOL_COLORS[rawName])
-    return TOOL_COLORS[rawName]!
-
-  const { tool } = parseToolName(rawName)
-  if (TOOL_COLORS[tool])
-    return TOOL_COLORS[tool]!
-  if ((/bash|command|exec|shell/i).test(tool))
-    return 'magenta'
-  if ((/write|edit|create/i).test(tool))
-    return 'green'
-  if ((/read|get|fetch|load/i).test(tool))
-    return 'blue'
-  if ((/search|find|grep|query|glob/i).test(tool))
-    return 'red'
-  return TOOL_COLORS.default!
-}
-
-const BACKGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
+const BACKGROUND: Record<BadgeColor, ChalkInstance> = {
   blue:          chalk.bgBlue,
   green:         chalk.bgGreen,
   yellow:        chalk.bgYellow,
@@ -173,7 +129,7 @@ const BACKGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
   brightWhite:   chalk.bgWhiteBright,
 }
 
-const FOREGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
+const FOREGROUND: Record<BadgeColor, ChalkInstance> = {
   blue:          chalk.blue,
   green:         chalk.green,
   yellow:        chalk.yellow,
@@ -193,10 +149,5 @@ const FOREGROUND_COLOR_MAP: Record<BadgeColor, ChalkInstance> = {
   brightWhite:   chalk.whiteBright,
 }
 
-export function getBadgeColor (name: BadgeColor): ChalkInstance {
-  return BACKGROUND_COLOR_MAP[name] ?? chalk.bgBlue
-}
-
-export function getBadgeTextColor (name: BadgeColor): ChalkInstance {
-  return FOREGROUND_COLOR_MAP[name] ?? chalk.blue
-}
+export const bg = (color: BadgeColor): ChalkInstance => BACKGROUND[color] ?? chalk.bgBlue
+export const fg = (color: BadgeColor): ChalkInstance => FOREGROUND[color] ?? chalk.blue

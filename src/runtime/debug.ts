@@ -7,13 +7,7 @@ const DEBUG_LOG = path.join(HOME, '.claude', 'debug.log')
 
 function detailValue (value: unknown): unknown {
   if (value instanceof Error)
-    return {
-      name:    value.name,
-      message: value.message,
-      stack:   value.stack,
-      cause:   value.cause,
-    }
-
+    return { name: value.name, message: value.message, stack: value.stack, cause: value.cause }
   try {
     JSON.stringify(value)
     return value
@@ -23,15 +17,12 @@ function detailValue (value: unknown): unknown {
   }
 }
 
-export function formatDebugEntry (
-  scope: string,
-  parts: readonly unknown[],
-  timestamp: Date = new Date(),
-): string {
-  const first = parts[0]
+export function formatDebugEntry (scope: string, parts: readonly unknown[], timestamp: Date = new Date()): string {
+  const [ first ] = parts
+  const labelled  = typeof first === 'string'
   return `[${timestamp.toISOString()}] [${scope}] ${JSON.stringify({
-    stage:      typeof first === 'string' ? first : 'log',
-    details:    parts.slice(typeof first === 'string' ? 1 : 0).map(detailValue),
+    stage:      labelled ? first : 'log',
+    details:    parts.slice(labelled ? 1 : 0).map(detailValue),
     pid:        process.pid,
     ppid:       process.ppid,
     runtime:    `${process.release.name}@${process.version}`,
@@ -43,6 +34,7 @@ export function formatDebugEntry (
   })}`
 }
 
+/** Appends a structured line to ~/.claude/debug.log. Never throws. */
 export function debugLog (scope: string, ...parts: unknown[]): void {
   try {
     fs.mkdirSync(path.dirname(DEBUG_LOG), { recursive: true })

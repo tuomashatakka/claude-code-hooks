@@ -1,157 +1,93 @@
-import chalk from 'chalk'
-import { defineGenericTool } from '../registry/tool-registry.ts'
-import type { RenderedSection } from '../registry/tool-registry.ts'
-import { softCollapse } from '../render/primitives.ts'
-import {
-  META_BADGE,
-  OUTPUT_BADGE,
-  pushDurationLine,
-  renderCard,
-} from '../tui/index.ts'
+import { ink } from '../ansi/chalk.ts'
+import { asRecord, pickAny, resultText } from '../lib/data.ts'
 import { parseToolName } from '../tui/index.ts'
-import {
-  isJSON,
-  formatJSON,
-  isCode,
-  detectLanguage,
-  simpleHighlight,
-  formatMetadataCustom,
-} from '../render/highlight.ts'
-import { operationBadges, playwrightOperation } from './browser-operations.ts'
-import type { RawToolInput, RawToolResult } from '../types/tool-io.ts'
+import type { ToolResult } from '../types.ts'
+import { metaCard, outputCard } from './kit.ts'
+import type { ToolRenderer } from './kit.ts'
 
+// The fallback for every tool without a renderer of its own: find the field
+// that carries the answer, show it as output, and table whatever is left.
 
-chalk.level = 3
-
-const TOOL_PRIMARY_OUTPUT_KEYS: Record<string, string[]> = {
+const PRIMARY_KEYS: Record<string, readonly string[]> = {
   Read:         [ 'content', 'output', 'text' ],
-  Edit:         [ 'diff', 'result', 'output' ],
-  MultiEdit:    [ 'diff', 'result', 'output' ],
-  Write:        [ 'file_path', 'result' ],
-  Bash:         [ 'stdout', 'output' ],
   Glob:         [ 'filenames', 'result', 'output' ],
   Grep:         [ 'filenames', 'result', 'output' ],
-  // WebFetch answers `{ code, codeText, url, durationMs, result }` — without
-  // `result` first, the whole response falls through to the metadata card and
-  // the actual answer gets flattened to one truncated line.
+  // WebFetch answers `{ code, codeText, url, durationMs, result }`.
   WebFetch:     [ 'result', 'content', 'output', 'text' ],
-  WebSearch:    [ 'results', 'output', 'text' ],
-  Task:         [ 'description', 'result', 'output' ],
-  Agent:        [ 'description', 'result', 'output' ],
-  TodoRead:     [ 'todos', 'result', 'output' ],
-  TodoWrite:    [ 'result', 'output' ],
-  ToolSearch:   [ 'results', 'output', 'text' ],
   ExitPlanMode: [ 'plan', 'result' ],
   NotebookRead: [ 'output', 'content' ],
   NotebookEdit: [ 'result', 'output' ],
 }
+
+const CONTENT_KEYS = [ 'stdout', 'output', 'content', 'text', 'message', 'result', 'error', 'stderr', 'filePath', 'type' ] as const
+
+const LABELLED: Partial<Record<typeof CONTENT_KEYS[number], (value: string) => string>> = {
+  error:    value => ink.err('⨂ ERROR:') + '\n' + value,
+  stderr:   value => ink.err('⨂ STDERR:') + '\n' + value,
+  filePath: value => ink.key('󰈚 ') + ink.strong('Path: ') + value,
+  type:     value => ink.key('⧖ ') + ink.strong('Action: ') + value,
+}
+
+const asText = (value: unknown): string =>
+  typeof value === 'object' && value !== null
+    ? resultText(value) ?? JSON.stringify(value, null, 2)
+    : String(value)
 
 interface Deconstructed {
   primary:  string | null;
   metadata: Record<string, unknown> | null;
 }
 
-function renderArrayLike (res: Record<string, unknown>): string | null {
-  const isArrayLike = Array.isArray(res) || (res['0'] as { type?: string } | undefined)?.type
-  if (!isArrayLike)
-    return null
+/** Removes the well-known content fields from `rest`, returning them as readable parts. */
+function takeContent (rest: Record<string, unknown>, primary: string | null): string[] {
+  const parts = primary === null ? [] : [ primary ]
+  for (const key of CONTENT_KEYS) {
+    if (rest[key] == null)
+      continue
 
-  const parts: string[] = []
-  for (const block of Array.isArray(res) ? res : Object.values(res)) {
-    const b = block as { type?: string; text?: string; output?: string }
-    if (b.type === 'text' && b.text)
-      parts.push(b.text)
-    else if (b.type === 'image' || b.type === 'base64')
-      parts.push(chalk.yellow('[Image Data]'))
-    else if (typeof block === 'string')
-      parts.push(block)
-    else if (b.output)
-      parts.push(b.output)
+    const value = asText(rest[key])
+    if (!primary?.includes(value.slice(0, 20)))
+      parts.push(LABELLED[key]?.(value) ?? value)
+    delete rest[key]
   }
-  return parts.length ? parts.join('\n\n') : null
+  return parts
 }
 
-function renderContentParts (res: Record<string, unknown>, primary: string): string[] {
-  const keys = [ 'stdout', 'output', 'content', 'text', 'message', 'error', 'stderr', 'file-contents-numbered', 'file_contets_numbered', 'file-contents', 'filePath', 'type' ]
-  return keys.filter(key => res[key] != null).flatMap(key => {
-    let value: unknown = res[key]
-    if (primary && primary.includes(String(value).slice(0, 20)))
-      return []
-    if (value && typeof value === 'object') {
-      const object = value as Record<string, unknown>
-      value = object.text ?? object.output ?? object.content ?? JSON.stringify(object, null, 2)
-    }
+/** Splits a result into the text worth reading and the fields worth tabling. */
+function deconstruct (toolName: string, result: ToolResult): Deconstructed {
+  if (typeof result === 'string')
+    return { primary: result, metadata: null }
+  if (Array.isArray(result) || asRecord(result)?.['0'])
+    return { primary: resultText(result), metadata: null }
 
-    const rendered = key === 'stderr' || key === 'error'
-      ? chalk.red(`⨂ ${key.toUpperCase()}:`) + '\n' + value
-      : key === 'filePath'
-        ? chalk.cyan('󰈚 ') + chalk.bold('Path: ') + value
-        : key === 'type' ? chalk.cyan('⧖ ') + chalk.bold('Action: ') + value : String(value)
-    delete res[key]
-    return [ rendered ]
-  })
-}
+  const record = asRecord(result)
+  if (!record)
+    return { primary: null, metadata: null }
 
-function deconstructToolResult (toolName: string, result: RawToolResult): Deconstructed {
-  if (!result || typeof result !== 'object')
-    return { primary: typeof result === 'string' ? result : null, metadata: null }
+  const rest       = { ...record }
+  const primaryKey = (PRIMARY_KEYS[parseToolName(toolName).tool] ?? []).find(key => rest[key] != null)
+  const primary    = primaryKey ? asText(rest[primaryKey]) : null
+  if (primaryKey)
+    delete rest[primaryKey]
 
-  const res      = JSON.parse(JSON.stringify(result)) as Record<string, unknown>
-  const { tool } = parseToolName(toolName)
-
-  let primary = ''
-
-  // Array-like content blocks (LLM standard)
-  const arrayPrimary = renderArrayLike(res)
-  if (arrayPrimary)
-    return { primary: arrayPrimary, metadata: null }
-
-  const toolKeys = TOOL_PRIMARY_OUTPUT_KEYS[tool] ?? []
-  for (const key of toolKeys) {
-    const v = res[key]
-    if (v != null) {
-      primary = typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)
-      delete res[key]
-      break
-    }
+  const parts = takeContent(rest, primary)
+  return {
+    primary:  parts.join('\n\n') || null,
+    metadata: Object.keys(rest).length ? rest : null,
   }
-
-  const parts: string[] = primary ? [ primary, ...renderContentParts(res, primary) ] : renderContentParts(res, primary)
-  primary = parts.join('\n\n')
-
-  const metadata = Object.keys(res).length ? res : null
-  return { primary: primary || null, metadata }
 }
 
-
-defineGenericTool<RawToolInput, RawToolResult>({
-  post (_input, result, durationMs, ctx): RenderedSection {
-    const rawTool               = ctx.toolName
-    const { primary, metadata } = deconstructToolResult(rawTool, result)
-    const lines: string[]       = []
-
-    pushDurationLine(lines, durationMs)
-
-    if (primary) {
-      let formatted: string = primary
-      if (typeof primary === 'string') {
-        if (isJSON(primary))
-          formatted = simpleHighlight(formatJSON(primary), 'json')
-        else if (isCode(primary))
-          formatted = simpleHighlight(primary, detectLanguage(primary, rawTool))
-      }
-      lines.push(renderCard({ badges: OUTPUT_BADGE, content: softCollapse(formatted) }))
-      if (metadata && Object.keys(metadata).length)
-        lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(metadata) }))
-    }
-    else if (result && typeof result === 'object')
-      lines.push(renderCard({ badges: META_BADGE, content: formatMetadataCustom(result) }))
-
-    const operation = playwrightOperation(rawTool)
+export const generic: ToolRenderer = {
+  id:    'generic',
+  match: () => true,
+  render ({ name, result }, limit) {
+    const { primary, metadata } = deconstruct(name, result)
     return {
-      lines,
-      isJson:      !primary,
-      extraBadges: operationBadges(operation ? [ operation ] : []),
+      lines: [
+        primary ? outputCard(primary, limit) : null,
+        metadata ? metaCard(metadata, limit) : null,
+        !primary && !metadata && pickAny(result) === undefined && result && typeof result === 'object' ? metaCard(result, limit) : null,
+      ],
     }
   },
-})
+}

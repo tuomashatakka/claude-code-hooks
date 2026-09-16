@@ -1,39 +1,35 @@
 import { debugLog } from './debug.ts'
-import { serializeHookResponse } from './output-transport.ts'
 
-
-export function readInput (): Promise<unknown | null> {
+/** The whole of stdin, parsed as JSON; null when empty or malformed. */
+export function readStdin (): Promise<unknown> {
   return new Promise(resolve => {
     const chunks: string[] = []
     process.stdin.setEncoding('utf8')
-    process.stdin.on('data', chunk => chunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8')))
+    process.stdin.on('data', chunk => chunks.push(String(chunk)))
     process.stdin.on('end', () => {
       const raw = chunks.join('')
-      if (!raw.trim()) {
-        resolve(null); return
-      }
+      if (!raw.trim())
+        return resolve(null)
       try {
         resolve(JSON.parse(raw))
       }
-      catch (e) {
-        debugLog('readInput', 'parse-fail', (e as Error).message, raw.slice(0, 200))
+      catch (error) {
+        debugLog('readStdin', 'parse-fail', (error as Error).message, raw.slice(0, 200))
         resolve(null)
       }
     })
   })
 }
 
-export interface WriteOutputOptions {
-  mirrorSystemMessageToStderr?: boolean;
+export interface WriteOptions {
+
+  /** Codex prints the stdout message itself; Claude Code's presentation wants a stderr mirror. */
+  mirrorToStderr: boolean;
 }
 
-export function writeOutput (
-  data: Record<string, unknown> & { systemMessage?: string },
-  { mirrorSystemMessageToStderr = true }: WriteOutputOptions = {},
-): never {
-  const response = serializeHookResponse(data)
-  if (mirrorSystemMessageToStderr && response.systemMessage)
-    process.stderr.write(response.systemMessage + '\n')
-  process.stdout.write(response.json)
+export function writeResponse (json: string, systemMessage: string | null, { mirrorToStderr }: WriteOptions): never {
+  if (mirrorToStderr && systemMessage)
+    process.stderr.write(systemMessage + '\n')
+  process.stdout.write(json)
   process.exit(0)
 }

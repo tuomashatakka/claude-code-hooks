@@ -1,18 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
-import * as hooksIndex from '../src/hooks/index.ts'
 
 
-void hooksIndex
-
-import { dispatchHook } from '../src/registry/hook-registry.ts'
-import {
-  HOOK_RESPONSE_CHAR_BUDGET,
-  serializeHookResponse,
-  systemMessageHeadroom,
-} from '../src/runtime/output-transport.ts'
+import { renderHook } from '../src/hooks.ts'
+import { fit } from '../src/render/fit.ts'
+import { HOOK_FIELD_CHAR_LIMIT, serializeHook } from '../src/runtime/transport.ts'
 import { renderWelcome, welcomeImagePath } from '../src/render/welcome.ts'
-import { stripAnsi } from '../src/render/primitives.ts'
+import { stripAnsi } from '../src/ansi/text.ts'
 
 // The bundled image uses half blocks; a local fallback may be braille text art.
 const GLYPH_ROW = /[▀▄█\u2801-\u28ff]/u
@@ -46,11 +40,11 @@ describe('welcome art', () => {
 
 describe('SessionStart banner', () => {
   test('fits the transport budget whole, art included', () => {
-    const output                  = dispatchHook('SessionStart', { source: 'startup', model: 'claude-opus-5' })
-    const { json, systemMessage } = serializeHookResponse({ ...output } as Record<string, unknown>)
+    const output                  = renderHook('SessionStart', { source: 'startup', model: 'claude-opus-5' })
+    const { json, systemMessage } = serializeHook(output)
     // The limit lands on the message alone; `additionalContext` beside it in the
     // same envelope is weighed separately and cannot crowd the art out.
-    expect((systemMessage ?? '').length).toBeLessThanOrEqual(HOOK_RESPONSE_CHAR_BUDGET)
+    expect((systemMessage ?? '').length).toBeLessThanOrEqual(HOOK_FIELD_CHAR_LIMIT)
     expect(() => JSON.parse(json)).not.toThrow()
     // The failure this guards is the art arriving with its middle cut out,
     // which is what an unbudgeted render gets from serializeHookResponse.
@@ -58,10 +52,20 @@ describe('SessionStart banner', () => {
     expect(systemMessage ?? '').toMatch(GLYPH_ROW)
   })
 
-  test('headroom is what the response has left, not what it has spent', () => {
-    const response = { systemMessage: 'x'.repeat(100) }
-    const headroom = systemMessageHeadroom(response)
-    expect(headroom).toBeGreaterThan(0)
-    expect(headroom).toBeLessThan(HOOK_RESPONSE_CHAR_BUDGET)
+  test('the fitter finds the largest limit a render fits at', () => {
+    const rows    = Array.from({ length: 500 }, (_, index) => `\x1b[36mrow ${index}\x1b[39m`)
+    type LimitType = { lines: number }
+
+    const render  = (limit: LimitType) => rows.slice(0, limit.lines).join('\n')
+    const fitted  = fit(render, 2_000)
+    const kept    = fitted.text.split('\n').length
+    const oneMore = rows.slice(0, kept + 1).join('\n')
+
+    expect(fitted.shrunk).toBeTrue()
+    expect(fitted.text.length).toBeLessThanOrEqual(2_000)
+    expect(oneMore.length).toBeGreaterThan(2_000)
+    expect(fitted.text).toContain('\x1b[36m')
+    expect(fitted.full.split('\n')).toHaveLength(500)
+    expect(fit('short', 2_000)).toEqual({ text: 'short', full: 'short', shrunk: false })
   })
 })

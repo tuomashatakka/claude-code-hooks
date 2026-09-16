@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Feeds canned JSON into hooks/bin/bind.ts for each event/tool combo and prints
+// Feeds canned JSON into src/main.ts for each event/tool combo and prints
 // the rendered systemMessage. Tool hooks carry it on stdout only; lifecycle
 // hooks keep the legacy stderr mirror used by Claude Code.
 
@@ -9,7 +9,7 @@ import { SMOKE_PNG, SMOKE_JPG, SMOKE_MONO_PNG, writeImageFixtures, removeImageFi
 
 
 const ROOT = path.resolve(import.meta.dir, '..')
-const BIND = path.join(ROOT, 'hooks', 'bin', 'bind.ts')
+const BIND = path.join(ROOT, 'src', 'main.ts')
 
 export interface Case {
   label:             string;

@@ -1,15 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  Badge,
+  badge,
   OUTPUT_BADGE,
   RUNNING_BADGE,
   layoutWidthForTerminal,
+  renderBadge,
   renderBox,
   renderCard,
-  renderColumns,
-  renderSection,
+  stack,
+  section,
 } from '../src/tui/index.ts'
-import { stripAnsi, visibleWidth } from '../src/render/primitives.ts'
+import { stripAnsi, visibleWidth } from '../src/ansi/text.ts'
 
 
 describe('tui cards', () => {
@@ -28,12 +29,12 @@ describe('tui cards', () => {
   })
 
   test('expands a short body to the ansi-aware badge width', () => {
-    const badge  = new Badge({ label: 'an unusually wide title', color: 'magenta' })
-    const lines  = renderCard({ badges: badge, content: 'x' }).split('\n')
+    const title  = badge({ label: 'an unusually wide title', color: 'magenta' })
+    const lines  = renderCard({ badges: title, content: 'x' }).split('\n')
     const widths = lines.slice(1, -1).map(visibleWidth)
 
     expect(new Set(widths).size).toBe(1)
-    expect(widths[0]).toBe(visibleWidth(badge.toString()) + 4)
+    expect(widths[0]).toBe(visibleWidth(renderBadge(title)) + 4)
     expect(stripAnsi(lines[1]!)).toEndWith('▁▁▁▁')
   })
 
@@ -60,14 +61,14 @@ describe('tui cards', () => {
     const rendered = renderCard({
       badges:  RUNNING_BADGE,
       content: 'x',
-      footer:  new Badge({ label: 'exit 0', color: 'brightGreen', icon: '✓' }),
+      footer:  badge({ label: 'exit 0', color: 'brightGreen', icon: '✓' }),
     })
     const lines  = rendered.split('\n')
     const footer = stripAnsi(lines.at(-2)!)
 
     expect(footer.trimStart()).toStartWith('✓ exit 0')
     expect(footer).not.toMatch(/[▏▕▔░]/)
-    expect(lines.at(-2)).toContain('\x1b[48;2;48;47;50m')
+    expect(lines.at(-2)).toContain('\x1b[48;5;236m')
   })
 
   test('supports darker and regular regions inside one aligned card', () => {
@@ -82,8 +83,8 @@ describe('tui cards', () => {
 
     expect(plain.indexOf('$ bun test')).toBeLessThan(plain.indexOf('Output'))
     expect(plain.indexOf('Output')).toBeLessThan(plain.indexOf('all tests passed'))
-    expect(rendered).toContain('\x1b[48;2;39;38;41m')
-    expect(rendered).toContain('\x1b[48;2;48;47;50m')
+    expect(rendered).toContain('\x1b[48;5;235m')
+    expect(rendered).toContain('\x1b[48;5;236m')
   })
 
   test('normalizes tabs and foreign terminal controls before measuring card rows', () => {
@@ -118,13 +119,10 @@ describe('tui cards', () => {
   })
 
   test('always stacks cards even when horizontal space is available', () => {
-    const output = stripAnsi(renderColumns({
-      items: [
-        renderCard({ badges: RUNNING_BADGE, content: '$ bun test' }),
-        renderCard({ badges: OUTPUT_BADGE, content: 'all tests passed' }),
-      ],
-      maximumWidth: 1_000,
-    }))
+    const output = stripAnsi(stack([
+      renderCard({ badges: RUNNING_BADGE, content: '$ bun test' }),
+      renderCard({ badges: OUTPUT_BADGE, content: 'all tests passed' }),
+    ]))
     const titleLines = output.split('\n').filter(line => (/Running|Output/).test(line))
 
     expect(titleLines).toHaveLength(2)
@@ -134,17 +132,32 @@ describe('tui cards', () => {
 
 describe('tui sections', () => {
   test('composes typed badges and body lines', () => {
-    const output = renderSection({
-      badges: [
-        new Badge({ label: 'Read', color: 'blue' }),
-        new Badge({ label: 'Output', color: 'green' }),
-      ],
-      lines: [ 'body' ],
-    })
+    const output = section([
+      badge({ label: 'Read', color: 'blue' }),
+      badge({ label: 'Output', color: 'green' }),
+    ], [ 'body', null, false ])
 
     const plain = stripAnsi(output)
     expect(plain).toContain('Read')
     expect(plain).toContain('Output')
     expect(plain).toEndWith('\n\nbody')
+  })
+})
+
+describe('card width', () => {
+  test('settles on the typical line and wraps the odd long one', () => {
+    const lines    = [ ...Array.from({ length: 20 }, () => 'short line'), 'x'.repeat(90) ]
+    const rendered = renderCard({ badges: OUTPUT_BADGE, content: lines.join('\n') })
+    const rows     = rendered.split('\n').slice(2, -1)
+
+    expect(Math.max(...rows.map(visibleWidth))).toBeLessThan(40)
+    expect(new Set(rows.map(visibleWidth)).size).toBe(1)
+    expect(stripAnsi(rendered).replace(/\s+/g, '')).toContain('x'.repeat(90))
+  })
+
+  test('keeps the widest line for short outputs', () => {
+    const rendered = renderCard({ badges: OUTPUT_BADGE, content: `total 8\n${'/'.repeat(60)}` })
+
+    expect(stripAnsi(rendered)).toContain('/'.repeat(60))
   })
 })

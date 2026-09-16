@@ -3,8 +3,15 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { PNG } from 'pngjs'
-import { previewBudgetChars, renderFileResult, stripLineRange } from '../src/render/file-preview.ts'
-import { stripAnsi } from '../src/render/primitives.ts'
+import { fileCard, stripLineRange } from '../src/render/file-card.ts'
+import type { FileCardOptions } from '../src/render/file-card.ts'
+import { fit, unlimited } from '../src/render/fit.ts'
+import { MESSAGE_BUDGET } from '../src/runtime/transport.ts'
+import { stripAnsi } from '../src/ansi/text.ts'
+
+/** A file card rendered with no limit at all — what a small file always gets. */
+const renderFileResult = (rawPath: string, options: FileCardOptions = {}): string | null =>
+  fileCard(rawPath, options)?.(unlimited(MESSAGE_BUDGET)) ?? null
 
 
 const dir    = fs.mkdtempSync(path.join(os.tmpdir(), 'file-result-'))
@@ -81,10 +88,11 @@ describe('renderFileResult', () => {
     }
     fs.writeFileSync(image, PNG.sync.write(png))
 
-    const card = renderFileResult(image, { action: 'read' })!
-    expect(card.length).toBeLessThanOrEqual(previewBudgetChars())
+    const card = fit(fileCard(image, { action: 'read' })!, MESSAGE_BUDGET).text
+    expect(card.length).toBeLessThanOrEqual(MESSAGE_BUDGET)
     // A card that fits by giving up on the picture is not a fit worth having.
     expect(stripAnsi(card)).not.toContain('image preview omitted')
+    expect(card).toMatch(/[▀▄█\u{1FB00}-\u{1FBFF}\u{1CD00}-\u{1CDE5}]/u)
   }, 20_000)
 
   test('transform reshapes the raw text before highlighting', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { renderCheckboxHeading } from '@tuomashatakka/ansi-headings'
-import { stripAnsi } from '../src/render/primitives.ts'
+import { stripAnsi } from '../src/ansi/text.ts'
 
 
 describe('renderCheckboxHeading', () => {
