@@ -13,15 +13,20 @@ if (!isHookEvent(event)) {
   writeResponse('{}', null, { mirrorToStderr: false })
 }
 
-// Codex displays PostToolUse's stdout systemMessage itself; mirroring it to
-// stderr would show the card twice. Lifecycle events keep the mirror Claude
-// Code's hook presentation relies on.
-const mirrorToStderr = event !== 'PostToolUse'
+// Codex supplies CLAUDE_PLUGIN_ROOT for compatibility, so that variable cannot
+// identify Claude Code. Codex marks systemMessage as a warning and shows tool
+// results itself; only hook context belongs in its JSON response.
+const isCodex        = Boolean(process.env.PLUGIN_ROOT || process.env.PLUGIN_DATA)
+const mirrorToStderr = !isCodex && event !== 'PostToolUse'
 
 try {
-  const raw                     = await readStdin()
-  const isCodex                 = Boolean(process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT)
-  const { json, systemMessage } = serializeHook(handleHook(event, raw), { ansi: !isCodex })
+  const raw = await readStdin()
+  if (isCodex && event !== 'SessionStart' && event !== 'PostToolUseFailure')
+    writeResponse('{}', null, { mirrorToStderr })
+
+  const output                  = handleHook(event, raw)
+  const response                = isCodex ? { ...output, systemMessage: undefined } : output
+  const { json, systemMessage } = serializeHook(response)
   writeResponse(json, systemMessage, { mirrorToStderr })
 }
 catch (error) {

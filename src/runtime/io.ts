@@ -23,7 +23,7 @@ export function readStdin (): Promise<unknown> {
 
 export interface WriteOptions {
 
-  /** Codex prints the stdout message itself; Claude Code's presentation wants a stderr mirror. */
+  /** Claude Code's terminal presentation wants a stderr mirror. */
   mirrorToStderr: boolean;
 }
 

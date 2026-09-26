@@ -23,10 +23,16 @@ type RunWireHookReturnType = {
   output: Record<string, unknown>;
 }
 
-function runWireHook (event: 'PreToolUse' | 'PostToolUse', payload: unknown, env?: NodeJS.ProcessEnv): RunWireHookReturnType {
+function runWireHook (event: 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'SessionStart' | 'UserPromptSubmit', payload: unknown, env?: NodeJS.ProcessEnv): RunWireHookReturnType {
+  const childEnv = { ...process.env, ...env }
+  if (!env?.PLUGIN_ROOT)
+    delete childEnv.PLUGIN_ROOT
+  if (!env?.PLUGIN_DATA)
+    delete childEnv.PLUGIN_DATA
+
   const result = spawnSync('bun', [ 'run', BIND, event ], {
     cwd:      ROOT,
-    env:      { ...process.env, ...env },
+    env:      childEnv,
     input:    JSON.stringify(payload),
     encoding: 'utf8',
   })
@@ -86,6 +92,39 @@ describe('codex-compatible tool hook output', () => {
 
     expect(result.output.systemMessage).toContain('\x1b[48;5;236m')
     expect(result.output.systemMessage).toContain('\x1b[1A')
+  })
+
+  test('does not render visual-only cards in Codex when both plugin roots are set', () => {
+    const codex = { PLUGIN_ROOT: ROOT, CLAUDE_PLUGIN_ROOT: ROOT }
+    for (const event of [ 'PostToolUse', 'UserPromptSubmit' ] as const) {
+      const result = runWireHook(event, {
+        ...input,
+        prompt:        'look at the image',
+        tool_response: { stdout: 'colored' },
+      }, codex)
+      expect(result.output).toEqual({})
+      expect(result.stderr).toBe('')
+    }
+  })
+
+  test('keeps SessionStart context in Codex without the welcome card', () => {
+    const result = runWireHook('SessionStart', { source: 'startup' }, {
+      PLUGIN_ROOT: ROOT, CLAUDE_PLUGIN_ROOT: ROOT,
+    })
+    expect(result.output.systemMessage).toBeUndefined()
+    expect(result.output.hookSpecificOutput).toMatchObject({ hookEventName: 'SessionStart' })
+    expect(result.stderr).toBe('')
+  })
+
+  test('keeps failure context in Codex without terminal output', () => {
+    const result = runWireHook('PostToolUseFailure', { ...input, error: 'failed' }, {
+      PLUGIN_DATA: '/tmp/codex-plugin-data', CLAUDE_PLUGIN_ROOT: ROOT,
+    })
+    expect(result.output.systemMessage).toBeUndefined()
+    expect(result.output.hookSpecificOutput).toMatchObject({
+      hookEventName: 'PostToolUseFailure', additionalContext: 'failed',
+    })
+    expect(result.stderr).toBe('')
   })
 
   test('emits PostToolUse output once on stdout and never mirrors it to stderr', () => {

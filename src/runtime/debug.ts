@@ -27,7 +27,7 @@ export function formatDebugEntry (scope: string, parts: readonly unknown[], time
     ppid:       process.ppid,
     runtime:    `${process.release.name}@${process.version}`,
     platform:   `${process.platform}-${process.arch}`,
-    host:       process.env.CLAUDE_PLUGIN_ROOT ? 'claude-code' : 'codex-or-direct',
+    host:       process.env.PLUGIN_ROOT || process.env.PLUGIN_DATA ? 'codex' : process.env.CLAUDE_PLUGIN_ROOT ? 'claude-code' : 'direct',
     cwd:        process.cwd(),
     entrypoint: process.argv[1] ?? null,
     event:      process.argv[2] ?? null,

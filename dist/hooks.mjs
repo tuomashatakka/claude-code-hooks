@@ -6113,7 +6113,7 @@ function terminalColumns() {
 }
 function layoutWidthForTerminal(columns) {
   const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width;
-  const codexWidth = process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT ? 72 : maximumLayout;
+  const codexWidth = process.env.PLUGIN_ROOT || process.env.PLUGIN_DATA ? 72 : maximumLayout;
   return Math.max(1, Math.min(codexWidth, (columns > 0 ? columns : fallbackContent) - outerIndentMargin));
 }
 var getMaxLayoutWidth = () => layoutWidthForTerminal(terminalColumns());
@@ -6771,7 +6771,7 @@ function formatDebugEntry(scope, parts, timestamp = /* @__PURE__ */ new Date()) 
     ppid: process.ppid,
     runtime: `${process.release.name}@${process.version}`,
     platform: `${process.platform}-${process.arch}`,
-    host: process.env.CLAUDE_PLUGIN_ROOT ? "claude-code" : "codex-or-direct",
+    host: process.env.PLUGIN_ROOT || process.env.PLUGIN_DATA ? "codex" : process.env.CLAUDE_PLUGIN_ROOT ? "claude-code" : "direct",
     cwd: process.cwd(),
     entrypoint: process.argv[1] ?? null,
     event: process.argv[2] ?? null
@@ -7971,11 +7971,15 @@ if (!isHookEvent(event)) {
   debugLog("main", "unknown-event", String(event));
   writeResponse("{}", null, { mirrorToStderr: false });
 }
-var mirrorToStderr = event !== "PostToolUse";
+var isCodex = Boolean(process.env.PLUGIN_ROOT || process.env.PLUGIN_DATA);
+var mirrorToStderr = !isCodex && event !== "PostToolUse";
 try {
   const raw = await readStdin();
-  const isCodex = Boolean(process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT);
-  const { json, systemMessage } = serializeHook(handleHook(event, raw), { ansi: !isCodex });
+  if (isCodex && event !== "SessionStart" && event !== "PostToolUseFailure")
+    writeResponse("{}", null, { mirrorToStderr });
+  const output = handleHook(event, raw);
+  const response = isCodex ? { ...output, systemMessage: void 0 } : output;
+  const { json, systemMessage } = serializeHook(response);
   writeResponse(json, systemMessage, { mirrorToStderr });
 } catch (error) {
   debugLog(event, "CRASH", error instanceof Error ? error.stack ?? error.message : String(error));

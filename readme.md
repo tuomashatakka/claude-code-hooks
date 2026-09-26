@@ -23,13 +23,12 @@ directly: [an image](https://tuomashatakka.github.io/claude-code-hooks/#read-ima
 
 Then `/reload-plugins` (or restart) and the hooks are live.
 
-When run by Codex CLI (`CODEX_HOME` is set without `CLAUDE_PLUGIN_ROOT`),
-post-tool hook messages are sent without ANSI styling or cursor-control
-sequences. Codex presents `systemMessage` as text, and terminal escapes in that
-field can appear as literal fragments in newer CLI versions. Codex card
-layouts cap at 72 columns to fit its narrower transcript pane. Claude Code keeps
-the full colored terminal rendering, including when both environment variables
-are present.
+Codex supplies `PLUGIN_ROOT` and a compatibility `CLAUDE_PLUGIN_ROOT` to plugin
+hooks. The plugin uses `PLUGIN_ROOT` (or `PLUGIN_DATA`) to identify Codex.
+Codex presents `systemMessage` as a warning and already shows tool results, so
+visual-only cards are omitted there. `SessionStart` and `PostToolUseFailure`
+keep their `hookSpecificOutput.additionalContext` without a terminal banner.
+Claude Code keeps the colored cards and stderr mirror for lifecycle events.
 
 The only requirement is **`node` on your PATH** (v18+). The plugin ships a
 prebuilt, dependency-inlined bundle at `dist/hooks.mjs`, so there is no install
@@ -130,7 +129,7 @@ share the same large block-weight checkbox: newly queued or active tasks stay
 empty, completed tasks show a checkmark, and descriptions sit directly beneath
 the task-state caption.
 
-`SessionStart` prints `assets/welcome.png` with the same compact half-block
+In Claude Code, `SessionStart` prints `assets/welcome.png` with the same compact half-block
 renderer used for file previews. The banner is sized against the remaining
 message budget after the heading and badges, so it arrives whole rather than
 with its middle omitted.
@@ -143,8 +142,8 @@ the ramp ` .:-=+*#%@`. It detects either light or dark dominant backgrounds,
 flips polarity accordingly, and emits no colour SGR. File and screenshot
 previews and the session banner use `imageToAsciiSimple()`, a compact half-block
 renderer with fewer glyph choices and lower rendering cost than the full
-`imageToAscii()` renderer. The image cards still retain their ANSI colors in
-Claude Code; Codex receives their plain-text glyphs without escape sequences.
+`imageToAscii()` renderer. The image cards retain their ANSI colors in
+Claude Code.
 
 Braille is a mode of its own (`CLAUDE_HOOKS_IMAGE_MODE=braille`, or
 `mode: 'braille'`): 2x4 dots per cell in the terminal's own foreground, with no
@@ -155,14 +154,13 @@ where it is tonal rather than linear.
 
 Images read through `Read`, screenshots, and the welcome banner use the simple
 half-block renderer. Each terminal cell displays up to two vertically stacked
-image samples. Claude Code receives ANSI colors; Codex receives the same glyphs
-without terminal escape sequences. `imageToAscii()` remains available to
+image samples. Claude Code receives ANSI colors; Codex uses its native image
+and tool display. `imageToAscii()` remains available to
 consumers that need the higher-detail sextant renderer.
 
 Width comes from the terminal rather than from a guess and is capped at 100
 columns, or the available terminal width after the host's outer margin,
-whichever is smaller. Codex layouts use a 72-column cap to fit the narrower
-transcript pane. Long content rows hard-wrap inside that width without
+whichever is smaller. Long content rows hard-wrap inside that width without
 dropping characters or replacing their tail with an ellipsis. A hook's stdout
 is a pipe — Claude Code reads the response JSON off it — so `process.stdout.columns`
 is undefined in exactly the situation that matters, and the fallback that stood
@@ -170,9 +168,9 @@ in for it sized every card and every picture to 96 columns however wide the
 window was. The controlling terminal is asked directly through `/dev/tty`,
 falling back only where there is none to ask.
 
-For Codex, `PostToolUse` output is emitted once as stdout JSON and does not
-mirror the same `systemMessage` to stderr, preventing doubled cards while
-preserving the strict hook wire envelope.
+For Codex, visual-only events return `{}` with exit code 0. No terminal output
+is written to stderr, and context-bearing events return JSON only. This avoids
+raw ANSI fragments and duplicate warnings in its transcript.
 
 Claude Code caps each hook output string at 10,000 characters, and *characters*
 is the whole of it: the limit is `value.length <= 1e4` against the parsed string,
