@@ -69,7 +69,8 @@ function terminalColumns (): number {
 
 export function layoutWidthForTerminal (columns: number): number {
   const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width
-  return Math.max(1, Math.min(maximumLayout, (columns > 0 ? columns : fallbackContent) - outerIndentMargin))
+  const codexWidth                                            = process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT ? 72 : maximumLayout
+  return Math.max(1, Math.min(codexWidth, (columns > 0 ? columns : fallbackContent) - outerIndentMargin))
 }
 
 export const getMaxLayoutWidth = (): number => layoutWidthForTerminal(terminalColumns())

@@ -23,9 +23,10 @@ type RunWireHookReturnType = {
   output: Record<string, unknown>;
 }
 
-function runWireHook (event: 'PreToolUse' | 'PostToolUse', payload: unknown): RunWireHookReturnType {
+function runWireHook (event: 'PreToolUse' | 'PostToolUse', payload: unknown, env?: NodeJS.ProcessEnv): RunWireHookReturnType {
   const result = spawnSync('bun', [ 'run', BIND, event ], {
     cwd:      ROOT,
+    env:      { ...process.env, ...env },
     input:    JSON.stringify(payload),
     encoding: 'utf8',
   })
@@ -75,6 +76,16 @@ describe('codex-compatible tool hook output', () => {
     expect(result.stdout).toBe('{}')
     expect(result.stderr).toBe('')
     expect(result.output).toEqual({})
+  })
+
+  test('keeps Claude Code colors when CODEX_HOME is also present', () => {
+    const result = runWireHook('PostToolUse', {
+      ...input,
+      tool_response: { stdout: 'colored' },
+    }, { CODEX_HOME: '/tmp/codex', CLAUDE_PLUGIN_ROOT: ROOT })
+
+    expect(result.output.systemMessage).toContain('\x1b[48;5;236m')
+    expect(result.output.systemMessage).toContain('\x1b[1A')
   })
 
   test('emits PostToolUse output once on stdout and never mirrors it to stderr', () => {
@@ -128,6 +139,14 @@ describe('codex-compatible tool hook output', () => {
     expect(plain).toContain('row 000 complete')
     expect(plain).not.toContain('row 399 complete')
     expect(plain).toContain('saved to')
+  })
+
+  test('serializes Codex hook messages without terminal control sequences', () => {
+    const result = serializeHook({ systemMessage: '\x1b[1A\x1b[2K\x1b[48;5;236mcard\x1b[0m' }, { ansi: false })
+    const output = JSON.parse(result.json) as { systemMessage: string }
+
+    expect(output.systemMessage).toBe('card')
+    expect(output.systemMessage).not.toMatch(/\x1b\[/)
   })
 
   // The limit Claude Code applies is `value.length <= 1e4` on the parsed string,
@@ -442,7 +461,7 @@ describe('codex-compatible tool hook output', () => {
       expect(output).not.toContain('metadata')
   })
 
-  test('renders a readable image path from UserPromptSubmit with the original image renderer', () => {
+  test('renders a readable image path from UserPromptSubmit as a compact preview', () => {
     const dir    = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt-image-'))
     const image  = path.join(dir, 'reference image.png')
     const prompt = `<image name=[Image #1] path="${image}">`

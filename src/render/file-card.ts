@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { imageToAscii } from '@tuomashatakka/image-to-ascii'
-import type { BudgetSpec } from '@tuomashatakka/image-to-ascii'
+import { imageToAsciiSimple } from '@tuomashatakka/image-to-ascii'
 import { ink } from '../ansi/chalk.ts'
 import { renderText } from '../ansi/highlight.ts'
 import { collapse } from '../ansi/text.ts'
@@ -63,24 +62,20 @@ function readFile (filePath: string): Buffer | null {
 
 // ------------------------------------------------------------------- images
 
-/**
- * What a picture may spend for a card of `chars`. The wrapper costs are
- * measured off compacted cards: title row, top rule and blank rows once; per
- * row the 256-colour fill, two columns of padding each side, the fill's
- * re-open after the picture's own background reset, the closing reset and
- * the newline. Rough is fine — the transport re-fits anyway.
- */
 const CARD_CHROME  = 300
 const CARD_PER_ROW = 34
-
-const imageBudget = (chars: number): BudgetSpec =>
-  ({ total: Math.max(600, chars), overhead: CARD_CHROME, perRow: CARD_PER_ROW })
 
 const NO_ROOM = ink.note('… image preview omitted — no room left in this message …')
 
 function drawImage (data: Buffer, ext: string, chars: number): string | null {
   try {
-    return imageToAscii(data, ext, { maxWidth: getMaxContentWidth(), budget: imageBudget(chars) })
+    let width = getMaxContentWidth()
+    let image = imageToAsciiSimple(data, ext, width)
+    while (image && image.length + CARD_CHROME + image.split('\n').length * CARD_PER_ROW > chars && width > 1) {
+      width = Math.max(1, Math.floor(width * 0.85))
+      image = imageToAsciiSimple(data, ext, width)
+    }
+    return image && image.length + CARD_CHROME + image.split('\n').length * CARD_PER_ROW <= chars ? image : null
   }
   catch {
     return null
@@ -121,7 +116,7 @@ function fileBody (filePath: string, options: FileCardOptions): FileBody | null 
   const ext = extensionOf(filePath)
   if (isImagePath(filePath)) {
     const data = readFile(filePath)
-    if (data && drawImage(data, ext, 4_000))
+    if (data)
       return { kind: 'image', draw: imageBody(data, ext) }
   }
 

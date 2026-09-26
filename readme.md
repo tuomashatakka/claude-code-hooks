@@ -3,8 +3,8 @@
 Enhanced hooks for Claude Code — beautified terminal output for post-tool results and lifecycle events.
 
 Block-letter headings, colored badges, syntax-highlighted diffs, box-drawn
-tables, sextant or opt-in literal-ASCII image previews and playful kaomoji
-phrases, across **14 hook events** and **23 tool renderers** — and every card
+tables, compact half-block image previews and playful kaomoji phrases, across
+**14 hook events** and **23 tool renderers** — and every card
 keeps its colours however much a command prints.
 
 **[See it running →](https://tuomashatakka.github.io/claude-code-hooks/)** — 44
@@ -22,6 +22,14 @@ directly: [an image](https://tuomashatakka.github.io/claude-code-hooks/#read-ima
 ```
 
 Then `/reload-plugins` (or restart) and the hooks are live.
+
+When run by Codex CLI (`CODEX_HOME` is set without `CLAUDE_PLUGIN_ROOT`),
+post-tool hook messages are sent without ANSI styling or cursor-control
+sequences. Codex presents `systemMessage` as text, and terminal escapes in that
+field can appear as literal fragments in newer CLI versions. Codex card
+layouts cap at 72 columns to fit its narrower transcript pane. Claude Code keeps
+the full colored terminal rendering, including when both environment variables
+are present.
 
 The only requirement is **`node` on your PATH** (v18+). The plugin ships a
 prebuilt, dependency-inlined bundle at `dist/hooks.mjs`, so there is no install
@@ -61,11 +69,11 @@ response into its answer and a key/value table of whatever is left.
 | Tool | What it draws | Live |
 | --- | --- | --- |
 | `Bash`, `wcgw BashCommand` | Command and stdout as darker/regular regions in one card, chains split a row per separator, rulers start new cards below, wcgw metadata becomes an inset footer | [#bash-grep](https://tuomashatakka.github.io/claude-code-hooks/#bash-grep) |
-| `Read` | Syntax-highlighted file card, or the established ANSI `imageToAscii` preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
+| `Read` | Syntax-highlighted file card, or a compact `imageToAsciiSimple` preview for images | [#read-source](https://tuomashatakka.github.io/claude-code-hooks/#read-source) |
 | `Write` | The written file read back off disk, in the same card `Read` draws | [#write](https://tuomashatakka.github.io/claude-code-hooks/#write) |
 | `Edit`, `MultiEdit` | The file re-read and cropped to the changed span plus three lines of context | [#edit](https://tuomashatakka.github.io/claude-code-hooks/#edit) |
 | `apply_patch` | Successful native patch summaries stay quiet instead of being repeated in a generic output card; unexpected output remains visible | [#apply-patch](https://tuomashatakka.github.io/claude-code-hooks/#apply-patch) |
-| `view_image` | The local target or inline data URL as a fitted ANSI image card | [#view-image](https://tuomashatakka.github.io/claude-code-hooks/#view-image) |
+| `view_image` | The local target or inline data URL as a compact half-block image card | [#view-image](https://tuomashatakka.github.io/claude-code-hooks/#view-image) |
 | `wcgw FileWriteOrEdit` | Search/replace blocks parsed to tell an edit from a write, result read back off disk | [#wcgw-write](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-write) |
 | `wcgw ReadFiles`, `ReadImage` | One card per path, sharing a single response budget | [#wcgw-read](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-read) |
 | `wcgw Initialize`, `ContextSave` | Workspace handshake as three lines; saved context with its inlined files accounted for rather than printed | [#wcgw-ctx](https://tuomashatakka.github.io/claude-code-hooks/#wcgw-ctx) |
@@ -122,10 +130,9 @@ share the same large block-weight checkbox: newly queued or active tasks stay
 empty, completed tasks show a checkmark, and descriptions sit directly beneath
 the task-state caption.
 
-`SessionStart` prints `assets/welcome.png` as sextant art through the same fitted
-renderer file previews use. The banner is sized
-against what is actually left of the message's character budget once the
-heading and the badges have taken their share, so it arrives whole rather than
+`SessionStart` prints `assets/welcome.png` with the same compact half-block
+renderer used for file previews. The banner is sized against the remaining
+message budget after the heading and badges, so it arrives whole rather than
 with its middle omitted.
 Point `CLAUDE_HOOKS_WELCOME_IMAGE` at another file to change the face; if no
 image can be rendered, a random `.txt` from `$HOME/Documents/Prompts/anime-ascii`
@@ -133,10 +140,11 @@ is used instead, skipping any that would not fit.
 
 `imageToMonochromeAscii()` is included as an opt-in literal text renderer using
 the ramp ` .:-=+*#%@`. It detects either light or dark dominant backgrounds,
-flips polarity accordingly, emits no colour SGR, and spends far fewer tokens
-than a photographic ANSI preview. File and screenshot previews and the session
-banner all use the full `imageToAscii()` renderer. `CLAUDE_HOOKS_IMAGE_MODE=ascii`
-explicitly selects the monochrome path for the full renderer.
+flips polarity accordingly, and emits no colour SGR. File and screenshot
+previews and the session banner use `imageToAsciiSimple()`, a compact half-block
+renderer with fewer glyph choices and lower rendering cost than the full
+`imageToAscii()` renderer. The image cards still retain their ANSI colors in
+Claude Code; Codex receives their plain-text glyphs without escape sequences.
 
 Braille is a mode of its own (`CLAUDE_HOOKS_IMAGE_MODE=braille`, or
 `mode: 'braille'`): 2x4 dots per cell in the terminal's own foreground, with no
@@ -145,17 +153,16 @@ a wide margin — the same budget that fits a 26-column colour render fits a
 full-width braille one — and Floyd-Steinberg dithering is available for sources
 where it is tonal rather than linear.
 
-Images read through `Read` are rendered as ANSI 2x3 sextant previews. Each cell
-chooses an exact two-colour clustering of six image samples, using Unicode block
-sextants and separated sextants through U+1CE86 for sharper edges. The renderer
-can degrade from 24-bit color through channel quantization to xterm-256 when a
-smaller representation scores better. Set `CLAUDE_HOOKS_IMAGE_MODE=half` (or
-use `TERM=dumb`) for the legacy half-block fallback when a terminal font does
-not cover the sextant glyphs.
+Images read through `Read`, screenshots, and the welcome banner use the simple
+half-block renderer. Each terminal cell displays up to two vertically stacked
+image samples. Claude Code receives ANSI colors; Codex receives the same glyphs
+without terminal escape sequences. `imageToAscii()` remains available to
+consumers that need the higher-detail sextant renderer.
 
 Width comes from the terminal rather than from a guess and is capped at 100
 columns, or the available terminal width after the host's outer margin,
-whichever is smaller. Long content rows hard-wrap inside that width without
+whichever is smaller. Codex layouts use a 72-column cap to fit the narrower
+transcript pane. Long content rows hard-wrap inside that width without
 dropping characters or replacing their tail with an ellipsis. A hook's stdout
 is a pipe — Claude Code reads the response JSON off it — so `process.stdout.columns`
 is undefined in exactly the situation that matters, and the fallback that stood

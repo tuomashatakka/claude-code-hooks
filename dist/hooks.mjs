@@ -4956,126 +4956,9 @@ function decodeImage(buffer, ext) {
   return img.width && img.height ? img : null;
 }
 
-// packages/image-to-ascii/src/sat.ts
-var MAX_SAT_PIXELS = 4e6;
-function decimationFactor(width, height) {
-  let factor = 1;
-  while (width / factor * (height / factor) > MAX_SAT_PIXELS) factor++;
-  return factor;
-}
-function buildSAT(img) {
-  const factor = decimationFactor(img.width, img.height);
-  const width = Math.max(1, Math.floor(img.width / factor));
-  const height = Math.max(1, Math.floor(img.height / factor));
-  const stride = width + 1;
-  const planes = [
-    new Uint32Array(stride * (height + 1)),
-    new Uint32Array(stride * (height + 1)),
-    new Uint32Array(stride * (height + 1)),
-    new Uint32Array(stride * (height + 1))
-  ];
-  for (let y = 0; y < height; y++) {
-    const rowAbove = y * stride;
-    const row = (y + 1) * stride;
-    for (let x = 0; x < width; x++) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      let n = 0;
-      const sx1 = Math.min(img.width, (x + 1) * factor);
-      const sy1 = Math.min(img.height, (y + 1) * factor);
-      for (let sy = y * factor; sy < sy1; sy++) {
-        for (let sx = x * factor; sx < sx1; sx++) {
-          const i = (sy * img.width + sx) * 4;
-          const alpha = img.data[i + 3] ?? 255;
-          r += Math.round((img.data[i] ?? 0) * alpha / 255);
-          g += Math.round((img.data[i + 1] ?? 0) * alpha / 255);
-          b += Math.round((img.data[i + 2] ?? 0) * alpha / 255);
-          a += alpha;
-          n++;
-        }
-      }
-      const inv = n || 1;
-      const values = [Math.round(r / inv), Math.round(g / inv), Math.round(b / inv), Math.round(a / inv)];
-      for (let p = 0; p < 4; p++) {
-        const plane = planes[p];
-        plane[row + x + 1] = values[p] + plane[row + x] + plane[rowAbove + x + 1] - plane[rowAbove + x];
-      }
-    }
-  }
-  return { width, height, stride, planes };
-}
-function rectMean(sat, x0, y0, x1, y1, out, withAlpha = true) {
-  const { stride, width, height, planes } = sat;
-  const area = (x1 - x0) * (y1 - y0);
-  if (!(area > 0)) {
-    out.r = 0;
-    out.g = 0;
-    out.b = 0;
-    out.a = 0;
-    return out;
-  }
-  const cx0 = x0 < 0 ? 0 : x0 > width ? width : x0;
-  const cy0 = y0 < 0 ? 0 : y0 > height ? height : y0;
-  const cx1 = x1 < 0 ? 0 : x1 > width ? width : x1;
-  const cy1 = y1 < 0 ? 0 : y1 > height ? height : y1;
-  const xi0 = cx0 < width - 1 ? cx0 | 0 : width - 1;
-  const xi1 = cx1 < width - 1 ? cx1 | 0 : width - 1;
-  const yi0 = cy0 < height - 1 ? cy0 | 0 : height - 1;
-  const yi1 = cy1 < height - 1 ? cy1 | 0 : height - 1;
-  const fx0 = cx0 - xi0;
-  const fx1 = cx1 - xi1;
-  const fy0 = cy0 - yi0;
-  const fy1 = cy1 - yi1;
-  const rowA0 = yi0 * stride;
-  const rowB0 = rowA0 + stride;
-  const rowA1 = yi1 * stride;
-  const rowB1 = rowA1 + stride;
-  const w00a = (1 - fx0) * (1 - fy0), w10a = fx0 * (1 - fy0), w01a = (1 - fx0) * fy0, w11a = fx0 * fy0;
-  const w00b = (1 - fx1) * (1 - fy0), w10b = fx1 * (1 - fy0), w01b = (1 - fx1) * fy0, w11b = fx1 * fy0;
-  const w00c = (1 - fx0) * (1 - fy1), w10c = fx0 * (1 - fy1), w01c = (1 - fx0) * fy1, w11c = fx0 * fy1;
-  const w00d = (1 - fx1) * (1 - fy1), w10d = fx1 * (1 - fy1), w01d = (1 - fx1) * fy1, w11d = fx1 * fy1;
-  const inv = 1 / area;
-  const count = withAlpha ? 4 : 3;
-  let r = 0, g = 0, b = 0, a = 0;
-  for (let p = 0; p < count; p++) {
-    const plane = planes[p];
-    const s11 = plane[rowA1 + xi1] * w00d + plane[rowA1 + xi1 + 1] * w10d + plane[rowB1 + xi1] * w01d + plane[rowB1 + xi1 + 1] * w11d;
-    const s01 = plane[rowA1 + xi0] * w00c + plane[rowA1 + xi0 + 1] * w10c + plane[rowB1 + xi0] * w01c + plane[rowB1 + xi0 + 1] * w11c;
-    const s10 = plane[rowA0 + xi1] * w00b + plane[rowA0 + xi1 + 1] * w10b + plane[rowB0 + xi1] * w01b + plane[rowB0 + xi1 + 1] * w11b;
-    const s00 = plane[rowA0 + xi0] * w00a + plane[rowA0 + xi0 + 1] * w10a + plane[rowB0 + xi0] * w01a + plane[rowB0 + xi0 + 1] * w11a;
-    const value = (s11 - s01 - s10 + s00) * inv;
-    if (p === 0) r = value;
-    else if (p === 1) g = value;
-    else if (p === 2) b = value;
-    else a = value;
-  }
-  if (!withAlpha) a = 255;
-  const scale = a > 0 ? 255 / a : 0;
-  out.r = r * scale;
-  out.g = g * scale;
-  out.b = b * scale;
-  out.a = a;
-  return out;
-}
-function subCellRect(sat, gridX, gridY, gridCols, gridRows) {
-  return [
-    gridX * sat.width / gridCols,
-    gridY * sat.height / gridRows,
-    (gridX + 1) * sat.width / gridCols,
-    (gridY + 1) * sat.height / gridRows
-  ];
-}
-
 // packages/image-to-ascii/src/budget.ts
-var DEFAULT_BUDGET = { total: 9200 };
 var BG_RESET = "\x1B[49m";
 var ESC = "\x1B";
-function normalizeBudget(budget) {
-  if (budget === void 0) return DEFAULT_BUDGET;
-  return typeof budget === "number" ? { total: budget } : budget;
-}
 function countOccurrences(haystack, needle) {
   let count = 0;
   let at = haystack.indexOf(needle);
@@ -5100,45 +4983,6 @@ function costOf(lines, spec) {
   return total;
 }
 
-// packages/image-to-ascii/src/glyphs/coverage.ts
-function coverageFromRects(basis2, rects) {
-  const w = new Float64Array(basis2.size);
-  const cellW = 1 / basis2.cols;
-  const cellH = 1 / basis2.rows;
-  const subArea = cellW * cellH;
-  for (let row = 0; row < basis2.rows; row++) {
-    for (let col = 0; col < basis2.cols; col++) {
-      const sx0 = col * cellW;
-      const sy0 = row * cellH;
-      const sx1 = sx0 + cellW;
-      const sy1 = sy0 + cellH;
-      let covered = 0;
-      for (const [x0, y0, x1, y1] of rects) {
-        const ox = Math.min(sx1, x1) - Math.max(sx0, x0);
-        const oy = Math.min(sy1, y1) - Math.max(sy0, y0);
-        if (ox > 0 && oy > 0) covered += ox * oy;
-      }
-      w[row * basis2.cols + col] = Math.min(1, covered / subArea);
-    }
-  }
-  return w;
-}
-function coverageUniform(basis2, alpha) {
-  return new Float64Array(basis2.size).fill(alpha);
-}
-function rectsForMask(basis2, mask) {
-  const rects = [];
-  const cellW = 1 / basis2.cols;
-  const cellH = 1 / basis2.rows;
-  for (let i = 0; i < basis2.size; i++) {
-    if (!(mask & 1 << i)) continue;
-    const col = i % basis2.cols;
-    const row = i / basis2.cols | 0;
-    rects.push([col * cellW, row * cellH, (col + 1) * cellW, (row + 1) * cellH]);
-  }
-  return rects;
-}
-
 // packages/image-to-ascii/src/glyphs/types.ts
 function basis(id, cols, rows) {
   return { id, cols, rows, size: cols * rows };
@@ -5153,795 +4997,18 @@ var BASES = {
   "8x1": basis("8x1", 8, 1),
   "4x6": basis("4x6", 4, 6)
 };
-function solveConstants(w) {
-  let a2 = 0;
-  let cross = 0;
-  let b2 = 0;
-  for (let i = 0; i < w.length; i++) {
-    const v = w[i];
-    a2 += v * v;
-    cross += v * (1 - v);
-    b2 += (1 - v) * (1 - v);
-  }
-  a2 /= w.length;
-  cross /= w.length;
-  b2 /= w.length;
-  return { a2, cross, b2, det: a2 * b2 - cross * cross };
-}
-function makeGlyph(char, family, coverageBasis, w, mask = -1) {
-  let area = 0;
-  let binary = true;
-  let uniform = true;
-  const first = w[0];
-  for (let i = 0; i < w.length; i++) {
-    const v = w[i];
-    area += v;
-    if (v !== 0 && v !== 1) binary = false;
-    if (v !== first) uniform = false;
-  }
-  return {
-    char,
-    units: char.length === 2 ? 2 : 1,
-    family,
-    basis: coverageBasis,
-    w,
-    area: area / w.length,
-    binary,
-    uniform,
-    mask,
-    solve: solveConstants(w)
-  };
-}
 
-// packages/image-to-ascii/src/glyphs/eighths.ts
-var VERTICAL = [
-  [1, true, "\u2581"],
-  [2, true, "\u2582"],
-  [3, true, "\u2583"],
-  [4, true, "\u2584"],
-  [5, true, "\u2585"],
-  [6, true, "\u2586"],
-  [7, true, "\u2587"],
-  [1, false, "\u2594"],
-  [2, false, "\u{1FB82}"],
-  [3, false, "\u{1FB83}"],
-  [4, false, "\u2580"],
-  [5, false, "\u{1FB84}"],
-  [6, false, "\u{1FB85}"],
-  [7, false, "\u{1FB86}"]
-];
-var HORIZONTAL = [
-  [1, true, "\u258F"],
-  [2, true, "\u258E"],
-  [3, true, "\u258D"],
-  [4, true, "\u258C"],
-  [5, true, "\u258B"],
-  [6, true, "\u258A"],
-  [7, true, "\u2589"],
-  [1, false, "\u2595"]
-];
-function verticalEighthFamily() {
-  const b = BASES["1x8"];
-  return VERTICAL.map(([eighths, fromBottom, char]) => {
-    const height = eighths / 8;
-    const rect = fromBottom ? [0, 1 - height, 1, 1] : [0, 0, 1, height];
-    return makeGlyph(char, "eighth-v", b, coverageFromRects(b, [rect]));
-  });
-}
-function horizontalEighthFamily() {
-  const b = BASES["8x1"];
-  return HORIZONTAL.map(([eighths, fromLeft, char]) => {
-    const width = eighths / 8;
-    const rect = fromLeft ? [0, 0, width, 1] : [1 - width, 0, 1, 1];
-    return makeGlyph(char, "eighth-h", b, coverageFromRects(b, [rect]));
-  });
-}
-
-// packages/image-to-ascii/src/glyphs/octant-table.ts
-var OCTANT_CHARS = [
-  " ",
-  "\u{1CEA8}",
-  "\u{1CEAB}",
-  "\u{1FB82}",
-  "\u{1CD00}",
-  "\u2598",
-  "\u{1CD01}",
-  "\u{1CD02}",
-  "\u{1CD03}",
-  "\u{1CD04}",
-  "\u259D",
-  "\u{1CD05}",
-  "\u{1CD06}",
-  "\u{1CD07}",
-  "\u{1CD08}",
-  "\u2580",
-  "\u{1CD09}",
-  "\u{1CD0A}",
-  "\u{1CD0B}",
-  "\u{1CD0C}",
-  "\u{1FBE6}",
-  "\u{1CD0D}",
-  "\u{1CD0E}",
-  "\u{1CD0F}",
-  "\u{1CD10}",
-  "\u{1CD11}",
-  "\u{1CD12}",
-  "\u{1CD13}",
-  "\u{1CD14}",
-  "\u{1CD15}",
-  "\u{1CD16}",
-  "\u{1CD17}",
-  "\u{1CD18}",
-  "\u{1CD19}",
-  "\u{1CD1A}",
-  "\u{1CD1B}",
-  "\u{1CD1C}",
-  "\u{1CD1D}",
-  "\u{1CD1E}",
-  "\u{1CD1F}",
-  "\u{1FBE7}",
-  "\u{1CD20}",
-  "\u{1CD21}",
-  "\u{1CD22}",
-  "\u{1CD23}",
-  "\u{1CD24}",
-  "\u{1CD25}",
-  "\u{1CD26}",
-  "\u{1CD27}",
-  "\u{1CD28}",
-  "\u{1CD29}",
-  "\u{1CD2A}",
-  "\u{1CD2B}",
-  "\u{1CD2C}",
-  "\u{1CD2D}",
-  "\u{1CD2E}",
-  "\u{1CD2F}",
-  "\u{1CD30}",
-  "\u{1CD31}",
-  "\u{1CD32}",
-  "\u{1CD33}",
-  "\u{1CD34}",
-  "\u{1CD35}",
-  "\u{1FB85}",
-  "\u{1CEA3}",
-  "\u{1CD36}",
-  "\u{1CD37}",
-  "\u{1CD38}",
-  "\u{1CD39}",
-  "\u{1CD3A}",
-  "\u{1CD3B}",
-  "\u{1CD3C}",
-  "\u{1CD3D}",
-  "\u{1CD3E}",
-  "\u{1CD3F}",
-  "\u{1CD40}",
-  "\u{1CD41}",
-  "\u{1CD42}",
-  "\u{1CD43}",
-  "\u{1CD44}",
-  "\u2596",
-  "\u{1CD45}",
-  "\u{1CD46}",
-  "\u{1CD47}",
-  "\u{1CD48}",
-  "\u258C",
-  "\u{1CD49}",
-  "\u{1CD4A}",
-  "\u{1CD4B}",
-  "\u{1CD4C}",
-  "\u259E",
-  "\u{1CD4D}",
-  "\u{1CD4E}",
-  "\u{1CD4F}",
-  "\u{1CD50}",
-  "\u259B",
-  "\u{1CD51}",
-  "\u{1CD52}",
-  "\u{1CD53}",
-  "\u{1CD54}",
-  "\u{1CD55}",
-  "\u{1CD56}",
-  "\u{1CD57}",
-  "\u{1CD58}",
-  "\u{1CD59}",
-  "\u{1CD5A}",
-  "\u{1CD5B}",
-  "\u{1CD5C}",
-  "\u{1CD5D}",
-  "\u{1CD5E}",
-  "\u{1CD5F}",
-  "\u{1CD60}",
-  "\u{1CD61}",
-  "\u{1CD62}",
-  "\u{1CD63}",
-  "\u{1CD64}",
-  "\u{1CD65}",
-  "\u{1CD66}",
-  "\u{1CD67}",
-  "\u{1CD68}",
-  "\u{1CD69}",
-  "\u{1CD6A}",
-  "\u{1CD6B}",
-  "\u{1CD6C}",
-  "\u{1CD6D}",
-  "\u{1CD6E}",
-  "\u{1CD6F}",
-  "\u{1CD70}",
-  "\u{1CEA0}",
-  "\u{1CD71}",
-  "\u{1CD72}",
-  "\u{1CD73}",
-  "\u{1CD74}",
-  "\u{1CD75}",
-  "\u{1CD76}",
-  "\u{1CD77}",
-  "\u{1CD78}",
-  "\u{1CD79}",
-  "\u{1CD7A}",
-  "\u{1CD7B}",
-  "\u{1CD7C}",
-  "\u{1CD7D}",
-  "\u{1CD7E}",
-  "\u{1CD7F}",
-  "\u{1CD80}",
-  "\u{1CD81}",
-  "\u{1CD82}",
-  "\u{1CD83}",
-  "\u{1CD84}",
-  "\u{1CD85}",
-  "\u{1CD86}",
-  "\u{1CD87}",
-  "\u{1CD88}",
-  "\u{1CD89}",
-  "\u{1CD8A}",
-  "\u{1CD8B}",
-  "\u{1CD8C}",
-  "\u{1CD8D}",
-  "\u{1CD8E}",
-  "\u{1CD8F}",
-  "\u2597",
-  "\u{1CD90}",
-  "\u{1CD91}",
-  "\u{1CD92}",
-  "\u{1CD93}",
-  "\u259A",
-  "\u{1CD94}",
-  "\u{1CD95}",
-  "\u{1CD96}",
-  "\u{1CD97}",
-  "\u2590",
-  "\u{1CD98}",
-  "\u{1CD99}",
-  "\u{1CD9A}",
-  "\u{1CD9B}",
-  "\u259C",
-  "\u{1CD9C}",
-  "\u{1CD9D}",
-  "\u{1CD9E}",
-  "\u{1CD9F}",
-  "\u{1CDA0}",
-  "\u{1CDA1}",
-  "\u{1CDA2}",
-  "\u{1CDA3}",
-  "\u{1CDA4}",
-  "\u{1CDA5}",
-  "\u{1CDA6}",
-  "\u{1CDA7}",
-  "\u{1CDA8}",
-  "\u{1CDA9}",
-  "\u{1CDAA}",
-  "\u{1CDAB}",
-  "\u2582",
-  "\u{1CDAC}",
-  "\u{1CDAD}",
-  "\u{1CDAE}",
-  "\u{1CDAF}",
-  "\u{1CDB0}",
-  "\u{1CDB1}",
-  "\u{1CDB2}",
-  "\u{1CDB3}",
-  "\u{1CDB4}",
-  "\u{1CDB5}",
-  "\u{1CDB6}",
-  "\u{1CDB7}",
-  "\u{1CDB8}",
-  "\u{1CDB9}",
-  "\u{1CDBA}",
-  "\u{1CDBB}",
-  "\u{1CDBC}",
-  "\u{1CDBD}",
-  "\u{1CDBE}",
-  "\u{1CDBF}",
-  "\u{1CDC0}",
-  "\u{1CDC1}",
-  "\u{1CDC2}",
-  "\u{1CDC3}",
-  "\u{1CDC4}",
-  "\u{1CDC5}",
-  "\u{1CDC6}",
-  "\u{1CDC7}",
-  "\u{1CDC8}",
-  "\u{1CDC9}",
-  "\u{1CDCA}",
-  "\u{1CDCB}",
-  "\u{1CDCC}",
-  "\u{1CDCD}",
-  "\u{1CDCE}",
-  "\u{1CDCF}",
-  "\u{1CDD0}",
-  "\u{1CDD1}",
-  "\u{1CDD2}",
-  "\u{1CDD3}",
-  "\u{1CDD4}",
-  "\u{1CDD5}",
-  "\u{1CDD6}",
-  "\u{1CDD7}",
-  "\u{1CDD8}",
-  "\u{1CDD9}",
-  "\u{1CDDA}",
-  "\u2584",
-  "\u{1CDDB}",
-  "\u{1CDDC}",
-  "\u{1CDDD}",
-  "\u{1CDDE}",
-  "\u2599",
-  "\u{1CDDF}",
-  "\u{1CDE0}",
-  "\u{1CDE1}",
-  "\u{1CDE2}",
-  "\u259F",
-  "\u{1CDE3}",
-  "\u2586",
-  "\u{1CDE4}",
-  "\u{1CDE5}",
-  "\u2588"
-];
-
-// packages/image-to-ascii/src/glyphs/octants.ts
-function octantChar(mask) {
-  return OCTANT_CHARS[mask & 255];
-}
-function octantFamily() {
-  const b = BASES["2x4"];
-  const out = [];
-  for (let mask = 0; mask < 256; mask++) {
-    out.push(makeGlyph(octantChar(mask), "octant", b, coverageFromRects(b, rectsForMask(b, mask)), mask));
-  }
-  return out;
-}
-
-// packages/image-to-ascii/src/glyphs/sextants.ts
-var LEFT_HALF_MASK = 21;
-var RIGHT_HALF_MASK = 42;
-var LAST_SEPARATED_MASK = 54;
-function regularSextant(mask) {
-  if (mask <= 0) return " ";
-  if (mask >= 63) return "\u2588";
-  if (mask === LEFT_HALF_MASK) return "\u258C";
-  if (mask === RIGHT_HALF_MASK) return "\u2590";
-  const skippedLeft = mask > LEFT_HALF_MASK ? 1 : 0;
-  const skippedRight = mask > RIGHT_HALF_MASK ? 1 : 0;
-  return String.fromCodePoint(129792 + mask - 1 - skippedLeft - skippedRight);
-}
-function separatedSextant(mask) {
-  return mask >= 1 && mask <= LAST_SEPARATED_MASK ? String.fromCodePoint(118352 + mask) : null;
-}
-function sextantFamily() {
-  const b = BASES["2x3"];
-  const out = [];
-  for (let mask = 0; mask < 64; mask++) {
-    out.push(makeGlyph(regularSextant(mask), "sextant", b, coverageFromRects(b, rectsForMask(b, mask)), mask));
-  }
-  return out;
-}
-var SEPARATED_INSET = 0.15;
-function separatedFamily() {
-  const b = BASES["2x3"];
-  const out = [];
-  for (let mask = 1; mask <= LAST_SEPARATED_MASK; mask++) {
-    const char = separatedSextant(mask);
-    if (char === null) continue;
-    const rects = rectsForMask(b, mask).map(([x0, y0, x1, y1]) => {
-      const ix = (x1 - x0) * SEPARATED_INSET;
-      const iy = (y1 - y0) * SEPARATED_INSET;
-      return [x0 + ix, y0 + iy, x1 - ix, y1 - iy];
-    });
-    out.push(makeGlyph(char, "separated", b, coverageFromRects(b, rects), mask));
-  }
-  return out;
-}
-
-// packages/image-to-ascii/src/glyphs/shades.ts
-var SHADES = [
-  [0.25, "\u2591"],
-  [0.5, "\u2592"],
-  [0.75, "\u2593"]
-];
-function shadeFamily() {
-  const b = BASES["1x1"];
-  return SHADES.map(([alpha, char]) => makeGlyph(char, "shade", b, coverageUniform(b, alpha)));
-}
-
-// packages/image-to-ascii/src/glyphs/table.ts
-var BUILDERS = {
-  sextant: sextantFamily,
-  octant: octantFamily,
-  separated: separatedFamily,
-  "eighth-v": verticalEighthFamily,
-  "eighth-h": horizontalEighthFamily,
-  shade: shadeFamily
-};
-var POWER_SETS = /* @__PURE__ */ new Set(["sextant", "octant", "braille"]);
-function buildTable(families) {
-  const glyphs2 = [];
-  const claimed = /* @__PURE__ */ new Set();
-  const enabled = [];
-  for (const family of families) {
-    const build = BUILDERS[family];
-    if (!build) continue;
-    enabled.push(family);
-    const isPowerSet = POWER_SETS.has(family);
-    for (const glyph of build()) {
-      if (!isPowerSet && claimed.has(glyph.char)) continue;
-      claimed.add(glyph.char);
-      glyphs2.push(glyph);
-    }
-  }
-  const byBasis = /* @__PURE__ */ new Map();
-  for (let i = 0; i < glyphs2.length; i++) {
-    const id = glyphs2[i].basis.id;
-    const list2 = byBasis.get(id);
-    if (list2) list2.push(i);
-    else byBasis.set(id, [i]);
-  }
-  const bases = [];
-  for (const id of byBasis.keys()) {
-    const glyph = glyphs2.find((g) => g.basis.id === id);
-    if (glyph) bases.push(glyph.basis);
-  }
-  return {
-    glyphs: glyphs2,
-    families: enabled,
-    byBasis: new Map([...byBasis].map(([id, list2]) => [id, Int32Array.from(list2)])),
-    bases,
-    complement: buildComplements(glyphs2),
-    chars: claimed
-  };
-}
-function buildComplements(glyphs2) {
-  const out = new Int32Array(glyphs2.length).fill(-1);
-  const key = (w) => w.join(",");
-  const index = /* @__PURE__ */ new Map();
-  for (let i = 0; i < glyphs2.length; i++) {
-    const id = `${glyphs2[i].basis.id}|${key(glyphs2[i].w)}`;
-    if (!index.has(id)) index.set(id, i);
-  }
-  for (let i = 0; i < glyphs2.length; i++) {
-    const g = glyphs2[i];
-    const inverted = Float64Array.from(g.w, (v) => 1 - v);
-    const found = index.get(`${g.basis.id}|${key(inverted)}`);
-    if (found !== void 0 && found !== i) out[i] = found;
-  }
-  return out;
-}
-
-// packages/image-to-ascii/src/fit.ts
-function grayOrder(bits) {
-  const count = 1 << bits;
-  const order = new Int32Array(count);
-  const flipBit = new Int32Array(count);
-  const flipOn = new Uint8Array(count);
-  for (let i = 0; i < count; i++) order[i] = i ^ i >> 1;
-  for (let i = 1; i < count; i++) {
-    const changed = order[i] ^ order[i - 1];
-    flipBit[i] = Math.log2(changed) | 0;
-    flipOn[i] = (order[i] & changed) !== 0 ? 1 : 0;
-  }
-  return { order, flipBit, flipOn };
-}
-function compileTable(table) {
-  const powerSets = [];
-  const shaped = [];
-  const uniformShaped = [];
-  const bases = /* @__PURE__ */ new Map();
-  const byFamilyBasis = /* @__PURE__ */ new Map();
-  for (const glyph of table.glyphs) {
-    const key = `${glyph.family}|${glyph.basis.id}`;
-    const list2 = byFamilyBasis.get(key);
-    if (list2) list2.push(glyph);
-    else byFamilyBasis.set(key, [glyph]);
-  }
-  for (const [key, glyphs2] of byFamilyBasis) {
-    const basis2 = glyphs2[0].basis;
-    if (glyphs2[0].family === "separated") continue;
-    const complete = glyphs2.length === 1 << basis2.size && glyphs2.every((g) => g.mask >= 0 && g.binary);
-    if (complete) {
-      const chars = new Array(glyphs2.length);
-      const ordered = new Array(glyphs2.length);
-      for (const g of glyphs2) {
-        chars[g.mask] = g.char;
-        ordered[g.mask] = g;
-      }
-      const walk = grayOrder(basis2.size);
-      powerSets.push({ basis: basis2, chars, glyphs: ordered, ...walk });
-      bases.set(basis2.id, basis2);
-      continue;
-    }
-    for (const glyph of glyphs2) {
-      const index = [];
-      const weight = [];
-      for (let i = 0; i < glyph.w.length; i++) {
-        if (glyph.w[i] > 0) {
-          index.push(i);
-          weight.push(glyph.w[i]);
-        }
-      }
-      const entry = { glyph, index: Int32Array.from(index), weight: Float64Array.from(weight) };
-      if (glyph.uniform) uniformShaped.push(entry);
-      else shaped.push(entry);
-      bases.set(basis2.id, basis2);
-    }
-    void key;
-  }
-  bases.set("1x1", BASES["1x1"]);
-  bases.set("2x3", BASES["2x3"]);
-  return { powerSets, shaped, uniformShaped, bases: [...bases.values()] };
-}
-var rectScratch = { r: 0, g: 0, b: 0, a: 0 };
-function makeCellSamples(compiled) {
-  const planes = /* @__PURE__ */ new Map();
-  for (const basis2 of compiled.bases) planes.set(basis2.id, new Float64Array(basis2.size * 3));
-  return {
-    planes,
-    mean: new Float64Array(3),
-    alpha: new Float64Array(BASES["2x3"].size),
-    meanAlpha: 0
-  };
-}
-function sampleCell(sat, compiled, cellX, cellY, cols, rows, out) {
-  const cellW = sat.width / cols;
-  const cellH = sat.height / rows;
-  const left = cellX * cellW;
-  const top = cellY * cellH;
-  for (const basis2 of compiled.bases) {
-    const plane = out.planes.get(basis2.id);
-    const needsAlpha = basis2.id === "2x3";
-    const subW = cellW / basis2.cols;
-    const subH = cellH / basis2.rows;
-    for (let row = 0; row < basis2.rows; row++) {
-      for (let col = 0; col < basis2.cols; col++) {
-        const x0 = left + col * subW;
-        const y0 = top + row * subH;
-        rectMean(sat, x0, y0, x0 + subW, y0 + subH, rectScratch, needsAlpha);
-        const at = (row * basis2.cols + col) * 3;
-        plane[at] = rectScratch.r;
-        plane[at + 1] = rectScratch.g;
-        plane[at + 2] = rectScratch.b;
-        if (basis2.id === "2x3") out.alpha[row * basis2.cols + col] = rectScratch.a;
-      }
-    }
-  }
-  rectMean(sat, left, top, left + cellW, top + cellH, rectScratch);
-  out.mean[0] = rectScratch.r;
-  out.mean[1] = rectScratch.g;
-  out.mean[2] = rectScratch.b;
-  out.meanAlpha = rectScratch.a;
-}
-var CLAMP_LO = 0;
-var CLAMP_HI = 255;
-var clamp = (v) => v < CLAMP_LO ? CLAMP_LO : v > CLAMP_HI ? CLAMP_HI : v;
-function scoreBinary(px, py, pz, mx, my, mz, a, n) {
-  const P = 1 / n;
-  const p0 = px * P;
-  const p1 = py * P;
-  const p2 = pz * P;
-  if (a <= 0 || a >= 1) return mx * mx + my * my + mz * mz;
-  const q0 = mx - p0;
-  const q1 = my - p1;
-  const q2 = mz - p2;
-  const ia = 1 / a;
-  const ib = 1 / (1 - a);
-  return (p0 * p0 + p1 * p1 + p2 * p2) * ia + (q0 * q0 + q1 * q1 + q2 * q2) * ib;
-}
-function fitCell(compiled, samples, out, margin = 0) {
-  const mx = samples.mean[0];
-  const my = samples.mean[1];
-  const mz = samples.mean[2];
-  const flatScore = mx * mx + my * my + mz * mz;
-  let bestScore = flatScore + margin;
-  let bestGlyph = null;
-  let bestFg = [mx, my, mz];
-  let bestBg = [mx, my, mz];
-  for (const family of compiled.powerSets) {
-    const plane = samples.planes.get(family.basis.id);
-    const n = family.basis.size;
-    let px = 0;
-    let py = 0;
-    let pz = 0;
-    for (let step = 1; step < family.order.length; step++) {
-      const bit = family.flipBit[step];
-      const sign = family.flipOn[step] ? 1 : -1;
-      const at = bit * 3;
-      px += sign * plane[at];
-      py += sign * plane[at + 1];
-      pz += sign * plane[at + 2];
-      const mask = family.order[step];
-      const glyph = family.glyphs[mask];
-      const a = glyph.area;
-      const score = scoreBinary(px, py, pz, mx, my, mz, a, n);
-      if (score > bestScore) {
-        bestScore = score;
-        bestGlyph = glyph;
-        const inv = 1 / n;
-        const p0 = px * inv;
-        const p1 = py * inv;
-        const p2 = pz * inv;
-        if (a <= 0 || a >= 1) {
-          bestFg = [mx, my, mz];
-          bestBg = [mx, my, mz];
-        } else {
-          const ia = 1 / a;
-          const ib = 1 / (1 - a);
-          bestFg = [p0 * ia, p1 * ia, p2 * ia];
-          bestBg = [(mx - p0) * ib, (my - p1) * ib, (mz - p2) * ib];
-        }
-      }
-    }
-  }
-  for (const entry of compiled.shaped) {
-    const glyph = entry.glyph;
-    const plane = samples.planes.get(glyph.basis.id);
-    const n = glyph.basis.size;
-    let px = 0;
-    let py = 0;
-    let pz = 0;
-    for (let i = 0; i < entry.index.length; i++) {
-      const at = entry.index[i] * 3;
-      const w = entry.weight[i];
-      px += w * plane[at];
-      py += w * plane[at + 1];
-      pz += w * plane[at + 2];
-    }
-    const inv = 1 / n;
-    const p0 = px * inv;
-    const p1 = py * inv;
-    const p2 = pz * inv;
-    const q0 = mx - p0;
-    const q1 = my - p1;
-    const q2 = mz - p2;
-    const { a2, cross, b2, det } = glyph.solve;
-    if (Math.abs(det) < 1e-12) continue;
-    const f0 = clamp((b2 * p0 - cross * q0) / det);
-    const f1 = clamp((b2 * p1 - cross * q1) / det);
-    const f2 = clamp((b2 * p2 - cross * q2) / det);
-    const g0 = clamp((a2 * q0 - cross * p0) / det);
-    const g1 = clamp((a2 * q1 - cross * p1) / det);
-    const g2 = clamp((a2 * q2 - cross * p2) / det);
-    const dot = f0 * p0 + f1 * p1 + f2 * p2 + g0 * q0 + g1 * q1 + g2 * q2;
-    const energy = a2 * (f0 * f0 + f1 * f1 + f2 * f2) + 2 * cross * (f0 * g0 + f1 * g1 + f2 * g2) + b2 * (g0 * g0 + g1 * g1 + g2 * g2);
-    const score = 2 * dot - energy;
-    if (score > bestScore) {
-      bestScore = score;
-      bestGlyph = glyph;
-      bestFg = [f0, f1, f2];
-      bestBg = [g0, g1, g2];
-    }
-  }
-  out.glyph = bestGlyph;
-  out.fg[0] = bestFg[0];
-  out.fg[1] = bestFg[1];
-  out.fg[2] = bestFg[2];
-  out.bg[0] = bestBg[0];
-  out.bg[1] = bestBg[1];
-  out.bg[2] = bestBg[2];
-  out.score = bestGlyph === null ? flatScore : bestScore - margin;
-  return out;
-}
-function makeFitResult() {
-  return { glyph: null, fg: new Float64Array(3), bg: new Float64Array(3), score: 0 };
-}
-
-// packages/image-to-ascii/src/braille.ts
-var DOT_BITS = [
-  [1, 8],
-  [2, 16],
-  [4, 32],
-  [64, 128]
-];
-var BRAILLE_BASE = 10240;
-var BRAILLE_COLS = 2;
-var BRAILLE_ROWS = 4;
-var THRESHOLD = 0.5;
-var scratch = { r: 0, g: 0, b: 0, a: 0 };
-function inkAt(sat, x, y, cols, rows) {
-  const [x0, y0, x1, y1] = subCellRect(sat, x, y, cols, rows);
-  rectMean(sat, x0, y0, x1, y1, scratch);
-  const luma = (0.299 * scratch.r + 0.587 * scratch.g + 0.114 * scratch.b) / 255;
-  return scratch.a / 255 * (1 - Math.min(1, Math.max(0, luma)));
-}
-function renderBraille(sat, cols, rows, options = {}) {
-  const threshold = options.threshold ?? THRESHOLD;
-  const dotCols = cols * BRAILLE_COLS;
-  const dotRows = rows * BRAILLE_ROWS;
-  const ink2 = new Float64Array(dotCols * dotRows);
-  for (let y = 0; y < dotRows; y++) {
-    for (let x = 0; x < dotCols; x++) ink2[y * dotCols + x] = inkAt(sat, x, y, dotCols, dotRows);
-  }
-  const on = new Uint8Array(dotCols * dotRows);
-  for (let y = 0; y < dotRows; y++) {
-    for (let x = 0; x < dotCols; x++) {
-      const at = y * dotCols + x;
-      const value = ink2[at];
-      const lit = value >= threshold ? 1 : 0;
-      on[at] = lit;
-      if (options.dither === false) continue;
-      const error = value - lit;
-      const spread = (index, weight) => {
-        ink2[index] = ink2[index] + error * weight;
-      };
-      if (x + 1 < dotCols) spread(at + 1, 7 / 16);
-      if (y + 1 < dotRows) {
-        if (x > 0) spread(at + dotCols - 1, 3 / 16);
-        spread(at + dotCols, 5 / 16);
-        if (x + 1 < dotCols) spread(at + dotCols + 1, 1 / 16);
-      }
-    }
-  }
-  const lines = [];
-  for (let cellY = 0; cellY < rows; cellY++) {
-    let line = "";
-    for (let cellX = 0; cellX < cols; cellX++) {
-      let mask = 0;
-      for (let dy = 0; dy < BRAILLE_ROWS; dy++) {
-        const row = (cellY * BRAILLE_ROWS + dy) * dotCols;
-        for (let dx = 0; dx < BRAILLE_COLS; dx++) {
-          if (on[row + cellX * BRAILLE_COLS + dx]) mask |= DOT_BITS[dy][dx];
-        }
-      }
-      line += mask === 0 ? " " : String.fromCharCode(BRAILLE_BASE + mask);
-    }
-    lines.push(line.replace(/ +$/, ""));
-  }
-  return lines;
-}
-
-// packages/image-to-ascii/src/index.ts
+// packages/image-to-ascii/src/imageToTerm.ts
 var MAX_ROWS = 120;
 var ALPHA_OPAQUE = 128;
-function quantizeChannel(value, levels) {
-  if (levels >= 256)
-    return value < 0 ? 0 : value > 255 ? 255 : Math.round(value);
-  const steps = levels - 1;
-  const index = Math.round(value * steps / 255);
-  return Math.round(Math.min(steps, Math.max(0, index)) * 255 / steps);
-}
+var BYTE_BUDGET = 9200;
+var ATTEMPTS = [
+  { mask: 255 },
+  { mask: 252 },
+  { mask: 248 },
+  { palette: true }
+];
 var MIN_COLS = 24;
-var MIN_ROWS = 8;
-var ROW_DECAY = 0.7;
-var DEFAULT_TIERS = [256, 64, 32, "palette"];
-function toAttempt(tier) {
-  return tier === "palette" ? { palette: true } : { levels: tier };
-}
-function attemptsFor(mode, tiers) {
-  const kept = tiers.filter((tier) => {
-    if (mode === "truecolor")
-      return tier !== "palette";
-    if (mode === "palette")
-      return tier === "palette";
-    return true;
-  });
-  return (kept.length ? kept : tiers).map(toAttempt);
-}
-function resolveColorMode(requested) {
-  const env2 = process.env.CLAUDE_HOOKS_IMAGE_COLOR;
-  if (env2 === "truecolor" || env2 === "palette" || env2 === "auto")
-    return env2;
-  return requested ?? "auto";
-}
-function cellAspect() {
-  const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_CELL_ASPECT);
-  return Number.isFinite(raw) && raw > 0 ? raw : 2;
-}
 var cubeIdx = (v) => v < 48 ? 0 : v < 115 ? 1 : Math.min(5, Math.round((v - 35) / 40));
 function to256(r, g, b) {
   if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && Math.abs(r - b) < 12) {
@@ -5955,6 +5022,79 @@ function to256(r, g, b) {
 }
 var FG_RESET = "\x1B[39m";
 var BG_RESET2 = "\x1B[49m";
+function imageToAsciiSimple(buffer, ext, maxWidth = 80) {
+  const img = decodeImage(buffer, ext);
+  if (!img)
+    return null;
+  const { width, height, data } = img;
+  if (!width || !height)
+    return null;
+  const render = (cols, attempt) => {
+    const scale = Math.max(1, width / cols, height / (MAX_ROWS * 2));
+    const targetWidth = Math.max(1, Math.round(width / scale));
+    const pxRows = Math.max(1, Math.round(height / scale));
+    const sgrTail = attempt.palette ? (r, g, b) => `5;${to256(r, g, b)}` : (r, g, b) => `2;${r & attempt.mask};${g & attempt.mask};${b & attempt.mask}`;
+    const px = (col, row) => {
+      const idx = (Math.min(height - 1, Math.floor(row * scale)) * width + Math.min(width - 1, Math.floor(col * scale))) * 4;
+      if ((data[idx + 3] ?? 255) < ALPHA_OPAQUE)
+        return null;
+      return sgrTail(data[idx] ?? 0, data[idx + 1] ?? 0, data[idx + 2] ?? 0);
+    };
+    const lines = [];
+    for (let y = 0; y < pxRows; y += 2) {
+      let line = "";
+      let fg2 = null;
+      let bg2 = null;
+      const put = (char, wantFg, wantBg) => {
+        const parts = [];
+        if (wantFg !== null && wantFg !== fg2) {
+          parts.push(`38;${wantFg}`);
+          fg2 = wantFg;
+        }
+        if (wantBg !== bg2) {
+          parts.push(wantBg === null ? "49" : `48;${wantBg}`);
+          bg2 = wantBg;
+        }
+        line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
+      };
+      for (let x = 0; x < targetWidth; x++) {
+        const top = px(x, y);
+        const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
+        if (top === null && bottom === null)
+          put(" ", null, null);
+        else if (top !== null && bottom === null)
+          put("\u2580", top, null);
+        else if (top === null && bottom !== null)
+          put("\u2584", bottom, null);
+        else if (top === bottom)
+          put("\u2588", top, null);
+        else
+          put("\u2580", top, bottom);
+      }
+      if (fg2 !== null)
+        line += FG_RESET;
+      if (bg2 !== null)
+        line += BG_RESET2;
+      lines.push(line);
+    }
+    return lines.join("\n");
+  };
+  let out = "";
+  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
+  for (let cols = Math.min(width, requestedMax); ; ) {
+    for (const attempt of ATTEMPTS) {
+      out = render(cols, attempt);
+      if (out.length <= BYTE_BUDGET)
+        return out;
+    }
+    if (cols <= MIN_COLS)
+      break;
+    cols = Math.max(MIN_COLS, Math.floor(cols * 0.85));
+  }
+  return out;
+}
+
+// packages/image-to-ascii/src/index.ts
 var PALETTE_256 = (() => {
   const levels = [0, 95, 135, 175, 215, 255];
   const out = [];
@@ -5972,454 +5112,6 @@ var PALETTE_256 = (() => {
   }
   return out;
 })();
-function environmentGlyphMode() {
-  const env2 = process.env.CLAUDE_HOOKS_IMAGE_MODE;
-  return env2 === "sextant" || env2 === "octant" || env2 === "half" || env2 === "braille" || env2 === "ascii" ? env2 : null;
-}
-function drawsItsOwnGlyphs() {
-  const program = (process.env.TERM_PROGRAM ?? "").toLowerCase();
-  if (program === "ghostty" || program === "wezterm")
-    return true;
-  return Boolean(process.env.KITTY_WINDOW_ID) || process.env.TERM === "xterm-kitty";
-}
-function resolveGlyphMode() {
-  const env2 = environmentGlyphMode();
-  if (env2)
-    return env2;
-  if (process.env.TERM === "dumb")
-    return "half";
-  if (drawsItsOwnGlyphs() && cellAspect() >= 1.75)
-    return "octant";
-  return "sextant";
-}
-var MONOCHROME_CHROMA_TOLERANCE = 18;
-var MONOCHROME_MIN_SHARE = 0.995;
-var MONOCHROME_SAMPLE_LIMIT = 1e5;
-var ASCII_RAMP = " .:-=+*#%@";
-function analyzeMonochrome(img) {
-  const pixels = img.width * img.height;
-  const step = Math.max(1, Math.ceil(pixels / MONOCHROME_SAMPLE_LIMIT));
-  let visible = 0;
-  let neutral = 0;
-  let luminance = 0;
-  for (let pixel = 0; pixel < pixels; pixel += step) {
-    const at = pixel * 4;
-    if ((img.data[at + 3] ?? 255) < 16)
-      continue;
-    const r = img.data[at] ?? 0;
-    const g = img.data[at + 1] ?? 0;
-    const b = img.data[at + 2] ?? 0;
-    visible++;
-    luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if (Math.max(r, g, b) - Math.min(r, g, b) <= MONOCHROME_CHROMA_TOLERANCE)
-      neutral++;
-  }
-  return {
-    monochrome: visible === 0 || neutral / visible >= MONOCHROME_MIN_SHARE,
-    lightBackground: visible > 0 && luminance / visible >= 127.5
-  };
-}
-function renderAsciiLines(sat, cols, rows, lightBackground) {
-  const sample = { r: 0, g: 0, b: 0, a: 0 };
-  const lines = [];
-  for (let y = 0; y < rows; y++) {
-    let line = "";
-    for (let x = 0; x < cols; x++) {
-      const [x0, y0, x1, y1] = subCellRect(sat, x, y, cols, rows);
-      rectMean(sat, x0, y0, x1, y1, sample);
-      if (sample.a < 16) {
-        line += " ";
-        continue;
-      }
-      const luminance = 0.2126 * sample.r + 0.7152 * sample.g + 0.0722 * sample.b;
-      const polarity = lightBackground ? 255 - luminance : luminance;
-      const ink2 = polarity * sample.a / 255;
-      const index = Math.min(ASCII_RAMP.length - 1, Math.round(ink2 / 255 * (ASCII_RAMP.length - 1)));
-      line += ASCII_RAMP[index];
-    }
-    lines.push(line.trimEnd());
-  }
-  return lines;
-}
-function widestAsciiRender(img, sat, startCols, spec, maxRows, lightBackground) {
-  let smallest = [" "];
-  let previousGeometry = "";
-  for (let requested = startCols; requested >= 1; requested--) {
-    const geometry = fitGeometry(img.width, img.height, requested, BASES["1x1"], cellAspect(), maxRows);
-    const key = `${geometry.cols}x${geometry.rows}`;
-    if (key === previousGeometry)
-      continue;
-    previousGeometry = key;
-    const lines = renderAsciiLines(sat, geometry.cols, geometry.rows, lightBackground);
-    smallest = lines;
-    if (costOf(lines, spec) <= spec.total)
-      return lines;
-  }
-  return smallest;
-}
-var CONTEXTS = /* @__PURE__ */ new Map();
-function contextFor(mode, palette) {
-  const key = `${mode}|${palette ? "shade" : "plain"}`;
-  const cached = CONTEXTS.get(key);
-  if (cached)
-    return cached;
-  const primary = mode === "octant" ? "octant" : "sextant";
-  const families = [primary, "separated", "eighth-v", "eighth-h"];
-  if (palette)
-    families.push("shade");
-  const table = buildTable(families);
-  const complement = /* @__PURE__ */ new Map();
-  for (let i = 0; i < table.glyphs.length; i++) {
-    const j = table.complement[i];
-    if (j >= 0)
-      complement.set(table.glyphs[i].char, table.glyphs[j].char);
-  }
-  const compiled = compileTable(table);
-  const context = {
-    table,
-    compiled,
-    complement,
-    samples: makeCellSamples(compiled),
-    fit: makeFitResult(),
-    basis: mode === "octant" ? BASES["2x4"] : BASES["2x3"],
-    chars: table.chars
-  };
-  CONTEXTS.set(key, context);
-  return context;
-}
-var KEEP = /* @__PURE__ */ Symbol("keep");
-function dist2(a, b) {
-  const dr = a.r - b.r;
-  const dg = a.g - b.g;
-  const db = a.b - b.b;
-  return dr * dr + dg * dg + db * db;
-}
-var SNAP_TOLERANCE = 160;
-var FIT_MARGIN = 200;
-function fitMargin() {
-  const raw = Number(process.env.CLAUDE_HOOKS_IMAGE_FIT_MARGIN);
-  return Number.isFinite(raw) && raw >= 0 ? raw : FIT_MARGIN;
-}
-function classify(alpha) {
-  let opaque = 0;
-  for (let i = 0; i < alpha.length; i++)
-    if (alpha[i] >= ALPHA_OPAQUE)
-      opaque++;
-  if (opaque === alpha.length)
-    return 0 /* Opaque */;
-  return opaque === 0 ? 1 /* Clear */ : 2 /* Mixed */;
-}
-function transparentCell(alpha, plane) {
-  let mask = 0;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let count = 0;
-  for (let i = 0; i < alpha.length; i++) {
-    if (alpha[i] < ALPHA_OPAQUE)
-      continue;
-    mask |= 1 << i;
-    const at = i * 3;
-    r += plane[at];
-    g += plane[at + 1];
-    b += plane[at + 2];
-    count++;
-  }
-  if (!count)
-    return { char: " ", fg: KEEP, bg: null, area: 0 };
-  return {
-    // Separated cells keep the terminal background visible between isolated
-    // transparent-edge samples.
-    char: separatedSextant(mask) ?? regularSextant(mask),
-    fg: { r: r / count, g: g / count, b: b / count },
-    bg: null,
-    area: count / alpha.length
-  };
-}
-function fittedCell(fit2) {
-  const glyph = fit2.glyph;
-  const fg2 = { r: fit2.fg[0], g: fit2.fg[1], b: fit2.fg[2] };
-  if (glyph === null || glyph.area >= 1)
-    return { char: "\u2588", fg: fg2, bg: KEEP, area: 1 };
-  const bg2 = { r: fit2.bg[0], g: fit2.bg[1], b: fit2.bg[2] };
-  if (glyph.area <= 0)
-    return { char: " ", fg: KEEP, bg: bg2, area: 0 };
-  return { char: glyph.char, fg: fg2, bg: bg2, area: glyph.area };
-}
-function fitGeometry(width, height, requestedCols, basis2 = BASES["2x3"], aspect = cellAspect(), maxRows = MAX_ROWS) {
-  let cols = Math.max(1, Math.min(requestedCols, Math.ceil(width / basis2.cols)));
-  let rows = Math.max(1, Math.round(height * cols / (width * aspect)));
-  if (rows > maxRows) {
-    cols = Math.max(1, Math.floor(cols * maxRows / rows));
-    rows = Math.max(1, Math.min(maxRows, Math.round(height * cols / (width * aspect))));
-  }
-  return { cols, rows };
-}
-var scratch2 = { r: 0, g: 0, b: 0, a: 0 };
-function imageSample(sat, sampleX, sampleY, sampleCols, sampleRows) {
-  const [x0, y0, x1, y1] = subCellRect(sat, sampleX, sampleY, sampleCols, sampleRows);
-  rectMean(sat, x0, y0, x1, y1, scratch2);
-  return {
-    r: Math.round(scratch2.r),
-    g: Math.round(scratch2.g),
-    b: Math.round(scratch2.b),
-    opaque: scratch2.a >= ALPHA_OPAQUE
-  };
-}
-function quantizer(attempt) {
-  if (attempt.palette)
-    return (color) => {
-      const index = to256(color.r, color.g, color.b);
-      return { tail: `5;${index}`, color: PALETTE_256[index] };
-    };
-  const levels = attempt.levels;
-  return (color) => {
-    const r = quantizeChannel(color.r, levels);
-    const g = quantizeChannel(color.g, levels);
-    const b = quantizeChannel(color.b, levels);
-    return { tail: `2;${r};${g};${b}`, color: { r, g, b } };
-  };
-}
-function resolveSlot(slot, penTail, penColor, weight, quantize) {
-  if (slot === KEEP)
-    return { tail: penTail, color: penColor };
-  if (slot === null)
-    return { tail: null, color: null };
-  if (penTail !== null && penColor !== null && weight * dist2(slot, penColor) <= SNAP_TOLERANCE)
-    return { tail: penTail, color: penColor };
-  const q = quantize(slot);
-  return { tail: q.tail, color: q.color };
-}
-function escapeCount(fgTail, bgTail, pen) {
-  return (fgTail !== null && fgTail !== pen.fgTail ? 1 : 0) + (bgTail !== pen.bgTail ? 1 : 0);
-}
-function emitCell(cell, pen, quantize, complement) {
-  let char = cell.char;
-  let fg2 = resolveSlot(cell.fg, pen.fgTail, pen.fgColor, cell.area, quantize);
-  let bg2 = resolveSlot(cell.bg, pen.bgTail, pen.bgColor, 1 - cell.area, quantize);
-  const swapped = complement.get(cell.char);
-  if (swapped !== void 0 && typeof cell.fg === "object" && cell.fg !== null && typeof cell.bg === "object" && cell.bg !== null) {
-    const altFg = resolveSlot(cell.bg, pen.fgTail, pen.fgColor, 1 - cell.area, quantize);
-    const altBg = resolveSlot(cell.fg, pen.bgTail, pen.bgColor, cell.area, quantize);
-    if (escapeCount(altFg.tail, altBg.tail, pen) < escapeCount(fg2.tail, bg2.tail, pen)) {
-      char = swapped;
-      fg2 = altFg;
-      bg2 = altBg;
-    }
-  }
-  const parts = [];
-  if (fg2.tail !== null && fg2.tail !== pen.fgTail) {
-    parts.push(`38;${fg2.tail}`);
-    pen.fgTail = fg2.tail;
-    pen.fgColor = fg2.color;
-  }
-  if (bg2.tail !== pen.bgTail) {
-    parts.push(bg2.tail === null ? "49" : `48;${bg2.tail}`);
-    pen.bgTail = bg2.tail;
-    pen.bgColor = bg2.color;
-  }
-  return parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
-}
-function renderFitted(img, sat, requestedCols, attempt, ctx, maxRows = MAX_ROWS) {
-  const { cols, rows } = fitGeometry(img.width, img.height, requestedCols, ctx.basis, cellAspect(), maxRows);
-  const quantize = quantizer(attempt);
-  const alphaPlane = ctx.samples.planes.get("2x3");
-  const lines = [];
-  let score = 0;
-  for (let cellY = 0; cellY < rows; cellY++) {
-    const pen = { fgTail: null, bgTail: null, fgColor: null, bgColor: null };
-    let line = "";
-    for (let cellX = 0; cellX < cols; cellX++) {
-      sampleCell(sat, ctx.compiled, cellX, cellY, cols, rows, ctx.samples);
-      let cell;
-      switch (classify(ctx.samples.alpha)) {
-        case 1 /* Clear */:
-          cell = { char: " ", fg: KEEP, bg: null, area: 0 };
-          break;
-        case 2 /* Mixed */:
-          cell = transparentCell(ctx.samples.alpha, alphaPlane);
-          break;
-        default:
-          cell = fittedCell(fitCell(ctx.compiled, ctx.samples, ctx.fit, fitMargin()));
-          score += ctx.fit.score;
-      }
-      line += emitCell(cell, pen, quantize, ctx.complement);
-    }
-    if (pen.fgTail !== null)
-      line += FG_RESET;
-    if (pen.bgTail !== null)
-      line += BG_RESET2;
-    lines.push(line);
-  }
-  return { lines, score };
-}
-function renderHalfBlocks(img, sat, requestedCols, attempt, maxRows = MAX_ROWS) {
-  const aspect = cellAspect();
-  const scale = Math.max(1, img.width / requestedCols, img.height * 2 / (aspect * maxRows * 2));
-  const targetWidth = Math.max(1, Math.round(img.width / scale));
-  const pxRows = Math.max(1, Math.round(img.height * 2 / (scale * aspect)));
-  const quantize = quantizer(attempt);
-  const tail = (sample) => quantize(sample).tail;
-  const px = (col, row) => {
-    const sample = imageSample(sat, col, row, targetWidth, pxRows);
-    return sample.opaque ? tail(sample) : null;
-  };
-  const lines = [];
-  for (let y = 0; y < pxRows; y += 2) {
-    let line = "";
-    let fg2 = null;
-    let bg2 = null;
-    const put = (char, wantFg, wantBg) => {
-      const parts = [];
-      if (wantFg !== null && wantFg !== fg2) {
-        parts.push(`38;${wantFg}`);
-        fg2 = wantFg;
-      }
-      if (wantBg !== bg2) {
-        parts.push(wantBg === null ? "49" : `48;${wantBg}`);
-        bg2 = wantBg;
-      }
-      line += parts.length ? `\x1B[${parts.join(";")}m${char}` : char;
-    };
-    for (let x = 0; x < targetWidth; x++) {
-      const top = px(x, y);
-      const bottom = y + 1 < pxRows ? px(x, y + 1) : null;
-      if (top === null && bottom === null)
-        put(" ", null, null);
-      else if (top !== null && bottom === null)
-        put("\u2580", top, null);
-      else if (top === null && bottom !== null)
-        put("\u2584", bottom, null);
-      else if (top === bottom)
-        put("\u2588", top, bg2);
-      else
-        put("\u2580", top, bottom);
-    }
-    if (fg2 !== null)
-      line += FG_RESET;
-    if (bg2 !== null)
-      line += BG_RESET2;
-    lines.push(line);
-  }
-  return { lines, score: 0 };
-}
-function bestFittingRender(startCols, spec, render) {
-  const WINDOW = 16;
-  const floor = Math.max(1, Math.min(MIN_COLS, startCols));
-  let best = null;
-  let bestScore = -Infinity;
-  const seen = /* @__PURE__ */ new Map();
-  const consider = (cols) => {
-    const known = seen.get(cols);
-    if (known !== void 0)
-      return known;
-    const attempt = render(cols);
-    const fits2 = costOf(attempt.lines, spec) <= spec.total;
-    seen.set(cols, fits2);
-    if (fits2 && attempt.score > bestScore) {
-      best = attempt;
-      bestScore = attempt.score;
-    }
-    return fits2;
-  };
-  if (consider(startCols))
-    return best;
-  if (!consider(floor))
-    return null;
-  let low = floor;
-  let high = startCols - 1;
-  while (low < high) {
-    const mid = low + high + 1 >> 1;
-    if (consider(mid))
-      low = mid;
-    else
-      high = mid - 1;
-  }
-  for (let cols = Math.min(startCols - 1, low + WINDOW / 2); cols >= Math.max(floor, low - WINDOW); cols--)
-    consider(cols);
-  return best;
-}
-function imageToMonochromeAscii(buffer, ext, widthOrOptions = 80) {
-  const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
-  const img = decodeImage(buffer, ext);
-  if (!img)
-    return null;
-  const maxWidth = options.maxWidth ?? 80;
-  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
-  const analysis = analyzeMonochrome(img);
-  const lines = widestAsciiRender(
-    img,
-    buildSAT(img),
-    Math.min(img.width, requestedMax),
-    normalizeBudget(options.budget),
-    requestedRows,
-    analysis.lightBackground
-  );
-  const output = lines.join("\n");
-  return output.length > 0 ? output : " ";
-}
-function widestBrailleRender(img, sat, startCols, spec, options, maxRows = MAX_ROWS) {
-  const at = (cols) => {
-    const geometry = fitGeometry(img.width, img.height, cols, BASES["2x4"], cellAspect(), maxRows);
-    return renderBraille(sat, geometry.cols, geometry.rows, options ?? {});
-  };
-  let low = 1;
-  let high = Math.max(1, startCols);
-  let best = at(low);
-  while (low <= high) {
-    const cols = low + high >> 1;
-    const lines = at(cols);
-    if (costOf(lines, spec) <= spec.total) {
-      best = lines;
-      low = cols + 1;
-    } else
-      high = cols - 1;
-  }
-  return best;
-}
-function imageToAscii(buffer, ext, widthOrOptions = 80) {
-  const options = typeof widthOrOptions === "number" ? { maxWidth: widthOrOptions } : widthOrOptions;
-  const img = decodeImage(buffer, ext);
-  if (!img)
-    return null;
-  const sat = buildSAT(img);
-  const spec = normalizeBudget(options.budget);
-  const maxWidth = options.maxWidth ?? 80;
-  const requestedMax = Number.isFinite(maxWidth) ? Math.max(1, Math.floor(maxWidth)) : 80;
-  const mode = options.mode ?? resolveGlyphMode();
-  const forceHalfBlocks = mode === "half";
-  const initialCols = forceHalfBlocks ? Math.min(img.width, requestedMax) : Math.min(Math.ceil(img.width / BRAILLE_COLS), requestedMax);
-  const requestedRows = Math.max(1, Math.floor(options.maxRows ?? MAX_ROWS));
-  if (mode === "ascii")
-    return imageToMonochromeAscii(buffer, ext, options);
-  if (mode === "braille")
-    return widestBrailleRender(img, sat, initialCols, spec, options.braille, requestedRows).join("\n");
-  const attempts = attemptsFor(resolveColorMode(options.colorMode), options.tiers ?? DEFAULT_TIERS);
-  let out = [];
-  let cheapest = Infinity;
-  let lastRows = requestedRows;
-  const render = (cols, attempt, maxRows) => {
-    const result = forceHalfBlocks ? renderHalfBlocks(img, sat, cols, attempt, maxRows) : renderFitted(img, sat, cols, attempt, contextFor(mode, Boolean(attempt.palette)), maxRows);
-    const cost = costOf(result.lines, spec);
-    lastRows = result.lines.length;
-    if (cost < cheapest) {
-      cheapest = cost;
-      out = result.lines;
-    }
-    return result;
-  };
-  for (let rows = requestedRows; rows >= MIN_ROWS; rows = Math.floor(lastRows * ROW_DECAY)) {
-    for (const attempt of attempts) {
-      const fitted = bestFittingRender(Math.max(1, initialCols), spec, (cols) => render(cols, attempt, rows));
-      if (fitted)
-        return fitted.lines.join("\n");
-    }
-    if (lastRows <= MIN_ROWS)
-      break;
-  }
-  return out.join("\n");
-}
 
 // src/ansi/text.ts
 var OSC_SEQUENCE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
@@ -6858,7 +5550,7 @@ var PALETTE = {
   italic: source_default.italic,
   code: source_default.inverse
 };
-var classify2 = (sets, fallback, fold = false) => (text) => sets.find(([, words]) => words.has(fold ? text.toLowerCase() : text))?.[0] ?? fallback;
+var classify = (sets, fallback, fold = false) => (text) => sets.find(([, words]) => words.has(fold ? text.toLowerCase() : text))?.[0] ?? fallback;
 var followedByCall = ({ src, at }, length) => /^\s*\(/.test(src.slice(at + length, at + length + 8));
 var JS_KEYWORDS = /* @__PURE__ */ new Set(["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "export", "from", "async", "await", "try", "catch", "finally", "throw", "new", "this", "super", "static", "interface", "type", "enum", "extends", "implements", "typeof", "instanceof", "in", "of", "yield", "switch", "case", "default", "break", "continue", "do", "void", "delete", "as", "declare", "namespace", "readonly", "keyof", "infer", "satisfies", "abstract", "public", "private", "protected", "override", "get", "set"]);
 var JS_LITERALS = /* @__PURE__ */ new Set(["true", "false", "null", "undefined", "NaN", "Infinity"]);
@@ -7065,7 +5757,7 @@ var SQL_GRAMMAR = [
   { type: "comment", match: /\/\*[\s\S]*?(?:\*\/|$)/y },
   { type: "string", match: /'(?:[^'\\]|\\.|'')*'?/y },
   { type: "number", match: /\d+(?:\.\d+)?/y, when: wordBoundaryBefore },
-  { type: classify2([["keyword", SQL_KEYWORDS]], "plain", true), match: /[A-Za-z_]\w*/y, when: wordBoundaryBefore }
+  { type: classify([["keyword", SQL_KEYWORDS]], "plain", true), match: /[A-Za-z_]\w*/y, when: wordBoundaryBefore }
 ];
 var inTag = (cursor) => cursor.state.inTag === true;
 var XML_GRAMMAR = [
@@ -7421,7 +6113,8 @@ function terminalColumns() {
 }
 function layoutWidthForTerminal(columns) {
   const { fallbackContent, maximumLayout, outerIndentMargin } = TUI_TOKENS.width;
-  return Math.max(1, Math.min(maximumLayout, (columns > 0 ? columns : fallbackContent) - outerIndentMargin));
+  const codexWidth = process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT ? 72 : maximumLayout;
+  return Math.max(1, Math.min(codexWidth, (columns > 0 ? columns : fallbackContent) - outerIndentMargin));
 }
 var getMaxLayoutWidth = () => layoutWidthForTerminal(terminalColumns());
 var horizontalPaddingFor = (layoutWidth) => Math.min(TUI_TOKENS.card.horizontalPadding, Math.max(0, Math.floor((layoutWidth - 1) / 2)));
@@ -7941,11 +6634,16 @@ function readFile(filePath) {
 }
 var CARD_CHROME = 300;
 var CARD_PER_ROW = 34;
-var imageBudget = (chars) => ({ total: Math.max(600, chars), overhead: CARD_CHROME, perRow: CARD_PER_ROW });
 var NO_ROOM = ink.note("\u2026 image preview omitted \u2014 no room left in this message \u2026");
 function drawImage(data, ext, chars) {
   try {
-    return imageToAscii(data, ext, { maxWidth: getMaxContentWidth(), budget: imageBudget(chars) });
+    let width = getMaxContentWidth();
+    let image = imageToAsciiSimple(data, ext, width);
+    while (image && image.length + CARD_CHROME + image.split("\n").length * CARD_PER_ROW > chars && width > 1) {
+      width = Math.max(1, Math.floor(width * 0.85));
+      image = imageToAsciiSimple(data, ext, width);
+    }
+    return image && image.length + CARD_CHROME + image.split("\n").length * CARD_PER_ROW <= chars ? image : null;
   } catch {
     return null;
   }
@@ -7955,7 +6653,7 @@ function fileBody(filePath, options) {
   const ext = extensionOf(filePath);
   if (isImagePath(filePath)) {
     const data = readFile(filePath);
-    if (data && drawImage(data, ext, 4e3))
+    if (data)
       return { kind: "image", draw: imageBody(data, ext) };
   }
   const raw = options.readText === false ? null : readFile(filePath)?.toString("utf8") ?? null;
@@ -8130,10 +6828,13 @@ function welcomeImage(spec) {
   if (!file)
     return null;
   try {
-    const art = imageToAscii(fs6.readFileSync(file), path5.extname(file), {
-      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
-      budget: spec
-    });
+    const data = fs6.readFileSync(file);
+    let width = Math.min(MAX_COLS, getMaxLayoutWidth());
+    let art = imageToAsciiSimple(data, path5.extname(file), width);
+    while (art && !fits(art, spec) && width > 1) {
+      width = Math.max(1, Math.floor(width * 0.85));
+      art = imageToAsciiSimple(data, path5.extname(file), width);
+    }
     return art && fits(art, spec) ? art : null;
   } catch (error) {
     debugLog("SessionStart", "render-welcome-image", error.message);
@@ -8230,10 +6931,11 @@ function resolveMessage(message) {
   return shrunk ? `${text}
 ${pointer(full)}` : text;
 }
-function serializeHook(output) {
+function serializeHook(output, { ansi = true } = {}) {
   const { systemMessage: message, ...rest } = output;
   const resolved = resolveMessage(message);
-  const systemMessage = resolved === null ? null : CLEAR_LINE_PREFIX + resolved;
+  const messageText = resolved === null || ansi ? resolved : stripAnsi(resolved);
+  const systemMessage = messageText === null ? null : ansi ? CLEAR_LINE_PREFIX + messageText : messageText;
   const body = systemMessage === null ? rest : { ...rest, systemMessage };
   return { json: JSON.stringify(body, null, 2), systemMessage };
 }
@@ -9272,7 +7974,8 @@ if (!isHookEvent(event)) {
 var mirrorToStderr = event !== "PostToolUse";
 try {
   const raw = await readStdin();
-  const { json, systemMessage } = serializeHook(handleHook(event, raw));
+  const isCodex = Boolean(process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT);
+  const { json, systemMessage } = serializeHook(handleHook(event, raw), { ansi: !isCodex });
   writeResponse(json, systemMessage, { mirrorToStderr });
 } catch (error) {
   debugLog(event, "CRASH", error instanceof Error ? error.stack ?? error.message : String(error));

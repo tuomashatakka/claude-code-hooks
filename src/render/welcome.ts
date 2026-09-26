@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { imageToAscii, costOf } from '@tuomashatakka/image-to-ascii'
+import { imageToAsciiSimple, costOf } from '@tuomashatakka/image-to-ascii'
 import type { BudgetSpec } from '@tuomashatakka/image-to-ascii'
 import { getMaxLayoutWidth } from '../tui/index.ts'
 import { debugLog } from '../runtime/debug.ts'
@@ -68,10 +68,13 @@ function welcomeImage (spec: BudgetSpec): string | null {
   if (!file)
     return null
   try {
-    const art = imageToAscii(fs.readFileSync(file), path.extname(file), {
-      maxWidth: Math.min(MAX_COLS, getMaxLayoutWidth()),
-      budget:   spec,
-    })
+    const data = fs.readFileSync(file)
+    let width = Math.min(MAX_COLS, getMaxLayoutWidth())
+    let art   = imageToAsciiSimple(data, path.extname(file), width)
+    while (art && !fits(art, spec) && width > 1) {
+      width = Math.max(1, Math.floor(width * 0.85))
+      art = imageToAsciiSimple(data, path.extname(file), width)
+    }
     return art && fits(art, spec) ? art : null
   }
   catch (error) {

@@ -74,10 +74,13 @@ export interface SerializedHook {
 }
 
 /** The hook response JSON, with `systemMessage` resolved and prefixed. */
-export function serializeHook (output: HookOutput<string | Render>): SerializedHook {
+export function serializeHook (output: HookOutput<string | Render>, { ansi = true }: { ansi?: boolean } = {}): SerializedHook {
   const { systemMessage: message, ...rest } = output
   const resolved                            = resolveMessage(message)
-  const systemMessage                       = resolved === null ? null : CLEAR_LINE_PREFIX + resolved
-  const body                                = systemMessage === null ? rest : { ...rest, systemMessage }
+  // Codex renders hook messages as text and newer CLI builds expose terminal
+  // control sequences literally. Keep ANSI only for Claude's terminal UI.
+  const messageText   = resolved === null || ansi ? resolved : stripAnsi(resolved)
+  const systemMessage = messageText === null ? null : ansi ? CLEAR_LINE_PREFIX + messageText : messageText
+  const body          = systemMessage === null ? rest : { ...rest, systemMessage }
   return { json: JSON.stringify(body, null, 2), systemMessage }
 }

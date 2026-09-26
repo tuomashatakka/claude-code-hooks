@@ -20,7 +20,8 @@ const mirrorToStderr = event !== 'PostToolUse'
 
 try {
   const raw                     = await readStdin()
-  const { json, systemMessage } = serializeHook(handleHook(event, raw))
+  const isCodex                 = Boolean(process.env.CODEX_HOME && !process.env.CLAUDE_PLUGIN_ROOT)
+  const { json, systemMessage } = serializeHook(handleHook(event, raw), { ansi: !isCodex })
   writeResponse(json, systemMessage, { mirrorToStderr })
 }
 catch (error) {
